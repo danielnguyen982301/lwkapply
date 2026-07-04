@@ -149,5 +149,4 @@ In Active Development
 See:
 - docs/ARCHITECTURE.md
 - docs/ROADMAP.md
-- docs/DECISIONS.md
 - TODO.md
