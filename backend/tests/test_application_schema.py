@@ -5,6 +5,8 @@ Focus: the salary_min <= salary_max cross-field validator, since that's
 the one piece of non-trivial business logic living in the schema layer.
 """
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,8 +14,13 @@ from app.models.application import ApplicationStatus
 from app.schemas.application import ApplicationCreate
 
 
-def _base_payload(**overrides):
-    payload = {"company": "Acme Corp", "position": "Backend Engineer"}
+def _base_payload(**overrides: Any) -> dict[str, Any]:
+    # Explicitly typed as dict[str, Any] - without this, Pylance infers
+    # dict[str, str] from the literal below (both initial values are
+    # strings) and then flags every call site that overrides a numeric
+    # field (e.g. salary_min=80_000) as a type mismatch against
+    # ApplicationCreate's int fields, even though it's correct at runtime.
+    payload: dict[str, Any] = {"company": "Acme Corp", "position": "Backend Engineer"}
     payload.update(overrides)
     return payload
 
@@ -50,11 +57,11 @@ class TestSalaryRangeValidation:
 class TestRequiredFields:
     def test_missing_company_is_rejected(self):
         with pytest.raises(ValidationError):
-            ApplicationCreate(position="Backend Engineer")
+            ApplicationCreate(position="Backend Engineer")  # pyright: ignore[reportCallIssue]
 
     def test_missing_position_is_rejected(self):
         with pytest.raises(ValidationError):
-            ApplicationCreate(company="Acme Corp")
+            ApplicationCreate(company="Acme Corp")  # pyright: ignore[reportCallIssue]
 
     def test_default_status_is_saved(self):
         app = ApplicationCreate(**_base_payload())
