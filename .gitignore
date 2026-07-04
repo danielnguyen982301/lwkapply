@@ -9,3 +9,12 @@ docs/MOBILE_APP.md
 docs/SECURITY.md
 docs/SUMMARY.md
 docs/TESTING.md
+
+# .venv
+.venv
+
+# Others
+.DS_Store
+.env
+.env.example
+.env.local
