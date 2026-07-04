@@ -65,7 +65,12 @@ def list_applications(
         .all()
     )
 
-    return ApplicationListResponse(items=items, total=total, page=page, page_size=page_size)
+    return ApplicationListResponse(
+        items=[ApplicationRead.model_validate(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("", response_model=ApplicationRead, status_code=status.HTTP_201_CREATED)
