@@ -34,6 +34,23 @@ class TestPasswordHashing:
         second = security.hash_password("repeat-password")
         assert first != second
 
+    def test_password_at_72_byte_limit_hashes_successfully(self):
+        # Regression test: bcrypt>=4.1 raises instead of silently
+        # truncating at 72 bytes. A password of exactly 72 bytes is
+        # the boundary case that must still succeed.
+        password = "a" * 72
+        hashed = security.hash_password(password)
+        assert security.verify_password(password, hashed)
+
+    def test_password_over_72_bytes_raises_clear_error(self):
+        # Regression test for the passlib/bcrypt incompatibility bug:
+        # previously this surfaced as an opaque ValueError from deep
+        # inside bcrypt's C extension. Now it's an explicit, early
+        # ValueError from our own code.
+        password = "a" * 73
+        with pytest.raises(ValueError, match="72 bytes"):
+            security.hash_password(password)
+
 
 class TestAccessToken:
     def test_access_token_round_trips_subject(self):
@@ -69,6 +86,8 @@ class TestRefreshToken:
         access = security.decode_token(security.create_access_token("user-123"))
         refresh = security.decode_token(security.create_refresh_token("user-123"))
 
+        assert access is not None
+        assert refresh is not None
         assert access["type"] != refresh["type"]
 
 
@@ -86,11 +105,15 @@ class TestPasswordResetToken:
         # This test documents/pins that the type tag is present.
         token = security.create_password_reset_token(subject="user-123")
         payload = security.decode_token(token)
+        assert payload is not None
         assert payload["type"] != "access"
 
 
 @pytest.mark.parametrize("bad_token", ["", "abc", "a.b.c.d", None])
 def test_decode_token_handles_malformed_input_gracefully(bad_token):
-    if bad_token is None:
-        pytest.skip("decode_token requires a str; None is a type-checker concern, not runtime")
+    # decode_token() now explicitly guards against falsy input (including
+    # None) with an early return, rather than relying on callers to never
+    # pass it - a missing Authorization header is a real-world source of
+    # None reaching this function, so it needs to be a genuine runtime
+    # guarantee, not just a type hint.
     assert security.decode_token(bad_token) is None
