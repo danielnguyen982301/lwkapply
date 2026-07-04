@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- App ---
-    APP_NAME: str = "Job Application Tracker API"
+    APP_NAME: str = "LwkApply API"
     ENVIRONMENT: str = "development"  # development | staging | production
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/job_tracker"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply"
 
     # --- Redis / Celery ---
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
-    AWS_S3_BUCKET: str = "job-tracker-documents"
+    AWS_S3_BUCKET: str = "lwkapply-documents"
 
     # --- Rate limiting / misc ---
     MAX_UPLOAD_SIZE_MB: int = 10
