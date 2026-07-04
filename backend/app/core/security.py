@@ -63,8 +63,10 @@ def create_password_reset_token(subject: str) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict[str, Any]]:
-    """Returns the decoded payload, or None if invalid/expired."""
+def decode_token(token: Optional[str]) -> Optional[dict[str, Any]]:
+    """Returns the decoded payload, or None if missing/invalid/expired."""
+    if not token:
+        return None
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except JWTError:
