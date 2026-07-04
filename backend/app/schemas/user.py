@@ -1,6 +1,20 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+# bcrypt only uses the first 72 bytes of a password - anything past that
+# is silently ignored by the algorithm. We reject rather than truncate,
+# so no one thinks a 100-character password is stronger than a 72-byte one.
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
+def validate_password_byte_length(password: str) -> str:
+    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"Password must not exceed {BCRYPT_MAX_PASSWORD_BYTES} bytes when UTF-8 encoded "
+            "(most passwords: 72 characters; fewer if using emoji/non-Latin scripts)."
+        )
+    return password
 
 
 class UserBase(BaseModel):
@@ -11,6 +25,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
+
+    _validate_password_bytes = field_validator("password")(validate_password_byte_length)
 
 
 class UserRead(UserBase):
