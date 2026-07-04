@@ -21,6 +21,30 @@ and the start of Phase 2 (Application Tracking) from the project roadmap.
 - Celery tasks (resume parsing, email sending, AI processing)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 
+## Development workflow
+
+CI runs automatically on push/PR to `main` (see `.github/workflows/backend-ci.yml`):
+lint (`ruff check`), format check (`ruff format --check`), and unit tests
+with coverage.
+
+To catch the same issues locally *before* pushing:
+
+```bash
+pip install pre-commit
+pre-commit install        # one-time, from the repo root
+```
+
+From then on, `ruff check --fix` and `ruff format` run automatically on
+every `git commit` touching `backend/`. To run everything manually without
+committing:
+
+```bash
+cd backend
+ruff check .
+ruff format .
+pytest --cov=app --cov-report=term-missing
+```
+
 ## Local development
 
 ### Option A — Docker Compose (recommended)
