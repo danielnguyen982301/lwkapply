@@ -8,20 +8,37 @@ Kept separate from business logic so auth mechanics can be swapped
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt's algorithm only uses the first 72 bytes of the input - anything
+# beyond that is silently ignored by the C library. We reject longer
+# passwords explicitly (rather than truncating) so a user can't be misled
+# into thinking a 100-character password is stronger than a 72-byte one.
+_BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > _BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"Password must not exceed {_BCRYPT_MAX_PASSWORD_BYTES} bytes "
+            "when UTF-8 encoded."
+        )
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
+    except (ValueError, TypeError):
+        # Malformed hash (e.g. corrupted DB value) - fail closed, not open.
+        return False
 
 
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
