@@ -1,0 +1,21 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modern syntax)
+    "B",   # flake8-bugbear (common bug patterns)
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line length - handled by formatter, not worth failing CI over
+]
+
+[lint.isort]
+known-first-party = ["app"]
+
+[format]
+quote-style = "double"
