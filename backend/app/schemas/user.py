@@ -26,7 +26,9 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
 
-    _validate_password_bytes = field_validator("password")(validate_password_byte_length)
+    _validate_password_bytes = field_validator("password")(
+        validate_password_byte_length
+    )
 
 
 class UserRead(UserBase):

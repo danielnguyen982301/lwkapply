@@ -54,7 +54,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         # Deliberately vague message: don't confirm which field collided
-        raise HTTPException(status_code=400, detail="Unable to register with these details")
+        raise HTTPException(
+            status_code=400, detail="Unable to register with these details"
+        )
 
     user = User(
         email=payload.email,
@@ -93,7 +95,9 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
-def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+def request_password_reset(
+    payload: PasswordResetRequest, db: Session = Depends(get_db)
+):
     user = db.query(User).filter(User.email == payload.email).first()
     if user:
         # reset_token = create_password_reset_token(str(user.id))
@@ -104,7 +108,9 @@ def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_200_OK)
-def confirm_password_reset(payload: PasswordResetConfirm, db: Session = Depends(get_db)):
+def confirm_password_reset(
+    payload: PasswordResetConfirm, db: Session = Depends(get_db)
+):
     token_payload = decode_token(payload.token)
     if token_payload is None or token_payload.get("type") != "password_reset":
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")

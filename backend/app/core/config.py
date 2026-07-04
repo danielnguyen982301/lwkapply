@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply"
+    DATABASE_URL: str = (
+        "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply"
+    )
 
     # --- Redis / Celery ---
     REDIS_URL: str = "redis://localhost:6379/0"

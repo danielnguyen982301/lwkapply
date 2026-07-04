@@ -29,7 +29,9 @@ class TestSalaryRangeValidation:
         assert app.salary_min == app.salary_max
 
     def test_min_greater_than_max_is_rejected(self):
-        with pytest.raises(ValidationError, match="salary_min cannot be greater than salary_max"):
+        with pytest.raises(
+            ValidationError, match="salary_min cannot be greater than salary_max"
+        ):
             ApplicationCreate(**_base_payload(salary_min=150_000, salary_max=100_000))
 
     def test_only_min_provided_is_valid(self):

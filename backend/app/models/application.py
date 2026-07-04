@@ -31,7 +31,10 @@ class Application(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "applications"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     position: Mapped[str] = mapped_column(String(255), nullable=False)

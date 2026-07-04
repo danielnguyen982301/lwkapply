@@ -26,14 +26,18 @@ from app.schemas.application import (
 router = APIRouter()
 
 
-def _get_owned_application(db: Session, application_id: uuid.UUID, user: User) -> Application:
+def _get_owned_application(
+    db: Session, application_id: uuid.UUID, user: User
+) -> Application:
     application = (
         db.query(Application)
         .filter(Application.id == application_id, Application.user_id == user.id)
         .first()
     )
     if not application:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
+        )
     return application
 
 

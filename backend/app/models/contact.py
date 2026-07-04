@@ -9,14 +9,16 @@ from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.application import Application
-    
+
 
 class Contact(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "contacts"
 
     application_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)

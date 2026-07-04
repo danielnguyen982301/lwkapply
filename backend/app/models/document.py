@@ -22,8 +22,10 @@ class Document(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "documents"
 
     application_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     file_url: Mapped[str] = mapped_column(String(1000), nullable=False)

@@ -33,13 +33,17 @@ class Interview(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "interviews"
 
     application_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     type: Mapped[InterviewType] = mapped_column(
         Enum(InterviewType, name="interview_type"), nullable=False
     )
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[InterviewResult] = mapped_column(
