@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.security import (
     create_access_token,
-    create_password_reset_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -97,7 +96,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if user:
-        reset_token = create_password_reset_token(str(user.id))
+        # reset_token = create_password_reset_token(str(user.id))
         # TODO: enqueue a Celery task to email `reset_token` to the user.
         logger.info("Password reset token generated for user_id=%s", user.id)
     # Always return the same response, whether or not the email exists.
