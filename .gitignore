@@ -10,8 +10,9 @@ docs/SECURITY.md
 docs/SUMMARY.md
 docs/TESTING.md
 
-# .venv
+# Python
 .venv
+__pycache__
 
 # Others
 .DS_Store
