@@ -1,12 +1,16 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.application import Application
 
 
 class InterviewType(str, enum.Enum):

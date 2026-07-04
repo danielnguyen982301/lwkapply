@@ -1,10 +1,16 @@
 import enum
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    # Import only for type-checkers (Pylance/mypy). Doing this at runtime
+    # would create a circular import, since Application imports User back.
+    from app.models.application import Application
 
 
 class UserRole(str, enum.Enum):

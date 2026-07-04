@@ -1,12 +1,19 @@
 import enum
 import uuid
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.contact import Contact
+    from app.models.document import Document
+    from app.models.interview import Interview
+    from app.models.user import User
 
 
 class ApplicationStatus(str, enum.Enum):
