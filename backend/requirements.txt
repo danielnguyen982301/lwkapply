@@ -6,7 +6,9 @@ psycopg2-binary==2.9.9
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+# Using bcrypt directly (not via passlib) - passlib 1.7.4 is unmaintained
+# and incompatible with bcrypt>=4.1's stricter 72-byte length enforcement.
+bcrypt==4.2.0
 python-multipart==0.0.9
 email-validator==2.2.0
 redis==5.0.8
