@@ -30,7 +30,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     file_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_type: Mapped[DocumentType] = mapped_column(
-        Enum(DocumentType, name="document_type"), default=DocumentType.OTHER
+        Enum(DocumentType, name="document_type"), server_default=DocumentType.OTHER
     )
 
     application: Mapped["Application"] = relationship(back_populates="documents")
