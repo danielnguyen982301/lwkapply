@@ -11,6 +11,7 @@
 - JWT auth: register, login, refresh, password reset request/confirm, `/me`
 - Application CRUD API with pagination, status filter, and search
 - Docker Compose for local dev (API + Postgres + Redis)
+- Unit tests for security, application schema and user schema.
 
 ## v0.1.0
 
