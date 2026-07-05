@@ -1,9 +1,29 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import applications, auth
+from app.api.v1.endpoints import applications, auth, contacts, documents, interviews
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(
     applications.router, prefix="/applications", tags=["applications"]
+)
+
+# Interviews/Documents/Contacts are nested under a specific application -
+# they never exist independently of one, so their routes and ownership
+# checks are scoped through applications/{application_id}/... rather than
+# living at the top level. See docstrings in each endpoint module.
+api_router.include_router(
+    interviews.router,
+    prefix="/applications/{application_id}/interviews",
+    tags=["interviews"],
+)
+api_router.include_router(
+    documents.router,
+    prefix="/applications/{application_id}/documents",
+    tags=["documents"],
+)
+api_router.include_router(
+    contacts.router,
+    prefix="/applications/{application_id}/contacts",
+    tags=["contacts"],
 )
