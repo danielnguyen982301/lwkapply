@@ -12,6 +12,7 @@ and the start of Phase 2 (Application Tracking) from the project roadmap.
 - **Models**: User, Application, Interview, Document, Contact (matches
   `docs/DATABASE.md`)
 - **Infra**: Alembic migrations wired up, Docker Compose (API + Postgres + Redis)
+- **Tests**: Unit tests for security, application schema and user schema
 
 ## Not yet implemented (next up per TODO.md)
 
