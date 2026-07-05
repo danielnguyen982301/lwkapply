@@ -40,7 +40,11 @@ class Application(Base, UUIDMixin, TimestampMixin):
     position: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[ApplicationStatus] = mapped_column(
-        Enum(ApplicationStatus, name="application_status"),
+        Enum(
+            ApplicationStatus,
+            name="application_status",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
         default=ApplicationStatus.SAVED,
         nullable=False,
         index=True,

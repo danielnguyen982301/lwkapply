@@ -47,7 +47,12 @@ class Interview(Base, UUIDMixin, TimestampMixin):
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[InterviewResult] = mapped_column(
-        Enum(InterviewResult, name="interview_result"), server_default=InterviewResult.PENDING
+        Enum(
+            InterviewResult,
+            name="interview_result",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        server_default=InterviewResult.PENDING,
     )
 
     application: Mapped["Application"] = relationship(back_populates="interviews")

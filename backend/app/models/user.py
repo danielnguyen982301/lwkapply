@@ -29,7 +29,13 @@ class User(Base, UUIDMixin, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role"), default=UserRole.USER, nullable=False
+        Enum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=UserRole.USER,
+        nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
