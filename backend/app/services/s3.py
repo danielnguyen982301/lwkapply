@@ -50,7 +50,9 @@ def _s3_client():
     )
 
 
-def _build_object_key(user_id: uuid.UUID, application_id: uuid.UUID, filename: str) -> str:
+def _build_object_key(
+    user_id: uuid.UUID, application_id: uuid.UUID, filename: str
+) -> str:
     # A random suffix (not just the original filename) prevents key
     # collisions when a user uploads two files with the same name, and
     # avoids leaking any meaning from the filename itself into the key.
