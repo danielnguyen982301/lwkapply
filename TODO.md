@@ -3,9 +3,9 @@
 ## Project Setup
 
 - [ ] Create repository structure
-- [ x ] Configure Docker environment
-- [ x ] Configure development workflow
-- [ x ] Setup GitHub Actions
+- [x] Configure Docker environment
+- [x] Configure development workflow
+- [x] Setup GitHub Actions
 
 ---
 
@@ -13,17 +13,17 @@
 
 ### Infrastructure
 
-- [ x ] Setup FastAPI project
-- [ x ] Setup PostgreSQL
-- [ x ] Configure SQLAlchemy
-- [ x ] Configure Alembic
+- [x] Setup FastAPI project
+- [x] Setup PostgreSQL
+- [x] Configure SQLAlchemy
+- [x] Configure Alembic
 
 ### Authentication
 
-- [ x ] User registration
-- [ x ] User login
-- [ x ] JWT authentication
-- [ x ] Password reset
+- [x] User registration
+- [x] User login
+- [x] JWT authentication
+- [x] Password reset
 
 ### Applications
 
