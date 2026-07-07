@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: job_tracker
+      POSTGRES_DB: lwkapply
     ports:
       - "5432:5432"
     volumes:
@@ -28,7 +28,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/job_tracker
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/lwkapply
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
