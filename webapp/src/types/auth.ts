@@ -7,9 +7,10 @@ export interface User {
   role: string;
 }
 
-export interface TokenPair {
+// The refresh token never appears here anymore — it lives only in the
+// httpOnly cookie the backend sets on /auth/login and /auth/refresh.
+export interface AccessTokenResponse {
   access_token: string;
-  refresh_token: string;
   token_type: "bearer";
 }
 
