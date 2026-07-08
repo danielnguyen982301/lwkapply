@@ -149,3 +149,13 @@ def confirm_password_reset(
     db.add(user)
     db.commit()
     return {"message": "Password has been reset successfully."}
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(verify_csrf)],
+)
+def logout(response: Response):
+    clear_auth_cookies(response)
+    return None
