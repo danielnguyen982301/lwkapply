@@ -16,9 +16,16 @@ Design notes:
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.cookies import (
+    REFRESH_COOKIE_NAME,
+    generate_csrf_token,
+    set_auth_cookies,
+    clear_auth_cookies,
+)
+from app.api.deps import verify_csrf
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -32,7 +39,6 @@ from app.schemas.auth import (
     LoginRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
-    RefreshRequest,
     TokenResponse,
 )
 from app.schemas.user import UserCreate, UserRead
@@ -42,10 +48,7 @@ router = APIRouter()
 
 
 def _issue_tokens(user_id) -> TokenResponse:
-    return TokenResponse(
-        access_token=create_access_token(str(user_id)),
-        refresh_token=create_refresh_token(str(user_id)),
-    )
+    return TokenResponse(access_token=create_access_token(str(user_id)))
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -70,25 +73,49 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
+    refresh_token = create_refresh_token(str(user.id))
+    csrf_token = generate_csrf_token()
+
+    set_auth_cookies(response, refresh_token, csrf_token)
+
     return _issue_tokens(user.id)
 
 
-@router.post("/refresh", response_model=TokenResponse)
-def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
-    token_payload = decode_token(payload.refresh_token)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(verify_csrf)],
+)
+def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
+    token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
+        )
+
+    token_payload = decode_token(token)
     if token_payload is None or token_payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user = db.query(User).filter(User.id == token_payload["sub"]).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # Rotate both the refresh token and the CSRF token on every refresh —
+    # if a refresh token is ever replayed after rotation, this makes the
+    # replay detectable (the old one no longer validates) rather than
+    # silently accepted.
+    new_refresh_token = create_refresh_token(str(user.id))
+    new_csrf_token = generate_csrf_token()
+
+    set_auth_cookies(response, new_refresh_token, new_csrf_token)
 
     return _issue_tokens(user.id)
 
