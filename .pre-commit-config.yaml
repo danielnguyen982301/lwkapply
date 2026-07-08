@@ -20,16 +20,16 @@ repos:
 
   - repo: local
     hooks:
-      - id: eslint
-        name: eslint (webapp)
-        entry: bash -c 'cd webapp && npm run lint'
-        language: system
-        files: ^webapp/.*\.(ts|vue)$
-        pass_filenames: false
-
       - id: prettier
-        name: prettier --check (webapp)
-        entry: bash -c 'cd webapp && npm run format:check'
+        name: prettier --write (webapp)
+        entry: webapp/node_modules/.bin/prettier --write
         language: system
         files: ^webapp/.*\.(ts|vue|css)$
-        pass_filenames: false
+        pass_filenames: true
+
+      - id: eslint
+        name: eslint --fix (webapp)
+        entry: webapp/node_modules/.bin/eslint --fix --config webapp/eslint.config.js
+        language: system
+        files: ^webapp/.*\.(ts|vue)$
+        pass_filenames: true
