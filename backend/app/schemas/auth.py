@@ -13,10 +13,6 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
 class PasswordResetRequest(BaseModel):
     """Step 1: user requests a reset email."""
 
