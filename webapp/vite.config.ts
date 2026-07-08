@@ -1,8 +1,9 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, mergeConfig } from 'vite'
+import { defineConfig as defineVitestConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
-export default defineConfig({
+const viteConfig = defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
@@ -11,9 +12,6 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // Proxy API calls to the FastAPI backend during local dev so the
-    // browser only ever talks to one origin (avoids CORS config drift
-    // between environments).
     proxy: {
       '/api': {
         target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
@@ -22,3 +20,16 @@ export default defineConfig({
     },
   },
 })
+
+const vitestConfig = defineVitestConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+    },
+  },
+})
+
+export default mergeConfig(viteConfig, vitestConfig)
