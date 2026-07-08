@@ -17,3 +17,19 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=1000"]
       - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (webapp)
+        entry: bash -c 'cd webapp && npm run lint'
+        language: system
+        files: ^webapp/.*\.(ts|vue)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier --check (webapp)
+        entry: bash -c 'cd webapp && npm run format:check'
+        language: system
+        files: ^webapp/.*\.(ts|vue|css)$
+        pass_filenames: false
