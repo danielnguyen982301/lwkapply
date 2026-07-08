@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 declare module 'vue-router' {
@@ -7,6 +7,21 @@ declare module 'vue-router' {
     /** Routes only a logged-out visitor should see (login/register). */
     guestOnly?: boolean
   }
+}
+
+// Pulled out as a plain function (rather than left inline in
+// router.beforeEach) so it's testable without spinning up a full router
+// instance — see src/router/__tests__/authGuard.spec.ts.
+export function authGuard(to: RouteLocationNormalized, isAuthenticated: boolean) {
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.guestOnly && isAuthenticated) {
+    return { name: 'dashboard' }
+  }
+
+  return true
 }
 
 const router = createRouter({
@@ -56,15 +71,7 @@ router.beforeEach(async (to) => {
     await auth.bootstrap()
   }
 
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
-  }
-
-  if (to.meta.guestOnly && auth.isAuthenticated) {
-    return { name: 'dashboard' }
-  }
-
-  return true
+  return authGuard(to, auth.isAuthenticated)
 })
 
 export default router
