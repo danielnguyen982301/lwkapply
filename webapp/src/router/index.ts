@@ -1,11 +1,11 @@
-import { createRouter, createWebHistory } from "vue-router";
-import { useAuthStore } from "@/stores/auth";
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
-declare module "vue-router" {
+declare module 'vue-router' {
   interface RouteMeta {
-    requiresAuth?: boolean;
+    requiresAuth?: boolean
     /** Routes only a logged-out visitor should see (login/register). */
-    guestOnly?: boolean;
+    guestOnly?: boolean
   }
 }
 
@@ -13,54 +13,54 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: "/",
-      component: () => import("@/layouts/AppLayout.vue"),
+      path: '/',
+      component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },
       children: [
         {
-          path: "",
-          name: "dashboard",
-          component: () => import("@/views/DashboardView.vue"),
+          path: '',
+          name: 'dashboard',
+          component: () => import('@/views/DashboardView.vue'),
         },
       ],
     },
     {
-      path: "/",
-      component: () => import("@/layouts/AuthLayout.vue"),
+      path: '/',
+      component: () => import('@/layouts/AuthLayout.vue'),
       meta: { guestOnly: true },
       children: [
         {
-          path: "login",
-          name: "login",
-          component: () => import("@/views/auth/LoginView.vue"),
+          path: 'login',
+          name: 'login',
+          component: () => import('@/views/auth/LoginView.vue'),
         },
         {
-          path: "register",
-          name: "register",
-          component: () => import("@/views/auth/RegisterView.vue"),
+          path: 'register',
+          name: 'register',
+          component: () => import('@/views/auth/RegisterView.vue'),
         },
       ],
     },
     {
-      path: "/:pathMatch(.*)*",
-      name: "not-found",
-      component: () => import("@/views/NotFoundView.vue"),
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
     },
   ],
-});
+})
 
 router.beforeEach((to) => {
-  const auth = useAuthStore();
+  const auth = useAuthStore()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: "login", query: { redirect: to.fullPath } };
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
   if (to.meta.guestOnly && auth.isAuthenticated) {
-    return { name: "dashboard" };
+    return { name: 'dashboard' }
   }
 
-  return true;
-});
+  return true
+})
 
-export default router;
+export default router
