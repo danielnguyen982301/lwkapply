@@ -25,6 +25,8 @@
 - [x] User login
 - [x] JWT authentication
 - [x] Password reset
+- [x] httpOnly-cookie refresh token + CSRF double-submit check on
+      `/auth/refresh` and `/auth/logout` (see BACKEND-SUMMARY.md)
 
 ### Applications
 
@@ -63,20 +65,23 @@
 
 ### Foundation
 
-- [ ] Create Vue project
-- [ ] Configure TypeScript
-- [ ] Configure Pinia
-- [ ] Configure PrimeVue
-- [ ] Configure Vue Router
-- [ ] Configure Tailwind CSS
-- [ ] Base layout / shell (nav, auth-aware routing guard)
-- [ ] API client (typed, JWT-aware, refresh-token handling)
+- [x] Create Vue project (`webapp/` — Vite + Vue 3 + TypeScript)
+- [x] Configure TypeScript
+- [x] Configure Pinia
+- [x] Configure PrimeVue
+- [x] Configure Vue Router
+- [x] Configure Tailwind CSS
+- [x] Base layout / shell (nav, auth-aware routing guard — see
+      `authGuard` in `src/router/index.ts`)
+- [x] API client (typed, JWT-aware, refresh-token handling — Axios
+      instance with bearer-token injection, queued refresh-on-401, and
+      the httpOnly-cookie refresh flow)
 
 ### Authentication
 
-- [ ] Login page
-- [ ] Registration page
-- [ ] Protected routes
+- [x] Login page
+- [x] Registration page
+- [x] Protected routes
 
 ### Applications
 
@@ -120,9 +125,11 @@
 
 ## Deployment
 
-- [ ] Docker Compose
+- [ ] Docker Compose (frontend — backend's is already done)
 - [ ] Production environment
-- [ ] CI/CD pipeline
+- [x] CI/CD pipeline — webapp (`.github/workflows/webapp-ci.yml`:
+      eslint, prettier check, vue-tsc type-check, vitest w/ coverage,
+      build); backend's already existed
 - [ ] Monitoring
 
 ---
@@ -131,6 +138,8 @@
 
 - [x] Backend unit tests (security, application/interview/contact/document
       schemas, user schema)
-- [ ] Frontend unit tests
+- [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
+      error-extraction helper; not yet covering Applications/Kanban/
+      Interviews/Contacts/Documents UI, since none of that exists yet)
 - [ ] Integration tests
 - [ ] End-to-end tests
