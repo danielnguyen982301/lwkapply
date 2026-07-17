@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import Button from 'primevue/button'
 </script>
 
 <template>
@@ -8,6 +8,6 @@ import { RouterLink } from 'vue-router'
   >
     <p class="font-display text-2xl font-bold text-ink">Page not found</p>
     <p class="text-sm text-slate">The page you're looking for doesn't exist or was moved.</p>
-    <RouterLink to="/" class="text-sm font-medium text-teal"> Back to dashboard </RouterLink>
+    <Button label="Back to dashboard" as="RouterLink" to="/" link />
   </div>
 </template>
