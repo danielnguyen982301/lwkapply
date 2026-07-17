@@ -85,10 +85,12 @@
 
 ### Applications
 
-- [ ] Application list
-- [ ] Application details
-- [ ] Kanban board
-- [ ] Search and filters
+- [x] Application list
+- [x] Application details
+- [x] Kanban board
+- [x] Search and filters
+- [x] PrimeVue components across existing UI (forms, tables, alerts,
+      confirm dialogs, status badges)
 
 ### Interviews / Contacts / Documents
 
@@ -139,7 +141,7 @@
 - [x] Backend unit tests (security, application/interview/contact/document
       schemas, user schema)
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
-      error-extraction helper; not yet covering Applications/Kanban/
-      Interviews/Contacts/Documents UI, since none of that exists yet)
+      error-extraction helper; Applications/Kanban UI exists but is not yet
+      covered by component/store tests)
 - [ ] Integration tests
 - [ ] End-to-end tests
