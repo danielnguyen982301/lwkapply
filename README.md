@@ -1,4 +1,4 @@
-# Job Application Tracker
+# LwkApply
 
 A full-stack job application management platform designed to help job seekers organize applications, track interview progress, manage resumes, and gain insights into their job search through analytics and AI-powered features.
 
@@ -146,7 +146,7 @@ In Active Development
 
 
 
-See: 
+See:
 - docs/ARCHITECTURE.md
 - docs/ROADMAP.md
 - TODO.md
