@@ -106,14 +106,12 @@ async function handleDelete(id: string, company: string) {
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h1 class="font-display text-xl font-semibold text-ink">Applications</h1>
-      <button
-        type="button"
-        disabled
-        title="Coming soon"
-        class="cursor-not-allowed rounded-card bg-teal/40 px-4 py-2 text-sm font-medium text-white"
+      <RouterLink
+        :to="{ name: 'application-new' }"
+        class="rounded-card bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal-dark"
       >
         New Application
-      </button>
+      </RouterLink>
     </div>
 
     <div class="flex flex-wrap items-center gap-3">
@@ -230,7 +228,14 @@ async function handleDelete(id: string, company: string) {
         </thead>
         <tbody class="divide-y divide-slate/10">
           <tr v-for="app in store.items" :key="app.id" class="hover:bg-paper/60">
-            <td class="px-4 py-3 font-medium text-ink">{{ app.company }}</td>
+            <td class="px-4 py-3 font-medium text-ink">
+              <RouterLink
+                :to="{ name: 'application-detail', params: { id: app.id } }"
+                class="hover:underline"
+              >
+                {{ app.company }}
+              </RouterLink>
+            </td>
             <td class="px-4 py-3 text-slate">{{ app.position }}</td>
             <td class="px-4 py-3 text-slate">{{ app.location ?? '—' }}</td>
             <td class="px-4 py-3">
@@ -244,9 +249,15 @@ async function handleDelete(id: string, company: string) {
             <td class="px-4 py-3 text-slate">{{ formatSalary(app.salary_min, app.salary_max) }}</td>
             <td class="px-4 py-3 text-slate">{{ formatDate(app.applied_date) }}</td>
             <td class="px-4 py-3 text-right">
+              <RouterLink
+                :to="{ name: 'application-detail', params: { id: app.id } }"
+                class="text-xs font-medium text-teal hover:underline"
+              >
+                Edit
+              </RouterLink>
               <button
                 type="button"
-                class="text-xs font-medium text-coral hover:underline"
+                class="ml-3 text-xs font-medium text-coral hover:underline"
                 @click="handleDelete(app.id, app.company)"
               >
                 Delete
