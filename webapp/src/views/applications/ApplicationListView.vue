@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useApplicationsStore } from '@/stores/applications'
+import ViewTabs from '@/components/applications/ViewTabs.vue'
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
@@ -113,6 +114,8 @@ async function handleDelete(id: string, company: string) {
         New Application
       </RouterLink>
     </div>
+
+    <ViewTabs />
 
     <div class="flex flex-wrap items-center gap-3">
       <div class="min-w-[220px] flex-1">
