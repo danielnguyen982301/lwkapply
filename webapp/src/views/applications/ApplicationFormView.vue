@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import DatePicker from 'primevue/datepicker'
+import InputNumber from 'primevue/inputnumber'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import ProgressSpinner from 'primevue/progressspinner'
+import Select from 'primevue/select'
+import Textarea from 'primevue/textarea'
+import { useConfirm } from 'primevue/useconfirm'
+
 import { useApplicationsStore } from '@/stores/applications'
+import { applicationStatusOptions } from '@/lib/application-ui'
 import {
-  APPLICATION_STATUSES,
-  APPLICATION_STATUS_LABELS,
   type Application,
   type ApplicationCreatePayload,
   type ApplicationStatus,
@@ -13,11 +23,10 @@ import {
 const route = useRoute()
 const router = useRouter()
 const store = useApplicationsStore()
+const confirm = useConfirm()
 
-// One component, two modes — determined by which route matched, not by
-// presence/absence of an id prop, since `/applications/new` and
-// `/applications/:id` are registered as distinct named routes even though
-// they share this component.
+const statusOptions = applicationStatusOptions()
+
 const isNew = computed(() => route.name === 'application-new')
 const applicationId = computed(() => (isNew.value ? null : String(route.params.id)))
 
@@ -26,7 +35,6 @@ interface FormState {
   position: string
   location: string
   status: ApplicationStatus
-  // Kept as strings for the inputs; parsed to number|null in buildPayload().
   salary_min: string
   salary_max: string
   applied_date: string
@@ -50,6 +58,34 @@ function blankForm(): FormState {
 
 const form = reactive<FormState>(blankForm())
 const validationErrors = ref<Partial<Record<keyof FormState, string>>>({})
+
+const appliedDate = computed({
+  get(): Date | null {
+    if (!form.applied_date) return null
+    return new Date(`${form.applied_date}T00:00:00`)
+  },
+  set(value: Date | null) {
+    form.applied_date = value ? value.toISOString().slice(0, 10) : ''
+  },
+})
+
+const salaryMin = computed({
+  get(): number | null {
+    return form.salary_min ? Number(form.salary_min) : null
+  },
+  set(value: number | null) {
+    form.salary_min = value != null ? String(value) : ''
+  },
+})
+
+const salaryMax = computed({
+  get(): number | null {
+    return form.salary_max ? Number(form.salary_max) : null
+  },
+  set(value: number | null) {
+    form.salary_max = value != null ? String(value) : ''
+  },
+})
 
 function populateForm(app: Application) {
   form.company = app.company
@@ -78,9 +114,6 @@ onMounted(() => {
   }
 })
 
-// Handles navigating directly from one application's detail page to
-// another's (e.g. Kanban card -> card) without an unmount in between,
-// since both routes resolve to this same component instance.
 watch(
   () => route.params.id,
   (newId, oldId) => {
@@ -136,18 +169,25 @@ async function handleSubmit() {
   }
 }
 
-async function handleDelete() {
+function handleDelete() {
   if (!applicationId.value) return
-  if (
-    !confirm(`Delete the application to ${form.company || 'this company'}? This can't be undone.`)
-  )
-    return
-  try {
-    await store.deleteApplication(applicationId.value)
-    router.push({ name: 'applications' })
-  } catch {
-    // store.mutationError is already set and rendered below.
-  }
+  confirm.require({
+    message: `Delete the application to ${form.company || 'this company'}? This can't be undone.`,
+    header: 'Confirm deletion',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Delete',
+    rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true },
+    acceptProps: { label: 'Delete', severity: 'danger' },
+    accept: async () => {
+      try {
+        await store.deleteApplication(applicationId.value!)
+        router.push({ name: 'applications' })
+      } catch {
+        // store.mutationError is already set and rendered below.
+      }
+    },
+  })
 }
 
 function handleCancel() {
@@ -161,220 +201,204 @@ function handleCancel() {
       <h1 class="font-display text-xl font-semibold text-ink">
         {{ isNew ? 'New Application' : form.company || 'Edit Application' }}
       </h1>
-      <RouterLink
+      <Button
+        label="Back to list"
+        icon="pi pi-arrow-left"
+        as="RouterLink"
         :to="{ name: 'applications' }"
-        class="text-sm font-medium text-slate hover:text-ink"
-      >
-        &larr; Back to list
-      </RouterLink>
+        link
+        size="small"
+      />
     </div>
 
-    <div
-      v-if="!isNew && store.currentStatus === 'error'"
-      role="alert"
-      class="rounded-card border border-coral/30 bg-coral/5 p-4 text-sm text-coral"
-    >
-      {{ store.currentError }}
-      <button
-        type="button"
-        class="ml-2 underline"
+    <Message v-if="!isNew && store.currentStatus === 'error'" severity="error" :closable="false">
+      <span>{{ store.currentError }}</span>
+      <Button
+        label="Retry"
+        link
+        size="small"
+        class="ml-2"
         @click="applicationId && loadApplication(applicationId)"
-      >
-        Retry
-      </button>
-    </div>
+      />
+    </Message>
 
     <div
       v-else-if="!isNew && store.currentStatus === 'loading' && !form.company"
       aria-live="polite"
-      class="rounded-card border border-slate/10 bg-white p-10 text-center text-sm text-slate"
+      class="flex justify-center rounded-card border border-slate/10 bg-white p-10"
     >
-      Loading application…
+      <ProgressSpinner aria-label="Loading application" />
     </div>
 
-    <form
-      v-else
-      class="space-y-5 rounded-card border border-slate/10 bg-white p-6"
-      @submit.prevent="handleSubmit"
-    >
-      <div
-        v-if="store.mutationStatus === 'error'"
-        role="alert"
-        class="rounded-card border border-coral/30 bg-coral/5 p-3 text-sm text-coral"
-      >
-        {{ store.mutationError }}
-      </div>
+    <Card v-else>
+      <template #content>
+        <form class="space-y-5" @submit.prevent="handleSubmit">
+          <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
+            {{ store.mutationError }}
+          </Message>
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label for="company" class="mb-1 block text-sm font-medium text-ink">Company *</label>
-          <input
-            id="company"
-            v-model="form.company"
-            type="text"
-            required
-            :aria-invalid="!!validationErrors.company"
-            :aria-describedby="validationErrors.company ? 'company-error' : undefined"
-            class="w-full rounded-card border px-3 py-2 text-sm focus:border-teal"
-            :class="validationErrors.company ? 'border-coral' : 'border-slate/20'"
-          />
-          <p v-if="validationErrors.company" id="company-error" class="mt-1 text-xs text-coral">
-            {{ validationErrors.company }}
-          </p>
-        </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="flex flex-col gap-1">
+              <label for="company" class="text-sm font-medium text-ink">Company *</label>
+              <InputText
+                id="company"
+                v-model="form.company"
+                :invalid="!!validationErrors.company"
+                :aria-describedby="validationErrors.company ? 'company-error' : undefined"
+                class="w-full"
+              />
+              <Message
+                v-if="validationErrors.company"
+                id="company-error"
+                severity="error"
+                variant="simple"
+                size="small"
+              >
+                {{ validationErrors.company }}
+              </Message>
+            </div>
 
-        <div>
-          <label for="position" class="mb-1 block text-sm font-medium text-ink">Position *</label>
-          <input
-            id="position"
-            v-model="form.position"
-            type="text"
-            required
-            :aria-invalid="!!validationErrors.position"
-            :aria-describedby="validationErrors.position ? 'position-error' : undefined"
-            class="w-full rounded-card border px-3 py-2 text-sm focus:border-teal"
-            :class="validationErrors.position ? 'border-coral' : 'border-slate/20'"
-          />
-          <p v-if="validationErrors.position" id="position-error" class="mt-1 text-xs text-coral">
-            {{ validationErrors.position }}
-          </p>
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="position" class="text-sm font-medium text-ink">Position *</label>
+              <InputText
+                id="position"
+                v-model="form.position"
+                :invalid="!!validationErrors.position"
+                :aria-describedby="validationErrors.position ? 'position-error' : undefined"
+                class="w-full"
+              />
+              <Message
+                v-if="validationErrors.position"
+                id="position-error"
+                severity="error"
+                variant="simple"
+                size="small"
+              >
+                {{ validationErrors.position }}
+              </Message>
+            </div>
 
-        <div>
-          <label for="location" class="mb-1 block text-sm font-medium text-ink">Location</label>
-          <input
-            id="location"
-            v-model="form.location"
-            type="text"
-            class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          />
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="location" class="text-sm font-medium text-ink">Location</label>
+              <InputText id="location" v-model="form.location" class="w-full" />
+            </div>
 
-        <div>
-          <label for="status" class="mb-1 block text-sm font-medium text-ink">Status</label>
-          <select
-            id="status"
-            v-model="form.status"
-            class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          >
-            <option v-for="status in APPLICATION_STATUSES" :key="status" :value="status">
-              {{ APPLICATION_STATUS_LABELS[status] }}
-            </option>
-          </select>
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="status" class="text-sm font-medium text-ink">Status</label>
+              <Select
+                v-model="form.status"
+                input-id="status"
+                :options="statusOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+              />
+            </div>
 
-        <div>
-          <label for="salary_min" class="mb-1 block text-sm font-medium text-ink">Salary min</label>
-          <input
-            id="salary_min"
-            v-model="form.salary_min"
-            type="number"
-            min="0"
-            :aria-invalid="!!validationErrors.salary_min"
-            :aria-describedby="validationErrors.salary_min ? 'salary-min-error' : undefined"
-            class="w-full rounded-card border px-3 py-2 text-sm focus:border-teal"
-            :class="validationErrors.salary_min ? 'border-coral' : 'border-slate/20'"
-          />
-          <p
-            v-if="validationErrors.salary_min"
-            id="salary-min-error"
-            class="mt-1 text-xs text-coral"
-          >
-            {{ validationErrors.salary_min }}
-          </p>
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="salary_min" class="text-sm font-medium text-ink">Salary min</label>
+              <InputNumber
+                v-model="salaryMin"
+                input-id="salary_min"
+                :min="0"
+                :invalid="!!validationErrors.salary_min"
+                :aria-describedby="validationErrors.salary_min ? 'salary-min-error' : undefined"
+                class="w-full"
+              />
+              <Message
+                v-if="validationErrors.salary_min"
+                id="salary-min-error"
+                severity="error"
+                variant="simple"
+                size="small"
+              >
+                {{ validationErrors.salary_min }}
+              </Message>
+            </div>
 
-        <div>
-          <label for="salary_max" class="mb-1 block text-sm font-medium text-ink">Salary max</label>
-          <input
-            id="salary_max"
-            v-model="form.salary_max"
-            type="number"
-            min="0"
-            :aria-invalid="!!validationErrors.salary_max"
-            :aria-describedby="validationErrors.salary_max ? 'salary-max-error' : undefined"
-            class="w-full rounded-card border px-3 py-2 text-sm focus:border-teal"
-            :class="validationErrors.salary_max ? 'border-coral' : 'border-slate/20'"
-          />
-          <p
-            v-if="validationErrors.salary_max"
-            id="salary-max-error"
-            class="mt-1 text-xs text-coral"
-          >
-            {{ validationErrors.salary_max }}
-          </p>
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="salary_max" class="text-sm font-medium text-ink">Salary max</label>
+              <InputNumber
+                v-model="salaryMax"
+                input-id="salary_max"
+                :min="0"
+                :invalid="!!validationErrors.salary_max"
+                :aria-describedby="validationErrors.salary_max ? 'salary-max-error' : undefined"
+                class="w-full"
+              />
+              <Message
+                v-if="validationErrors.salary_max"
+                id="salary-max-error"
+                severity="error"
+                variant="simple"
+                size="small"
+              >
+                {{ validationErrors.salary_max }}
+              </Message>
+            </div>
 
-        <div>
-          <label for="applied_date" class="mb-1 block text-sm font-medium text-ink"
-            >Applied date</label
-          >
-          <input
-            id="applied_date"
-            v-model="form.applied_date"
-            type="date"
-            class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          />
-        </div>
+            <div class="flex flex-col gap-1">
+              <label for="applied_date" class="text-sm font-medium text-ink">Applied date</label>
+              <DatePicker
+                v-model="appliedDate"
+                input-id="applied_date"
+                date-format="yy-mm-dd"
+                show-icon
+                icon-display="input"
+                class="w-full"
+              />
+            </div>
 
-        <div>
-          <label for="job_url" class="mb-1 block text-sm font-medium text-ink"
-            >Job posting URL</label
-          >
-          <input
-            id="job_url"
-            v-model="form.job_url"
-            type="url"
-            placeholder="https://…"
-            class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          />
-        </div>
-      </div>
+            <div class="flex flex-col gap-1">
+              <label for="job_url" class="text-sm font-medium text-ink">Job posting URL</label>
+              <InputText
+                id="job_url"
+                v-model="form.job_url"
+                type="url"
+                placeholder="https://…"
+                class="w-full"
+              />
+            </div>
+          </div>
 
-      <div>
-        <label for="notes" class="mb-1 block text-sm font-medium text-ink">Notes</label>
-        <textarea
-          id="notes"
-          v-model="form.notes"
-          rows="4"
-          class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-        ></textarea>
-      </div>
+          <div class="flex flex-col gap-1">
+            <label for="notes" class="text-sm font-medium text-ink">Notes</label>
+            <Textarea id="notes" v-model="form.notes" rows="4" class="w-full" />
+          </div>
 
-      <div class="flex items-center justify-between border-t border-slate/10 pt-4">
-        <button
-          v-if="!isNew"
-          type="button"
-          class="text-sm font-medium text-coral hover:underline"
-          @click="handleDelete"
-        >
-          Delete application
-        </button>
-        <span v-else />
+          <div class="flex items-center justify-between border-t border-slate/10 pt-4">
+            <Button
+              v-if="!isNew"
+              label="Delete application"
+              link
+              severity="danger"
+              type="button"
+              @click="handleDelete"
+            />
 
-        <div class="flex items-center gap-3">
-          <button
-            type="button"
-            class="rounded-card border border-slate/20 px-4 py-2 text-sm font-medium text-slate hover:text-ink"
-            @click="handleCancel"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            :disabled="store.mutationStatus === 'loading'"
-            class="rounded-card bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal-dark disabled:opacity-60"
-          >
-            {{
-              store.mutationStatus === 'loading'
-                ? 'Saving…'
-                : isNew
-                  ? 'Create application'
-                  : 'Save changes'
-            }}
-          </button>
-        </div>
-      </div>
-    </form>
+            <div class="ml-auto flex items-center gap-3">
+              <Button
+                label="Cancel"
+                severity="secondary"
+                outlined
+                type="button"
+                @click="handleCancel"
+              />
+              <Button
+                type="submit"
+                :label="
+                  store.mutationStatus === 'loading'
+                    ? 'Saving…'
+                    : isNew
+                      ? 'Create application'
+                      : 'Save changes'
+                "
+                :loading="store.mutationStatus === 'loading'"
+              />
+            </div>
+          </div>
+        </form>
+      </template>
+    </Card>
   </div>
 </template>
