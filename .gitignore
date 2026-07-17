@@ -14,10 +14,13 @@ docs/TESTING.md
 .venv
 __pycache__
 
-# Others
-.DS_Store
+# env
 .env
 .env.example
 .env.local
+
+# Misc
+*.tsbuildinfo
+.DS_Store
 filelist.txt
 *.zip
