@@ -43,6 +43,11 @@ const router = createRouter({
           component: () => import('@/views/applications/ApplicationListView.vue'),
         },
         {
+          path: 'applications/board',
+          name: 'application-board',
+          component: () => import('@/views/applications/ApplicationBoardView.vue'),
+        },
+        {
           path: 'applications/new',
           name: 'application-new',
           component: () => import('@/views/applications/ApplicationFormView.vue'),
