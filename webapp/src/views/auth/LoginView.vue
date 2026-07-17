@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Password from 'primevue/password'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -50,49 +54,62 @@ async function handleSubmit() {
   <form novalidate class="space-y-5" @submit.prevent="handleSubmit">
     <h2 class="font-display text-lg font-bold text-ink">Log in</h2>
 
-    <p v-if="formError" role="alert" class="rounded-card bg-coral/10 px-3 py-2 text-sm text-coral">
+    <Message v-if="formError" severity="error" :closable="false">
       {{ formError }}
-    </p>
+    </Message>
 
-    <div>
-      <label for="email" class="mb-1 block text-sm font-medium text-ink">Email</label>
-      <input
+    <div class="flex flex-col gap-1">
+      <label for="email" class="text-sm font-medium text-ink">Email</label>
+      <InputText
         id="email"
         v-model="form.email"
         type="email"
         autocomplete="email"
-        class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-        :aria-invalid="Boolean(fieldErrors.email)"
+        :invalid="Boolean(fieldErrors.email)"
         :aria-describedby="fieldErrors.email ? 'email-error' : undefined"
+        class="w-full"
       />
-      <p v-if="fieldErrors.email" id="email-error" class="mt-1 text-sm text-coral">
+      <Message
+        v-if="fieldErrors.email"
+        id="email-error"
+        severity="error"
+        variant="simple"
+        size="small"
+      >
         {{ fieldErrors.email }}
-      </p>
+      </Message>
     </div>
 
-    <div>
-      <label for="password" class="mb-1 block text-sm font-medium text-ink">Password</label>
-      <input
-        id="password"
+    <div class="flex flex-col gap-1">
+      <label for="password" class="text-sm font-medium text-ink">Password</label>
+      <Password
         v-model="form.password"
-        type="password"
+        input-id="password"
+        :feedback="false"
+        toggle-mask
         autocomplete="current-password"
-        class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-        :aria-invalid="Boolean(fieldErrors.password)"
+        :invalid="Boolean(fieldErrors.password)"
         :aria-describedby="fieldErrors.password ? 'password-error' : undefined"
+        class="w-full"
+        :input-props="{ class: 'w-full' }"
       />
-      <p v-if="fieldErrors.password" id="password-error" class="mt-1 text-sm text-coral">
+      <Message
+        v-if="fieldErrors.password"
+        id="password-error"
+        severity="error"
+        variant="simple"
+        size="small"
+      >
         {{ fieldErrors.password }}
-      </p>
+      </Message>
     </div>
 
-    <button
+    <Button
       type="submit"
-      class="w-full rounded-card bg-teal py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-      :disabled="submitting"
-    >
-      {{ submitting ? 'Logging in…' : 'Log in' }}
-    </button>
+      :label="submitting ? 'Logging in…' : 'Log in'"
+      class="w-full"
+      :loading="submitting"
+    />
 
     <p class="text-center text-sm text-slate">
       No account?
