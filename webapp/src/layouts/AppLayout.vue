@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 
 const auth = useAuthStore()
 const router = useRouter()
 
 const navItems = [
   { name: 'dashboard', label: 'Dashboard', to: '/' },
-  // Remaining items are placeholders until their views land later in
-  // Phase 2 (Applications/Kanban) and Phase 4 (Interviews/Contacts).
   { name: 'applications', label: 'Applications', to: '/applications' },
   { name: 'interviews', label: 'Interviews', to: '/', disabled: true },
   { name: 'contacts', label: 'Contacts', to: '/', disabled: true },
@@ -23,11 +23,11 @@ async function handleLogout() {
 
 <template>
   <div class="flex min-h-screen">
-    <aside class="w-60 shrink-0 bg-ink text-paper flex flex-col" aria-label="Primary navigation">
+    <aside class="flex w-60 shrink-0 flex-col bg-ink text-paper" aria-label="Primary navigation">
       <div class="px-6 py-5">
         <span class="font-display text-lg font-bold tracking-tight">LwkApply</span>
       </div>
-      <nav class="flex-1 px-3 space-y-1">
+      <nav class="flex-1 space-y-1 px-3">
         <RouterLink
           v-for="item in navItems"
           :key="item.name"
@@ -36,31 +36,25 @@ async function handleLogout() {
           class="flex items-center rounded-card px-3 py-2 text-sm font-medium transition-colors"
           :class="
             item.disabled
-              ? 'opacity-40 pointer-events-none'
+              ? 'pointer-events-none opacity-40'
               : 'hover:bg-white/10 aria-[current=page]:bg-teal aria-[current=page]:text-ink'
           "
         >
           {{ item.label }}
-          <span v-if="item.disabled" class="ml-auto text-xs text-slate-light">Soon</span>
+          <Tag v-if="item.disabled" value="Soon" severity="secondary" class="ml-auto text-xs" />
         </RouterLink>
       </nav>
     </aside>
 
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="flex min-w-0 flex-1 flex-col">
       <header class="flex items-center justify-between border-b border-slate/10 bg-white px-6 py-3">
         <h1 class="font-display text-base font-medium">
           Welcome back{{ auth.user ? `, ${auth.user.first_name}` : '' }}
         </h1>
-        <button
-          type="button"
-          class="text-sm font-medium text-slate hover:text-ink"
-          @click="handleLogout"
-        >
-          Log out
-        </button>
+        <Button label="Log out" link size="small" @click="handleLogout" />
       </header>
 
-      <main class="flex-1 min-w-0 overflow-x-hidden p-6">
+      <main class="min-w-0 flex-1 overflow-x-hidden p-6">
         <RouterView />
       </main>
     </div>
