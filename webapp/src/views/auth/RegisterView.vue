@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Password from 'primevue/password'
+
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -47,80 +52,87 @@ async function handleSubmit() {
   <form novalidate class="space-y-5" @submit.prevent="handleSubmit">
     <h2 class="font-display text-lg font-bold text-ink">Create your account</h2>
 
-    <p v-if="formError" role="alert" class="rounded-card bg-coral/10 px-3 py-2 text-sm text-coral">
+    <Message v-if="formError" severity="error" :closable="false">
       {{ formError }}
-    </p>
+    </Message>
 
     <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label for="firstName" class="mb-1 block text-sm font-medium text-ink">First name</label>
-        <input
+      <div class="flex flex-col gap-1">
+        <label for="firstName" class="text-sm font-medium text-ink">First name</label>
+        <InputText
           id="firstName"
           v-model="form.firstName"
-          type="text"
           autocomplete="given-name"
-          class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          :aria-invalid="Boolean(fieldErrors.firstName)"
+          :invalid="Boolean(fieldErrors.firstName)"
+          class="w-full"
         />
-        <p v-if="fieldErrors.firstName" class="mt-1 text-sm text-coral">
+        <Message v-if="fieldErrors.firstName" severity="error" variant="simple" size="small">
           {{ fieldErrors.firstName }}
-        </p>
+        </Message>
       </div>
-      <div>
-        <label for="lastName" class="mb-1 block text-sm font-medium text-ink">Last name</label>
-        <input
+      <div class="flex flex-col gap-1">
+        <label for="lastName" class="text-sm font-medium text-ink">Last name</label>
+        <InputText
           id="lastName"
           v-model="form.lastName"
-          type="text"
           autocomplete="family-name"
-          class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-          :aria-invalid="Boolean(fieldErrors.lastName)"
+          :invalid="Boolean(fieldErrors.lastName)"
+          class="w-full"
         />
-        <p v-if="fieldErrors.lastName" class="mt-1 text-sm text-coral">
+        <Message v-if="fieldErrors.lastName" severity="error" variant="simple" size="small">
           {{ fieldErrors.lastName }}
-        </p>
+        </Message>
       </div>
     </div>
 
-    <div>
-      <label for="email" class="mb-1 block text-sm font-medium text-ink">Email</label>
-      <input
+    <div class="flex flex-col gap-1">
+      <label for="email" class="text-sm font-medium text-ink">Email</label>
+      <InputText
         id="email"
         v-model="form.email"
         type="email"
         autocomplete="email"
-        class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-        :aria-invalid="Boolean(fieldErrors.email)"
+        :invalid="Boolean(fieldErrors.email)"
+        class="w-full"
       />
-      <p v-if="fieldErrors.email" class="mt-1 text-sm text-coral">
+      <Message v-if="fieldErrors.email" severity="error" variant="simple" size="small">
         {{ fieldErrors.email }}
-      </p>
+      </Message>
     </div>
 
-    <div>
-      <label for="password" class="mb-1 block text-sm font-medium text-ink">Password</label>
-      <input
-        id="password"
+    <div class="flex flex-col gap-1">
+      <label for="password" class="text-sm font-medium text-ink">Password</label>
+      <Password
         v-model="form.password"
-        type="password"
+        input-id="password"
+        :feedback="false"
+        toggle-mask
         autocomplete="new-password"
-        class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm focus:border-teal"
-        :aria-invalid="Boolean(fieldErrors.password)"
+        :invalid="Boolean(fieldErrors.password)"
         :aria-describedby="fieldErrors.password ? 'password-error' : 'password-hint'"
+        class="w-full"
+        :input-props="{ class: 'w-full' }"
       />
-      <p v-if="fieldErrors.password" id="password-error" class="mt-1 text-sm text-coral">
+      <Message
+        v-if="fieldErrors.password"
+        id="password-error"
+        severity="error"
+        variant="simple"
+        size="small"
+      >
         {{ fieldErrors.password }}
-      </p>
-      <p v-else id="password-hint" class="mt-1 text-sm text-slate">At least 8 characters.</p>
+      </Message>
+      <Message v-else id="password-hint" severity="secondary" variant="simple" size="small">
+        At least 8 characters.
+      </Message>
     </div>
 
-    <button
+    <Button
       type="submit"
-      class="w-full rounded-card bg-teal py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-      :disabled="submitting"
-    >
-      {{ submitting ? 'Creating account…' : 'Create account' }}
-    </button>
+      :label="submitting ? 'Creating account…' : 'Create account'"
+      class="w-full"
+      :loading="submitting"
+    />
 
     <p class="text-center text-sm text-slate">
       Already have an account?
