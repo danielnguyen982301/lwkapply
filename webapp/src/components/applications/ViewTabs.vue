@@ -1,32 +1,30 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import TabMenu from 'primevue/tabmenu'
+import type { MenuItem } from 'primevue/menuitem'
 
 const route = useRoute()
+const router = useRouter()
+
+const items = ref<MenuItem[]>([
+  { label: 'List', command: () => router.push({ name: 'applications' }) },
+  { label: 'Board', command: () => router.push({ name: 'application-board' }) },
+])
+
+const activeIndex = ref(0)
+
+watch(
+  () => route.name,
+  (name) => {
+    activeIndex.value = name === 'application-board' ? 1 : 0
+  },
+  { immediate: true },
+)
+
+const tabModel = computed(() => items.value)
 </script>
 
 <template>
-  <nav class="flex gap-1 border-b border-slate/10" aria-label="Applications view">
-    <RouterLink
-      :to="{ name: 'applications' }"
-      class="border-b-2 px-3 py-2 text-sm font-medium transition-colors"
-      :class="
-        route.name === 'applications'
-          ? 'border-teal text-ink'
-          : 'border-transparent text-slate hover:text-ink'
-      "
-    >
-      List
-    </RouterLink>
-    <RouterLink
-      :to="{ name: 'application-board' }"
-      class="border-b-2 px-3 py-2 text-sm font-medium transition-colors"
-      :class="
-        route.name === 'application-board'
-          ? 'border-teal text-ink'
-          : 'border-transparent text-slate hover:text-ink'
-      "
-    >
-      Board
-    </RouterLink>
-  </nav>
+  <TabMenu v-model:active-index="activeIndex" :model="tabModel" aria-label="Applications view" />
 </template>
