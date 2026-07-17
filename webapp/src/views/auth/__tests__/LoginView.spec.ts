@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { createRouter, createMemoryHistory } from 'vue-router'
+
 import LoginView from '../LoginView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { installPrimeVue } from '@/test/primevue'
 
 // A minimal router with just the routes LoginView actually needs
 // (useRouter/useRoute/RouterLink all require a real router instance to
@@ -31,6 +33,7 @@ async function renderLoginView(initialPath = '/login') {
       plugins: [
         createTestingPinia({ stubActions: true }), // actions become spies; store logic itself isn't under test here
         router,
+        { install: installPrimeVue },
       ],
     },
   })
