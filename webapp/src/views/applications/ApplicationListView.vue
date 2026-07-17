@@ -1,9 +1,49 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useApplicationsStore } from '@/stores/applications'
-import { APPLICATION_STATUS_LABELS, type ApplicationStatus } from '@/types/application'
+import {
+  APPLICATION_STATUSES,
+  APPLICATION_STATUS_LABELS,
+  type ApplicationStatus,
+} from '@/types/application'
 
 const store = useApplicationsStore()
+
+// Local filter state seeded from the store so returning to this view (e.g.
+// after opening a details page) keeps whatever filters were active.
+const searchInput = ref(store.filters.search)
+const statusFilter = ref<ApplicationStatus | ''>(store.filters.status ?? '')
+
+const hasActiveFilters = computed(() => !!store.filters.status || !!store.filters.search)
+
+let debounceTimer: ReturnType<typeof setTimeout> | undefined
+
+function handleSearchInput() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  // Debounced so we're not firing a request on every keystroke — 350ms is
+  // long enough to let someone finish typing a word, short enough to still
+  // feel live.
+  debounceTimer = setTimeout(() => {
+    store.setFilters({ search: searchInput.value }).catch(() => {})
+  }, 350)
+}
+
+function handleStatusChange() {
+  store
+    .setFilters({ status: statusFilter.value === '' ? null : statusFilter.value })
+    .catch(() => {})
+}
+
+function clearFilters() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  searchInput.value = ''
+  statusFilter.value = ''
+  store.setFilters({ status: null, search: '' }).catch(() => {})
+}
+
+onBeforeUnmount(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
 
 onMounted(() => {
   // Errors are surfaced via store.listStatus/listError in the template —
@@ -76,6 +116,42 @@ async function handleDelete(id: string, company: string) {
       </button>
     </div>
 
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="min-w-[220px] flex-1">
+        <label for="application-search" class="sr-only">Search by company or position</label>
+        <input
+          id="application-search"
+          v-model="searchInput"
+          type="search"
+          placeholder="Search by company or position…"
+          class="w-full rounded-card border border-slate/20 px-3 py-2 text-sm text-ink placeholder:text-slate-light focus:border-teal"
+          @input="handleSearchInput"
+        />
+      </div>
+      <div>
+        <label for="status-filter" class="sr-only">Filter by status</label>
+        <select
+          id="status-filter"
+          v-model="statusFilter"
+          class="rounded-card border border-slate/20 px-3 py-2 text-sm text-ink focus:border-teal"
+          @change="handleStatusChange"
+        >
+          <option value="">All statuses</option>
+          <option v-for="status in APPLICATION_STATUSES" :key="status" :value="status">
+            {{ APPLICATION_STATUS_LABELS[status] }}
+          </option>
+        </select>
+      </div>
+      <button
+        v-if="hasActiveFilters"
+        type="button"
+        class="text-sm font-medium text-slate hover:text-ink"
+        @click="clearFilters"
+      >
+        Clear filters
+      </button>
+    </div>
+
     <div
       v-if="store.mutationStatus === 'error'"
       role="alert"
@@ -111,14 +187,32 @@ async function handleDelete(id: string, company: string) {
       v-else-if="store.items.length === 0"
       class="rounded-card border border-dashed border-slate/30 p-10 text-center"
     >
-      <h2 class="font-display text-lg font-semibold text-ink">No applications yet</h2>
+      <h2 class="font-display text-lg font-semibold text-ink">
+        {{ hasActiveFilters ? 'No matching applications' : 'No applications yet' }}
+      </h2>
       <p class="mx-auto mt-2 max-w-sm text-sm text-slate">
-        Once you save or apply to a role, it'll show up here so you can track it through every stage
-        of the process.
+        <template v-if="hasActiveFilters"> Try a different search term or status filter. </template>
+        <template v-else>
+          Once you save or apply to a role, it'll show up here so you can track it through every
+          stage of the process.
+        </template>
       </p>
+      <button
+        v-if="hasActiveFilters"
+        type="button"
+        class="mt-4 text-sm font-medium text-teal hover:underline"
+        @click="clearFilters"
+      >
+        Clear filters
+      </button>
     </div>
 
-    <div v-else class="overflow-hidden rounded-card border border-slate/10 bg-white">
+    <div
+      v-else
+      class="overflow-hidden rounded-card border border-slate/10 bg-white transition-opacity"
+      :class="{ 'pointer-events-none opacity-50': store.listStatus === 'loading' }"
+      :aria-busy="store.listStatus === 'loading'"
+    >
       <table class="w-full text-left text-sm">
         <caption class="sr-only">
           Your job applications
