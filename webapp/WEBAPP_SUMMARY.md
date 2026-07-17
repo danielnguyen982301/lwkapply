@@ -1,89 +1,104 @@
 # Job Tracker — Web Frontend
 
-Vue 3 + TypeScript + Vite + Pinia + Vue Router + Tailwind + PrimeVue, matching
-Phase 1 of `docs/ROADMAP.md` (project setup, routing, layout system,
-authentication screens).
+Vue 3 + TypeScript + Vite + Pinia + Vue Router + Tailwind + PrimeVue.
+Phase 1 (foundation, auth) and Phase 2 application tracking (list, search/
+filter, details, Kanban board) are implemented.
 
-## What's here (Phase 1)
+## What's here
+
+### Foundation (Phase 1)
 
 - **Build tooling**: Vite, TypeScript (strict), path alias `@/` → `src/`
-- **Styling**: Tailwind with a small design-token layer (`tailwind.config.js`
-  + CSS variables in `src/style.css`) — palette/type choices are documented
-  inline as comments in `tailwind.config.js`
-- **Routing**: `src/router/index.ts` — two layout branches (`AppLayout` for
-  authenticated routes, `AuthLayout` for login/register), lazy-loaded route
-  components, a single `beforeEach` guard driven by `route.meta`
-- **State**: Pinia `auth` store (`src/stores/auth.ts`) — access token held
-  in memory only (never localStorage); refresh token lives in an httpOnly
-  cookie the backend sets, so JS never touches it at all
-- **API client**: `src/lib/api.ts` — Axios instance with `withCredentials:
-  true` (cross-site cookies, since frontend/backend are on different
-  domains), bearer-token injection, a double-submit CSRF header echoed
-  from the readable `csrf_token` cookie on unsafe requests, and a queued
-  refresh-on-401 interceptor (prevents duplicate refresh calls when
-  several requests 401 at once)
-- **Screens**: Login, Register, an empty-state Dashboard placeholder, 404
+- **Styling**: Tailwind design tokens (`tailwind.config.js` + CSS variables
+  in `src/style.css`) layered on top of PrimeVue's Aura theme; Tailwind
+  handles layout/spacing/branding, PrimeVue handles interactive controls
+- **Routing**: `src/router/index.ts` — `AppLayout` for authenticated routes,
+  `AuthLayout` for login/register, lazy-loaded views, `beforeEach` guard
+  driven by `route.meta`
+- **State**: Pinia `auth` store (`src/stores/auth.ts`) — access token in
+  memory only; refresh token in an httpOnly cookie the backend sets
+- **API client**: `src/lib/api.ts` — Axios with `withCredentials: true`,
+  bearer-token injection, CSRF double-submit header on unsafe requests,
+  queued refresh-on-401 interceptor
+- **Screens**: Login, Register, Dashboard placeholder, 404
+
+### Application tracking (Phase 2)
+
+- **Store**: Pinia `applications` store (`src/stores/applications.ts`) —
+  typed API calls for paginated list, single fetch, create, update,
+  delete, and board fetch; separate list vs. board state so switching
+  List/Board views doesn't clobber pagination
+- **List view** (`ApplicationListView.vue`): PrimeVue `DataTable` with
+  server-side pagination (`Paginator`), debounced search (`IconField` +
+  `InputText`), status filter (`Select`), status badges
+  (`ApplicationStatusTag`), delete via `ConfirmDialog`
+- **Details / New** (`ApplicationFormView.vue`): one component, two routes
+  (`application-new`, `application-detail`); PrimeVue form controls with
+  client-side validation; create redirects to detail on success
+- **Kanban board** (`ApplicationBoardView.vue`): columns per status,
+  drag-and-drop moves via `vue-draggable-plus`, optimistic UI with
+  server sync; keyboard/screen-reader path via per-card status `Select`
+- **View toggle** (`ViewTabs.vue`): PrimeVue `TabMenu` switching List ↔
+  Board
+- **Shared UI helpers**: `src/lib/application-ui.ts` (status severities,
+  select options), `src/components/applications/ApplicationStatusTag.vue`
+
+### PrimeVue usage
+
+Configured in `src/main.ts` (Aura theme, `ConfirmationService`,
+`primeicons`). Global `ConfirmDialog` lives in `App.vue`. Components used
+across the app include `Button`, `InputText`, `Password`, `Select`,
+`DataTable`, `Column`, `Paginator`, `Tag`, `Badge`, `Card`, `Message`,
+`ProgressSpinner`, `TabMenu`, `DatePicker`, `InputNumber`, `Textarea`,
+and `ConfirmDialog`.
 
 ## What's deliberately not here yet
 
-- Applications/Kanban UI, Interviews/Contacts/Documents UI — Phase 2+
-- Analytics — Phase 5
+- Interviews/Contacts/Documents UI — Phase 2+ (backend endpoints exist)
+- Analytics dashboard and charts — Phase 5
 - RBAC-aware UI — explicitly skipped per current backend scope
+- Component/store tests for Applications UI (auth tests exist; application
+  views not yet covered)
 
-## Auth cookie flow (updated)
+## Auth cookie flow
 
-Sessions now persist across a hard reload: the refresh token lives in an
-httpOnly cookie set by the backend, and `Vue Router` calls `authStore.bootstrap()`
-before each route if `bootstrapped` flag is `false` (this should only run once when app is mounted since after calling `authStore.bootstrap()`, `bootstrapped` flag is set to `true`), which silently exchanges that cookie for a fresh
-access token. See `src/stores/auth.ts`, `src/lib/api.ts` and `src/router/index.ts` for the full
-flow, and the `backend/` reference files for the corresponding
-backend changes (cookie-setting on login/refresh, CORS with
-`allow_credentials`, and a CSRF double-submit check scoped to
-`/auth/refresh` and `/auth/logout` only).
+Sessions persist across a hard reload: the refresh token lives in an
+httpOnly cookie set by the backend, and `Vue Router` calls
+`authStore.bootstrap()` before each route if the `bootstrapped` flag is
+`false` (runs once per app mount). See `src/stores/auth.ts`,
+`src/lib/api.ts`, and `src/router/index.ts` for the full flow.
 
 ## CI
 
-`.github/workflows/webapp-ci.yml` (lives at the **repo root**, not
-inside `webapp/` — GitHub only reads workflows from the top-level
-`.github/workflows/`) runs on every push/PR touching `webapp/**`:
-eslint -> prettier --check -> vue-tsc type-check -> vitest with coverage ->
-production build. Mirrors the backend's lint -> format -> test pattern.
+`.github/workflows/webapp-ci.yml` (repo root) runs on every push/PR
+touching `webapp/**`: eslint → prettier --check → vue-tsc type-check →
+vitest with coverage → production build.
 
-Needed alongside it, all added in this pass since they didn't exist yet:
+Supporting config under `webapp/`:
+
 - `eslint.config.js` — flat config (ESLint 9), Vue 3 + TypeScript
 - `.prettierrc.json` / `.prettierignore`
-- `vite.config.ts` — switched to `vitest/config`'s `defineConfig` and
-  added a `test` block (jsdom environment, v8 coverage)
-- `src/lib/__tests__/api.spec.ts` — smoke test for `extractErrorMessage`,
-  so CI has a real test to run rather than reporting a vacuous "0 tests
-  passed"
-- `package.json` — split `lint` (CI-safe, no autofix) from a separate
-  `lint:fix` (local dev convenience only); the original `lint` script had
-  `--fix` baked in, which in CI would have silently modified files in the
-  runner instead of failing the build — worth knowing since it's an easy
-  trap to reintroduce later. Added `type-check` and `format:check`
-  scripts, plus the missing eslint/coverage devDependencies.
+- `vite.config.ts` — Vitest block (jsdom, v8 coverage)
+- `package.json` — separate `lint` (CI-safe) from `lint:fix` (local);
+  `type-check` and `format:check` scripts
 
-`.pre-commit-config.yaml` (repo root, alongside this project)
-adds new hooks for eslint and prettier
+`.pre-commit-config.yaml` (repo root) includes eslint and prettier hooks
+for `webapp/`.
 
-## UI tests (added)
+## UI tests
 
-Two real component/logic tests beyond the pure-function `api.spec.ts`
-smoke test:
+Beyond the pure-function `api.spec.ts` smoke test:
 
-- `src/router/__tests__/authGuard.spec.ts` — the redirect logic itself
-  was pulled out of `router.beforeEach` into an exported `authGuard()`
-  function specifically so it's testable without a full router instance
-- `src/views/auth/__tests__/LoginView.spec.ts` — mounts the real
-  component with `@vue/test-utils` + `createTestingPinia` (stubs the
-  `auth` store's actions so nothing hits real network) + a minimal test
-  router; covers empty-submit validation, successful login + redirect-
-  to-intended-page, and the error-message path
+- `src/router/__tests__/authGuard.spec.ts` — exported `authGuard()`
+  redirect logic, testable without a full router instance
+- `src/views/auth/__tests__/LoginView.spec.ts` — mounts the real component
+  with `@vue/test-utils`, `createTestingPinia`, a minimal test router, and
+  the PrimeVue test helper (`src/test/primevue.ts`); covers empty-submit
+  validation, successful login + redirect-to-intended-page, and error
+  display
 
 **Deliberately not tested yet**: `DashboardView`, `NotFoundView`,
-`AppLayout`/`AuthLayout` — placeholder or markup-only content that Phase
-2 will substantially rewrite. Testing them now would mean testing code
-guaranteed to be replaced.
+`AppLayout`/`AuthLayout` (minimal placeholder/shell markup), and all
+Applications views/stores — worth adding next as the UI stabilises.
 
 New devDependency: `@pinia/testing` (store stubbing for component tests).
