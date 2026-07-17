@@ -46,7 +46,7 @@ async function handleLogout() {
       </nav>
     </aside>
 
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col min-w-0">
       <header class="flex items-center justify-between border-b border-slate/10 bg-white px-6 py-3">
         <h1 class="font-display text-base font-medium">
           Welcome back{{ auth.user ? `, ${auth.user.first_name}` : '' }}
@@ -60,7 +60,7 @@ async function handleLogout() {
         </button>
       </header>
 
-      <main class="flex-1 p-6">
+      <main class="flex-1 min-w-0 overflow-x-hidden p-6">
         <RouterView />
       </main>
     </div>
