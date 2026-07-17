@@ -1,9 +1,10 @@
 .
+├── AI_CONTEXT.md
 ├── CHANGELOG.md
 ├── README.md
 ├── TODO.md
 ├── backend
-│   ├── BACKEND-SUMMARY.md
+│   ├── BACKEND_SUMMARY.md
 │   ├── Dockerfile
 │   ├── alembic
 │   │   ├── env.py
@@ -78,7 +79,7 @@
 ├── folder-structure.txt
 ├── pyrightconfig.json
 └── webapp
-    ├── WEBAPP-SUMMARY.md
+    ├── WEBAPP_SUMMARY.md
     ├── eslint.config.js
     ├── index.html
     ├── package-lock.json
@@ -86,26 +87,39 @@
     ├── postcss.config.js
     ├── src
     │   ├── App.vue
+    │   ├── components
+    │   │   └── applications
+    │   │       ├── ApplicationStatusTag.vue
+    │   │       └── ViewTabs.vue
     │   ├── layouts
     │   │   ├── AppLayout.vue
     │   │   └── AuthLayout.vue
     │   ├── lib
     │   │   ├── __tests__
     │   │   │   └── api.spec.ts
-    │   │   └── api.ts
+    │   │   ├── api.ts
+    │   │   └── application-ui.ts
     │   ├── main.ts
     │   ├── router
     │   │   ├── __tests__
     │   │   │   └── authGuard.spec.ts
     │   │   └── index.ts
     │   ├── stores
+    │   │   ├── applications.ts
     │   │   └── auth.ts
     │   ├── style.css
+    │   ├── test
+    │   │   └── primevue.ts
     │   ├── types
+    │   │   ├── application.ts
     │   │   └── auth.ts
     │   ├── views
     │   │   ├── DashboardView.vue
     │   │   ├── NotFoundView.vue
+    │   │   ├── applications
+    │   │   │   ├── ApplicationBoardView.vue
+    │   │   │   ├── ApplicationFormView.vue
+    │   │   │   └── ApplicationListView.vue
     │   │   └── auth
     │   │       ├── LoginView.vue
     │   │       ├── RegisterView.vue
@@ -118,4 +132,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-28 directories, 91 files
+32 directories, 101 files
