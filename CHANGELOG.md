@@ -28,6 +28,25 @@
 - Webapp unit tests: `authGuard` (redirect logic), `LoginView`
   (validation, successful-login redirect, error display), and the API
   client's error-message extraction helper
+- Applications UI (Phase 2): Pinia `applications` store
+  (`src/stores/applications.ts`) with typed API calls for list, detail,
+  create, update, delete, and board fetch; server-side pagination, status
+  filter, and debounced search
+- Application List view (`ApplicationListView.vue`): PrimeVue `DataTable`,
+  `Paginator`, `Select`, and status `Tag` badges; edit/delete actions
+  with `ConfirmDialog` for destructive operations
+- Application Details / New view (`ApplicationFormView.vue`): shared
+  create/edit form with client-side validation; PrimeVue form controls
+  (`InputText`, `Select`, `InputNumber`, `DatePicker`, `Textarea`)
+- Kanban board (`ApplicationBoardView.vue`): drag-and-drop status changes
+  via `vue-draggable-plus`, keyboard-accessible status `Select` on each
+  card, List/Board toggle via `TabMenu` (`ViewTabs.vue`)
+- PrimeVue adopted across all existing screens: auth forms, app shell,
+  layouts, dashboard/404 placeholders — Aura theme, `primeicons`,
+  `ConfirmationService` for delete confirmations; shared helpers in
+  `src/lib/application-ui.ts` and `ApplicationStatusTag.vue`
+- Test helper `src/test/primevue.ts` so component tests can mount
+  PrimeVue controls (used by `LoginView.spec.ts`)
 
 ### Fixed
 
@@ -61,6 +80,9 @@
 - CORS now requires `allow_credentials=True` with an explicit
   `FRONTEND_ORIGIN` (no wildcard) to support the cross-site cookie, since
   frontend (Vercel) and backend (Railway/Render) are on different domains
+- All interactive UI migrated from hand-rolled HTML/Tailwind controls to
+  PrimeVue components where appropriate; Tailwind retained for layout,
+  spacing, and custom branding (sidebar, typography)
 
 ## v0.3.0 (in progress)
 
@@ -112,8 +134,9 @@
 
 ## Upcoming
 
-- Applications/Kanban UI (frontend Phase 2)
-- Analytics endpoints
+- Interviews/Contacts/Documents UI (frontend Phase 2+)
+- Analytics endpoints and dashboard charts
 - Celery tasks (resume parsing, email sending, AI processing)
 - RBAC beyond a `role` column
 - Interview reminder system
+- Webapp component/store tests for Applications UI
