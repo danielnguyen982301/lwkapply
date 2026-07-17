@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { onMounted, reactive } from 'vue'
+import { RouterLink } from 'vue-router'
 import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus'
+import Badge from 'primevue/badge'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import Message from 'primevue/message'
+import ProgressSpinner from 'primevue/progressspinner'
+import Select from 'primevue/select'
+
 import { useApplicationsStore } from '@/stores/applications'
 import ViewTabs from '@/components/applications/ViewTabs.vue'
+import { applicationStatusOptions } from '@/lib/application-ui'
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
@@ -11,11 +20,8 @@ import {
 } from '@/types/application'
 
 const store = useApplicationsStore()
+const statusSelectOptions = applicationStatusOptions()
 
-// Per-column arrays that VueDraggable owns directly via v-model — it
-// splices items into/out of whichever array is bound to the column the
-// user drags into, so this has to be a real mutable array per column, not
-// a computed derived from store.boardItems.
 const columnLists = reactive<Record<ApplicationStatus, Application[]>>(
   Object.fromEntries(APPLICATION_STATUSES.map((status) => [status, [] as Application[]])) as Record<
     ApplicationStatus,
@@ -23,11 +29,6 @@ const columnLists = reactive<Record<ApplicationStatus, Application[]>>(
   >,
 )
 
-// Re-derives every column from the store's last-known-good boardItems.
-// Used both after a successful move (to reflect the server-confirmed
-// state, since store.updateApplication replaces the item with a fresh
-// object from the response) and after a failed one (to snap the card
-// back to its original column).
 function syncColumnsFromStore() {
   for (const status of APPLICATION_STATUSES) {
     columnLists[status] = store.boardItems.filter((app) => app.status === status)
@@ -48,14 +49,6 @@ function formatSalary(min: number | null, max: number | null): string {
   return fmt((min ?? max) as number)
 }
 
-/**
- * Fires when a card is dropped into a *different* column (same-column
- * reorders don't fire `add`, and card order isn't persisted anyway, so
- * there's nothing to do for those). VueDraggable has already spliced the
- * card into columnLists[status] by the time this runs — the visual move
- * is instant — this just persists it and re-syncs from the server
- * afterwards, whether it succeeded or not.
- */
 async function handleAdd(status: ApplicationStatus, event: DraggableEvent<Application>) {
   const app = event.data
   if (!app || app.status === status) return
@@ -68,14 +61,7 @@ async function handleAdd(status: ApplicationStatus, event: DraggableEvent<Applic
   }
 }
 
-/**
- * The accessible, keyboard/screen-reader-operable way to move a card —
- * dragging (native or library-based) can't be driven without a pointer,
- * so this select is the real control, not a fallback bolted on after
- * the fact.
- */
-async function onStatusSelect(app: Application, event: Event) {
-  const newStatus = (event.target as HTMLSelectElement).value as ApplicationStatus
+async function onStatusSelect(app: Application, newStatus: ApplicationStatus) {
   if (newStatus === app.status) return
   try {
     await store.updateApplication(app.id, { status: newStatus })
@@ -91,47 +77,31 @@ async function onStatusSelect(app: Application, event: Event) {
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h1 class="font-display text-xl font-semibold text-ink">Applications</h1>
-      <RouterLink
-        :to="{ name: 'application-new' }"
-        class="rounded-card bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal-dark"
-      >
-        New Application
-      </RouterLink>
+      <Button label="New Application" as="RouterLink" :to="{ name: 'application-new' }" />
     </div>
 
     <ViewTabs />
 
-    <div
-      v-if="store.boardTruncated"
-      class="rounded-card border border-amber/30 bg-amber/5 p-3 text-sm text-ink"
-    >
+    <Message v-if="store.boardTruncated" severity="warn" :closable="false">
       Showing {{ store.boardItems.length }} of {{ store.boardTotal }} applications. The board
       doesn't yet page through everything — use the List view's search/filter to find the rest.
-    </div>
+    </Message>
 
-    <div
-      v-if="store.mutationStatus === 'error'"
-      role="alert"
-      class="rounded-card border border-coral/30 bg-coral/5 p-3 text-sm text-coral"
-    >
+    <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
       {{ store.mutationError }}
-    </div>
+    </Message>
 
-    <div
-      v-if="store.boardStatus === 'error'"
-      role="alert"
-      class="rounded-card border border-coral/30 bg-coral/5 p-4 text-sm text-coral"
-    >
-      {{ store.boardError }}
-      <button type="button" class="ml-2 underline" @click="loadBoard">Retry</button>
-    </div>
+    <Message v-if="store.boardStatus === 'error'" severity="error" :closable="false">
+      <span>{{ store.boardError }}</span>
+      <Button label="Retry" link size="small" class="ml-2" @click="loadBoard" />
+    </Message>
 
     <div
       v-else-if="store.boardStatus === 'loading' && store.boardItems.length === 0"
       aria-live="polite"
-      class="rounded-card border border-slate/10 bg-white p-10 text-center text-sm text-slate"
+      class="flex justify-center rounded-card border border-slate/10 bg-white p-10"
     >
-      Loading board…
+      <ProgressSpinner aria-label="Loading board" />
     </div>
 
     <div
@@ -150,64 +120,71 @@ async function onStatusSelect(app: Application, event: Event) {
       class="flex gap-4 overflow-x-auto pb-2"
       :aria-busy="store.boardStatus === 'loading'"
     >
-      <div
+      <Card
         v-for="status in APPLICATION_STATUSES"
         :key="status"
-        class="flex w-64 flex-none flex-col rounded-card border border-slate/10 bg-paper"
+        class="flex w-64 flex-none flex-col"
+        :pt="{
+          body: { class: 'p-0 flex flex-col flex-1 min-h-0' },
+          content: { class: 'p-0 flex flex-col flex-1 min-h-0' },
+        }"
       >
-        <div class="flex items-center justify-between border-b border-slate/10 px-3 py-2">
-          <h2 class="text-sm font-semibold text-ink">{{ APPLICATION_STATUS_LABELS[status] }}</h2>
-          <span class="text-xs text-slate">{{ columnLists[status].length }}</span>
-        </div>
-
-        <VueDraggable
-          v-model="columnLists[status]"
-          group="application-status"
-          filter=".no-drag"
-          :prevent-on-filter="false"
-          ghost-class="opacity-40"
-          class="flex min-h-[3rem] max-h-[65vh] flex-col gap-2 overflow-y-auto p-2"
-          @add="handleAdd(status, $event)"
-        >
-          <p
-            v-if="columnLists[status].length === 0"
-            class="px-2 py-3 text-center text-xs text-slate"
+        <template #title>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm">{{ APPLICATION_STATUS_LABELS[status] }}</span>
+            <Badge :value="columnLists[status].length" severity="secondary" />
+          </div>
+        </template>
+        <template #content>
+          <VueDraggable
+            v-model="columnLists[status]"
+            group="application-status"
+            filter=".no-drag"
+            :prevent-on-filter="false"
+            ghost-class="opacity-40"
+            class="flex min-h-[3rem] max-h-[65vh] flex-col gap-2 overflow-y-auto p-2"
+            @add="handleAdd(status, $event)"
           >
-            No applications
-          </p>
-
-          <div
-            v-for="app in columnLists[status]"
-            :key="app.id"
-            class="cursor-grab rounded-card border border-slate/10 bg-white p-3 shadow-sm active:cursor-grabbing"
-          >
-            <RouterLink
-              :to="{ name: 'application-detail', params: { id: app.id } }"
-              class="no-drag font-medium text-ink hover:underline"
+            <p
+              v-if="columnLists[status].length === 0"
+              class="px-2 py-3 text-center text-xs text-slate"
             >
-              {{ app.company }}
-            </RouterLink>
-            <p class="text-xs text-slate">{{ app.position }}</p>
-            <p v-if="formatSalary(app.salary_min, app.salary_max)" class="mt-1 text-xs text-slate">
-              {{ formatSalary(app.salary_min, app.salary_max) }}
+              No applications
             </p>
 
-            <label :for="`status-${app.id}`" class="sr-only">
-              Move {{ app.company }} — {{ app.position }} to a different status
-            </label>
-            <select
-              :id="`status-${app.id}`"
-              :value="app.status"
-              class="no-drag mt-2 w-full rounded-card border border-slate/20 bg-white px-2 py-1 text-xs text-ink focus:border-teal"
-              @change="onStatusSelect(app, $event)"
+            <Card
+              v-for="app in columnLists[status]"
+              :key="app.id"
+              class="cursor-grab active:cursor-grabbing"
+              :pt="{ body: { class: 'p-3' }, content: { class: 'p-0 space-y-1' } }"
             >
-              <option v-for="s in APPLICATION_STATUSES" :key="s" :value="s">
-                {{ APPLICATION_STATUS_LABELS[s] }}
-              </option>
-            </select>
-          </div>
-        </VueDraggable>
-      </div>
+              <template #content>
+                <RouterLink
+                  :to="{ name: 'application-detail', params: { id: app.id } }"
+                  class="no-drag font-medium text-ink hover:underline"
+                >
+                  {{ app.company }}
+                </RouterLink>
+                <p class="text-xs text-slate">{{ app.position }}</p>
+                <p v-if="formatSalary(app.salary_min, app.salary_max)" class="text-xs text-slate">
+                  {{ formatSalary(app.salary_min, app.salary_max) }}
+                </p>
+
+                <Select
+                  :model-value="app.status"
+                  :options="statusSelectOptions"
+                  option-label="label"
+                  option-value="value"
+                  :aria-label="`Move ${app.company} — ${app.position} to a different status`"
+                  class="no-drag mt-2 w-full"
+                  size="small"
+                  @update:model-value="onStatusSelect(app, $event as ApplicationStatus)"
+                />
+              </template>
+            </Card>
+          </VueDraggable>
+        </template>
+      </Card>
     </div>
   </div>
 </template>
