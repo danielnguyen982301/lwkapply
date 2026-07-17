@@ -26,10 +26,23 @@ interface ApplicationsState {
   currentStatus: RequestStatus
   currentError: string | null
 
+  // --- board state (Kanban view) — deliberately separate from the
+  // paginated `items`/`page`/`pageSize` above. The board wants every
+  // application in one shot, grouped client-side by status; reusing the
+  // list's pagination fields would mean switching between List and Board
+  // clobbers whichever page size the other view had set. ---
+  boardItems: Application[]
+  boardTotal: number
+  boardStatus: RequestStatus
+  boardError: string | null
+
   // --- create/update/delete state (shared by any form/action UI) ---
   mutationStatus: RequestStatus
   mutationError: string | null
 }
+
+/** Cap for the board's single-page fetch — see fetchBoard() for why. */
+const BOARD_PAGE_SIZE = 100
 
 export const useApplicationsStore = defineStore('applications', {
   state: (): ApplicationsState => ({
@@ -45,6 +58,11 @@ export const useApplicationsStore = defineStore('applications', {
     currentStatus: 'idle',
     currentError: null,
 
+    boardItems: [],
+    boardTotal: 0,
+    boardStatus: 'idle',
+    boardError: null,
+
     mutationStatus: 'idle',
     mutationError: null,
   }),
@@ -53,6 +71,8 @@ export const useApplicationsStore = defineStore('applications', {
     totalPages: (state): number => Math.max(1, Math.ceil(state.total / state.pageSize)),
     hasNextPage: (state): boolean => state.page * state.pageSize < state.total,
     hasPreviousPage: (state): boolean => state.page > 1,
+    /** True if the board's single-page fetch didn't cover every application. */
+    boardTruncated: (state): boolean => state.boardTotal > state.boardItems.length,
   },
 
   actions: {
@@ -96,6 +116,33 @@ export const useApplicationsStore = defineStore('applications', {
     /** Convenience wrapper: apply new filters and jump back to page 1. */
     async setFilters(filters: Pick<ApplicationListParams, 'status' | 'search'>) {
       await this.fetchApplications({ ...filters, page: 1 })
+    },
+
+    /**
+     * Fetches every application in one page for the Kanban board, grouped
+     * client-side by status. `BOARD_PAGE_SIZE` is a pragmatic cap, not a
+     * real solution for accounts with very large numbers of applications —
+     * `boardTruncated` tells the view whether it under-fetched, so the UI
+     * can say so rather than silently hiding applications. If this
+     * regularly gets hit in practice, the real fix is a dedicated
+     * non-paginated board endpoint or per-column pagination, not a bigger
+     * hardcoded number here.
+     */
+    async fetchBoard() {
+      this.boardStatus = 'loading'
+      this.boardError = null
+      try {
+        const { data } = await api.get<ApplicationListResponse>('/applications', {
+          params: { page: 1, page_size: BOARD_PAGE_SIZE },
+        })
+        this.boardItems = data.items
+        this.boardTotal = data.total
+        this.boardStatus = 'idle'
+      } catch (err) {
+        this.boardStatus = 'error'
+        this.boardError = extractErrorMessage(err)
+        throw err
+      }
     },
 
     async fetchApplication(id: string) {
@@ -142,6 +189,8 @@ export const useApplicationsStore = defineStore('applications', {
         const index = this.items.findIndex((item) => item.id === id)
         if (index !== -1) this.items[index] = data
         if (this.current?.id === id) this.current = data
+        const boardIndex = this.boardItems.findIndex((item) => item.id === id)
+        if (boardIndex !== -1) this.boardItems[boardIndex] = data
         this.mutationStatus = 'idle'
         return data
       } catch (err) {
@@ -157,6 +206,10 @@ export const useApplicationsStore = defineStore('applications', {
       try {
         await api.delete(`/applications/${id}`)
         this.items = this.items.filter((item) => item.id !== id)
+        this.boardItems = this.boardItems.filter((item) => item.id !== id)
+        if (this.boardTotal > 0 && this.boardItems.length < this.boardTotal) {
+          this.boardTotal -= 1
+        }
         this.total = Math.max(0, this.total - 1)
         if (this.current?.id === id) this.current = null
         this.mutationStatus = 'idle'
