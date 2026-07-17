@@ -42,6 +42,16 @@ const router = createRouter({
           name: 'applications',
           component: () => import('@/views/applications/ApplicationListView.vue'),
         },
+        {
+          path: 'applications/new',
+          name: 'application-new',
+          component: () => import('@/views/applications/ApplicationFormView.vue'),
+        },
+        {
+          path: 'applications/:id',
+          name: 'application-detail',
+          component: () => import('@/views/applications/ApplicationFormView.vue'),
+        },
       ],
     },
     {
