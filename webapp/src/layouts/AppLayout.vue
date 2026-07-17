@@ -9,7 +9,7 @@ const navItems = [
   { name: 'dashboard', label: 'Dashboard', to: '/' },
   // Remaining items are placeholders until their views land later in
   // Phase 2 (Applications/Kanban) and Phase 4 (Interviews/Contacts).
-  { name: 'applications', label: 'Applications', to: '/', disabled: true },
+  { name: 'applications', label: 'Applications', to: '/applications' },
   { name: 'interviews', label: 'Interviews', to: '/', disabled: true },
   { name: 'contacts', label: 'Contacts', to: '/', disabled: true },
   { name: 'documents', label: 'Documents', to: '/', disabled: true },
