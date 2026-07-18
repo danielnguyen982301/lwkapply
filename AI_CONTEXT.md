@@ -20,11 +20,11 @@ AI assistants working on this repository should preserve architectural consisten
 
 When determining current project status:
 
-1. `backend/BACKEND_SUMMARY.md` = backend implementation status
-2. `webapp/WEBAPP_SUMMARY.md` = web app implementation status
+1. `BACKEND_SUMMARY.md` = backend implementation status
+2. `WEBAPP_SUMMARY.md` = web app implementation status
 3. `TODO.md` = high-level task tracking
-4. `docs/ROADMAP.md` = long-term feature planning
-5. `docs/ARCHITECTURE.md` = intended architecture
+4. `ROADMAP.md` = long-term feature planning
+5. `ARCHITECTURE.md` = intended architecture
 
 If documentation conflicts:
 
@@ -481,8 +481,8 @@ The actual implementation status is maintained separately.
 
 Before modifying code:
 
-1. Read `backend/BACKEND_SUMMARY.md`.
-2. Read `webapp/WEBAPP_SUMMARY.md`.
+1. Read `BACKEND_SUMMARY.md`.
+2. Read `WEBAPP_SUMMARY.md`.
 3. Read `TODO.md`.
 4. Inspect the actual code.
 
