@@ -108,6 +108,26 @@ def update_application(
 ):
     application = _get_owned_application(db, application_id, current_user)
     updates = payload.model_dump(exclude_unset=True)
+
+    # ApplicationUpdate's own validator only catches a request that sets
+    # both salary_min and salary_max inconsistently in the same payload.
+    # A request that only touches one side of the range (e.g. just
+    # salary_min via PATCH) still needs checking against whatever the
+    # *other* side already is on the stored row - the schema alone can't
+    # see that. Computed before any setattr() so a rejected update never
+    # leaves the session holding a partially-mutated, uncommitted object.
+    effective_salary_min = updates.get("salary_min", application.salary_min)
+    effective_salary_max = updates.get("salary_max", application.salary_max)
+    if (
+        effective_salary_min is not None
+        and effective_salary_max is not None
+        and effective_salary_min > effective_salary_max
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="salary_min cannot be greater than salary_max",
+        )
+
     for field, value in updates.items():
         setattr(application, field, value)
 
