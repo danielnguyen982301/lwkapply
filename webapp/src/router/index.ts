@@ -57,6 +57,11 @@ const router = createRouter({
           name: 'application-detail',
           component: () => import('@/views/applications/ApplicationFormView.vue'),
         },
+        {
+          path: 'contacts',
+          name: 'contacts',
+          component: () => import('@/views/contacts/ContactDirectoryView.vue'),
+        },
       ],
     },
     {
