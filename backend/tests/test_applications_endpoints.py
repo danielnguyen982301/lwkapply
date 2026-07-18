@@ -314,10 +314,10 @@ class TestUpdateApplication:
     def test_salary_min_greater_than_max_is_rejected(
         self, client, db_session, make_user, auth_headers
     ):
-        """ApplicationUpdate previously had no cross-field salary
-        validator at all (only ApplicationCreate did) - this is the
-        endpoint-level confirmation that the schema fix actually takes
-        effect through the real HTTP/PATCH path, not just in isolation."""
+        """Both fields inverted in a single PATCH - caught by
+        ApplicationUpdate's own schema validator before the endpoint
+        code runs at all (a 422 from request parsing, not from the
+        endpoint-level check below)."""
         user = make_user()
         application = _make_application(db_session, user)
 
@@ -331,6 +331,86 @@ class TestUpdateApplication:
         db_session.refresh(application)
         assert application.salary_min is None
         assert application.salary_max is None
+
+    def test_salary_min_conflicting_with_existing_max_is_rejected(
+        self, client, db_session, make_user, auth_headers
+    ):
+        """A PATCH that only sets salary_min - the schema validator alone
+        can't see this is invalid, since salary_max never appears in the
+        request body. This is what the endpoint-level check (comparing
+        against the stored row) exists for."""
+        user = make_user()
+        application = _make_application(db_session, user, salary_max=100_000)
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"salary_min": 150_000},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422
+        assert (
+            "salary_min cannot be greater than salary_max" in response.json()["detail"]
+        )
+
+        db_session.refresh(application)
+        assert application.salary_min is None
+        assert application.salary_max == 100_000
+
+    def test_salary_max_conflicting_with_existing_min_is_rejected(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(db_session, user, salary_min=100_000)
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"salary_max": 50_000},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422
+
+        db_session.refresh(application)
+        assert application.salary_min == 100_000
+        assert application.salary_max is None
+
+    def test_partial_salary_update_consistent_with_existing_is_accepted(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(db_session, user, salary_min=80_000)
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"salary_max": 120_000},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["salary_min"] == 80_000
+        assert body["salary_max"] == 120_000
+
+    def test_unrelated_field_update_is_unaffected_by_salary_check(
+        self, client, db_session, make_user, auth_headers
+    ):
+        """A PATCH that never touches salary fields must not trip the
+        merged-values check just because the stored row happens to have
+        a valid (or even absent) salary range."""
+        user = make_user()
+        application = _make_application(
+            db_session, user, salary_min=80_000, salary_max=120_000
+        )
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"notes": "Following up next week"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["notes"] == "Following up next week"
 
     def test_valid_salary_range_update_is_accepted(
         self, client, db_session, make_user, auth_headers
