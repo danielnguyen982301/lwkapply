@@ -22,13 +22,50 @@
 - `Settings.TEST_DATABASE_URL` (`backend/app/core/config.py`): a
   separate throwaway-database setting for integration tests, loaded the
   same way as every other setting (`.env.local` locally, a real env var
-  in CI), defaulting to a `job_tracker_test` database alongside the dev
+  in CI), defaulting to a `lwkapply_test` database alongside the dev
   database
 - `backend-ci.yml`: enabled the previously-commented-out Postgres
   `services:` block in the `test` job, with `TEST_DATABASE_URL` set as a
   job-level env var; added `httpx` to `requirements-dev.txt`, required by
   `fastapi.testclient.TestClient` now that a test exercises the HTTP
   layer
+- Applications CRUD integration tests
+  (`backend/tests/test_applications_endpoints.py`): auth, create
+  (including confirming a spoofed `user_id` in the request body is
+  ignored — ownership always comes from the authenticated user), the
+  ownership/IDOR check on get/update/delete (each confirms the row is
+  actually untouched, not just that the HTTP call failed), status filter,
+  company/position search, pagination, and list ordering (using explicit
+  `updated_at` timestamps rather than wall-clock gaps between inserts,
+  since Postgres's `now()` is transaction-scoped and every insert in a
+  test shares one real transaction under the SAVEPOINT isolation
+  strategy)
+- `ApplicationUpdate` salary-range validation
+  (`backend/app/schemas/application.py`,
+  `backend/app/api/v1/endpoints/applications.py`): the `salary_min <=
+  salary_max` check previously only existed on `ApplicationCreate`, so a
+  PATCH could silently invert a valid range. Fixed at two levels: a
+  shared `SalaryRangeValidationMixin` now backs both `ApplicationCreate`
+  and `ApplicationUpdate` (catches both fields sent inconsistently in one
+  request), and `update_application` additionally checks the *merged*
+  effective range (request value if provided, otherwise the value
+  already on the row) before applying any change, since the schema alone
+  can't see a partial PATCH that conflicts with existing stored data
+- Interviews CRUD integration tests
+  (`backend/tests/test_interviews_endpoints.py`): auth, create/update
+  validation (duration bounds, invalid enum values), ownership/IDOR
+  across users, and — specific to this resource, since it's nested two
+  levels deep (Interview -> Application -> User) — a dedicated scoping
+  check confirming an interview under one application isn't reachable
+  through a *sibling* application's URL even for the same user. Also
+  directly verifies `Interview.result`'s `server_default` behavior
+  end-to-end (see Fixed, below)
+- Pagination for `GET /applications/{id}/interviews`
+  (`backend/app/schemas/interview.py`,
+  `backend/app/api/v1/endpoints/interviews.py`): `page`/`page_size` query
+  params and response fields, matching the existing Applications/Contacts
+  pattern; previously this was the only list endpoint returning every row
+  unpaginated
 
 - Frontend project scaffold (`webapp/`): Vite + Vue 3 + TypeScript +
   Pinia + Vue Router + Tailwind CSS + PrimeVue
@@ -100,6 +137,13 @@
 
 ### Fixed
 
+- `BACKEND_SUMMARY.md`'s note on `Document.file_type`/`Interview.result`
+  incorrectly claimed both used a Python-side `default=`. `Interview.result`
+  actually uses `server_default=InterviewResult.PENDING` (the raw enum
+  member, not `.value`) — confirmed working correctly via a dedicated
+  integration test rather than assumed; doc corrected to match. (`Document.file_type`
+  wasn't re-checked against its model file, so the note no longer makes a
+  claim about it either way.)
 - `/auth/me` moved to `/users/me` to correctly reflect the user resource
   route (frontend's `fetchCurrentUser` updated to match)
 - Response interceptor infinite-loop bug: a 401 from `/auth/refresh`
