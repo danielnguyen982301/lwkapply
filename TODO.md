@@ -150,16 +150,17 @@
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
       error-extraction helper; Applications/Kanban UI exists but is not yet
       covered by component/store tests; Contacts UI also not yet covered)
-- [x] Integration tests — `GET /contacts` now has a full integration test
-      suite (`backend/tests/test_contacts_directory.py`) against a real
-      Postgres instance: auth (missing/invalid/wrong-token-type),
-      cross-application aggregation, the ownership/IDOR check, search, and
-      pagination. `backend/tests/conftest.py` provides reusable fixtures
+- [x] Integration tests — `GET /contacts` (`test_contacts_directory.py`),
+      Applications CRUD (`test_applications_endpoints.py`, includes the
+      salary-range validator fix propagated to `ApplicationUpdate` at both
+      the schema and endpoint/merged-value level), and Interviews CRUD
+      (`test_interviews_endpoints.py`, includes the two-levels-deep
+      application-scoping check and Interviews gaining pagination — see
+      below) all now have full integration suites against a real Postgres
+      instance. `backend/tests/conftest.py` provides the reusable fixtures
       (real-Postgres engine, per-test SAVEPOINT isolation, authenticated
-      `TestClient`, `make_user`/`auth_headers` factories) that future
-      endpoint tests build on directly — no longer blocked on deciding a
-      strategy, since one now exists and is proven out end-to-end
-- [ ] Integration tests (remaining endpoints) — Applications, Interviews,
-      Documents CRUD still only have schema-level unit tests, not endpoint
-      tests
+      `TestClient`, `make_user`/`auth_headers` factories) every one of
+      these builds on directly
+- [ ] Integration tests (Documents) — still only schema-level unit tests;
+      will additionally need S3 interaction mocked/stubbed
 - [ ] End-to-end tests
