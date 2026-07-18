@@ -47,6 +47,30 @@
   `src/lib/application-ui.ts` and `ApplicationStatusTag.vue`
 - Test helper `src/test/primevue.ts` so component tests can mount
   PrimeVue controls (used by `LoginView.spec.ts`)
+- Contact management UI (Phase 4, frontend): Pinia `contacts` store
+  (`src/stores/contacts.ts`), scoped to one application's contacts at a
+  time; `ContactsPanel.vue`, rendered on `ApplicationFormView.vue` once an
+  application exists — add/edit via a PrimeVue `Dialog` (name required,
+  client-side email-format validation, title, LinkedIn URL), delete via
+  the existing `ConfirmDialog` pattern
+- Cross-application contacts directory (backend + frontend): read-only
+  `GET /contacts` endpoint (`directory_router` in
+  `app/api/v1/endpoints/contacts.py`), aggregating every contact across
+  every application the authenticated user owns, with the parent
+  application's company/position/status attached — paginated,
+  search-by-name-or-company, ownership enforced via the same
+  `Contact.application_id` → `Application.user_id` join the nested
+  endpoints already use, no new column or migration required; new schemas
+  `ApplicationSummary` / `ContactWithApplicationRead` /
+  `ContactWithApplicationListResponse`. Frontend: `ContactDirectoryView.vue`
+  (route `/contacts`) + Pinia `contactDirectory` store, same
+  `DataTable`/`Paginator`/debounced-search skeleton as
+  `ApplicationListView.vue`; each row links back to the owning
+  application's detail page
+- Backend schema tests extended to cover the three new directory-response
+  schemas above, including construction via `model_validate()` from
+  ORM-style attribute objects (not just dicts), matching how the endpoint
+  actually builds the response off `contains_eager(Contact.application)`
 
 ### Fixed
 
@@ -83,6 +107,11 @@
 - All interactive UI migrated from hand-rolled HTML/Tailwind controls to
   PrimeVue components where appropriate; Tailwind retained for layout,
   spacing, and custom branding (sidebar, typography)
+- `AppLayout.vue`'s "Contacts" nav item enabled (was a disabled
+  placeholder pointing at `/`) — now routes to `/contacts`
+- `router.py`'s nested-resource comment updated: Contacts is no longer
+  purely nested-only now that `GET /contacts` exists as a flat, top-level,
+  read-only route alongside the nested CRUD
 
 ## v0.3.0 (in progress)
 
@@ -134,9 +163,13 @@
 
 ## Upcoming
 
-- Interviews/Contacts/Documents UI (frontend Phase 2+)
+- Interviews/Documents UI (frontend Phase 2+/4; Contacts UI is now done —
+  see v0.4.0)
 - Analytics endpoints and dashboard charts
 - Celery tasks (resume parsing, email sending, AI processing)
 - RBAC beyond a `role` column
 - Interview reminder system
-- Webapp component/store tests for Applications UI
+- Webapp component/store tests for Applications UI and the new Contacts UI
+- Backend endpoint/integration test harness (test DB + fixtures + auth
+  test client) — none exists yet; `GET /contacts` is the first endpoint
+  that needs one
