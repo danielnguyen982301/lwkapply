@@ -30,11 +30,13 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   `ApplicationSummary` / `ContactWithApplicationRead` /
   `ContactWithApplicationListResponse` (the `GET /contacts` response
   shapes), including construction from ORM-style attribute objects via
-  `model_validate`, not just dicts. Plus a first integration test suite,
-  `backend/tests/test_contacts_directory.py` — real Postgres + HTTP layer,
-  not just schema validation — covering auth, cross-application
-  aggregation, the ownership/IDOR check, search, and pagination for
-  `GET /contacts` (see note below)
+  `model_validate`, not just dicts. Integration test suites (real
+  Postgres + HTTP layer, not just schema validation) exist for
+  `GET /contacts`, Applications CRUD, and Interviews CRUD — the latter
+  additionally covers the two-levels-deep ownership scoping (an interview
+  under one application must not be reachable via a sibling application's
+  URL, even for the same user) and confirms `Interview.result`'s
+  `server_default` behavior directly (see note below)
 
 All Interview/Document/Contact endpoints enforce ownership by joining
 through `Application.user_id`, the same IDOR-prevention approach the
@@ -96,11 +98,16 @@ again:
 2. Once regenerated via `alembic revision --autogenerate` against a real
    Postgres instance, that class of error went away — the models are now
    the actual source of truth for the schema, not a manual transcription.
-3. Separately, `Document.file_type` and `Interview.result` use a Python-side
-   `default=`, not `server_default=` — intentional, since the only current
-   write path is the ORM (FastAPI endpoints). If a future non-ORM writer
-   (bulk import, a second service, raw SQL) ever touches these tables,
-   revisit whether `server_default` is needed too.
+3. `Interview.result` actually uses `server_default=InterviewResult.PENDING`
+   (the raw enum member, not `.value`) — this note previously claimed a
+   Python-side `default=` instead, which didn't match the code. Confirmed
+   via `backend/tests/test_interviews_endpoints.py::TestInterviewResultServerDefault`,
+   which inserts a row through the ORM with `result` omitted entirely: it
+   resolves to `InterviewResult.PENDING` correctly, so the raw-enum
+   `server_default` does compile into valid DDL for this Postgres enum
+   column, despite looking like it shouldn't. `Document.file_type` wasn't
+   re-checked against its actual model file, so don't assume the same
+   holds there without looking.
 4. If enum columns are ever added to another model, double check
    `values_callable` is set so Postgres stores the enum's lowercase
    `.value` (`"resume"`) rather than the uppercase `.name` (`"RESUME"`) —
@@ -116,12 +123,12 @@ again:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- Integration tests for the remaining endpoints — Applications,
-  Interviews, and Documents CRUD still only have schema-level unit tests;
-  `GET /contacts` is the only endpoint with a full integration suite so
-  far (see note above). The fixtures in `conftest.py` are already
-  reusable, so this is now a matter of writing the tests, not building
-  infrastructure.
+- Integration tests for Documents CRUD — Contacts, Applications, and
+  Interviews now all have full integration suites (real Postgres + HTTP
+  layer); Documents still only has schema-level unit tests. The fixtures
+  in `conftest.py` are already reusable, so this is a matter of writing
+  the tests, not building infrastructure — Documents will also need S3
+  interaction mocked/stubbed, which the other three didn't.
 
 ## Development workflow
 
