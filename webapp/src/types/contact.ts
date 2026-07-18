@@ -1,6 +1,9 @@
+import type { ApplicationStatus } from './application'
+
 // Mirrors ContactRead (backend/app/schemas/contact.py). Contacts are
-// always nested under an application — there is no standalone /contacts
-// endpoint — so every read includes the parent `application_id`.
+// always created/edited nested under an application (see ContactCreatePayload
+// / ContactUpdatePayload below) — but they can also be read via the flat
+// cross-application directory endpoint, see ContactWithApplication below.
 export interface Contact {
   id: string
   application_id: string
@@ -35,3 +38,33 @@ export interface ContactCreatePayload {
 // are touched — omit a field here rather than sending `undefined`/`null`
 // for "don't change this".
 export type ContactUpdatePayload = Partial<ContactCreatePayload>
+
+// --- Cross-application contact directory ---------------------------------
+// Mirrors ApplicationSummary / ContactWithApplicationRead /
+// ContactWithApplicationListResponse (backend/app/schemas/contact.py),
+// returned only by GET /contacts (the flat "all my contacts" directory,
+// not the nested per-application endpoints above).
+
+export interface ContactApplicationSummary {
+  id: string
+  company: string
+  position: string
+  status: ApplicationStatus
+}
+
+export interface ContactWithApplication extends Contact {
+  application: ContactApplicationSummary
+}
+
+export interface ContactWithApplicationListResponse {
+  items: ContactWithApplication[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface ContactDirectoryParams {
+  search?: string
+  page?: number
+  page_size?: number
+}
