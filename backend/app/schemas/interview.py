@@ -38,3 +38,5 @@ class InterviewRead(InterviewBase):
 class InterviewListResponse(BaseModel):
     items: list[InterviewRead]
     total: int
+    page: int
+    page_size: int
