@@ -42,25 +42,25 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    # NOTE: this currently runs only the DB-free unit tests (security,
-    # schema validation). Once we add API/integration tests, this job
-    # will need a `services:` block for a Postgres container - see
-    # commented-out example below.
-    #
-    # services:
-    #   postgres:
-    #     image: postgres:16-alpine
-    #     env:
-    #       POSTGRES_USER: postgres
-    #       POSTGRES_PASSWORD: postgres
-    #       POSTGRES_DB: job_tracker_test
-    #     ports:
-    #       - 5432:5432
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
+    # test_contacts_directory.py (the first API/integration test) needs a
+    # real Postgres instance - Contact/Application/User all use the
+    # Postgres-specific UUID dialect type, so SQLite can't stand in here.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lwkapply_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply_test
     steps:
       - uses: actions/checkout@v4
 
@@ -75,4 +75,3 @@ jobs:
 
       - name: Run tests
         run: pytest --cov=app --cov-report=term-missing
-        
