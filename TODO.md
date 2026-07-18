@@ -135,7 +135,9 @@
 - [ ] Production environment
 - [x] CI/CD pipeline — webapp (`.github/workflows/webapp-ci.yml`:
       eslint, prettier check, vue-tsc type-check, vitest w/ coverage,
-      build); backend's already existed
+      build); backend's already existed, now with a `postgres:16-alpine`
+      `services:` container in the `test` job so integration tests (see
+      Testing below) can run in CI, not just locally
 - [ ] Monitoring
 
 ---
@@ -148,8 +150,16 @@
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
       error-extraction helper; Applications/Kanban UI exists but is not yet
       covered by component/store tests; Contacts UI also not yet covered)
-- [ ] Integration tests — none exist yet at any layer; `GET /contacts` will
-      be the first backend endpoint test, currently blocked on deciding the
-      test-DB/fixture strategy (`Contact.application_id` uses the Postgres
-      `UUID` dialect type, so an in-memory SQLite fixture won't work as-is)
+- [x] Integration tests — `GET /contacts` now has a full integration test
+      suite (`backend/tests/test_contacts_directory.py`) against a real
+      Postgres instance: auth (missing/invalid/wrong-token-type),
+      cross-application aggregation, the ownership/IDOR check, search, and
+      pagination. `backend/tests/conftest.py` provides reusable fixtures
+      (real-Postgres engine, per-test SAVEPOINT isolation, authenticated
+      `TestClient`, `make_user`/`auth_headers` factories) that future
+      endpoint tests build on directly — no longer blocked on deciding a
+      strategy, since one now exists and is proven out end-to-end
+- [ ] Integration tests (remaining endpoints) — Applications, Interviews,
+      Documents CRUD still only have schema-level unit tests, not endpoint
+      tests
 - [ ] End-to-end tests
