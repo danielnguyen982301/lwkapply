@@ -45,6 +45,8 @@
 
 - [x] Contact model
 - [x] CRUD endpoints
+- [x] Cross-application contacts directory endpoint (`GET /contacts`,
+      read-only, paginated, search by name/company — see BACKEND_SUMMARY.md)
 
 ### Documents
 
@@ -95,7 +97,9 @@
 ### Interviews / Contacts / Documents
 
 - [ ] Interview scheduling UI
-- [ ] Contact management UI
+- [x] Contact management UI — per-application panel (add/edit/delete,
+      on the application detail page) and a cross-application directory
+      view (`/contacts` nav item) — see WEBAPP_SUMMARY.md
 - [ ] Document upload/download UI
 
 ### Analytics
@@ -139,9 +143,13 @@
 ## Testing
 
 - [x] Backend unit tests (security, application/interview/contact/document
-      schemas, user schema)
+      schemas, user schema — contact schemas now also cover the
+      `GET /contacts` directory response shapes)
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
       error-extraction helper; Applications/Kanban UI exists but is not yet
-      covered by component/store tests)
-- [ ] Integration tests
+      covered by component/store tests; Contacts UI also not yet covered)
+- [ ] Integration tests — none exist yet at any layer; `GET /contacts` will
+      be the first backend endpoint test, currently blocked on deciding the
+      test-DB/fixture strategy (`Contact.application_id` uses the Postgres
+      `UUID` dialect type, so an in-memory SQLite fixture won't work as-is)
 - [ ] End-to-end tests
