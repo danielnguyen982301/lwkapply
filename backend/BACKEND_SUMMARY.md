@@ -30,7 +30,11 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   `ApplicationSummary` / `ContactWithApplicationRead` /
   `ContactWithApplicationListResponse` (the `GET /contacts` response
   shapes), including construction from ORM-style attribute objects via
-  `model_validate`, not just dicts
+  `model_validate`, not just dicts. Plus a first integration test suite,
+  `backend/tests/test_contacts_directory.py` — real Postgres + HTTP layer,
+  not just schema validation — covering auth, cross-application
+  aggregation, the ownership/IDOR check, search, and pagination for
+  `GET /contacts` (see note below)
 
 All Interview/Document/Contact endpoints enforce ownership by joining
 through `Application.user_id`, the same IDOR-prevention approach the
@@ -54,6 +58,32 @@ the one Contact route that isn't nested under `/applications/{id}`:
   across applications, and it's a meaningfully bigger change (join table,
   migration, dedupe/merge UX) — worth revisiting if that need shows up.
 - Create/update/delete remain nested-only; this route is read-only.
+
+### A note on the integration test setup
+
+`backend/tests/conftest.py` establishes the pattern every future endpoint
+test (Applications, Interviews, Documents) can reuse as-is:
+
+- Real Postgres only, via `Settings.TEST_DATABASE_URL` (defaults to a
+  separate `lwkapply_test` database) — same constraint as the
+  migration note below: Postgres-specific `UUID` and enum types don't
+  behave the same, or at all, against an in-memory SQLite DB.
+- Per-test isolation via SAVEPOINT nesting rather than truncating tables
+  between tests: each test gets its own connection + outer transaction,
+  with a nested SAVEPOINT recreated every time endpoint code calls
+  `db.commit()` (via an `after_transaction_end` listener), and the outer
+  transaction rolls back at teardown. Nothing a test writes is ever
+  actually persisted, and tests never see each other's data.
+- The `client` (`TestClient`), `make_user`, and `auth_headers` fixtures go
+  through the app's real dependency-injection and JWT path
+  (`get_current_user`, `create_access_token`) rather than mocking them,
+  so these are true integration tests, not schema tests with an HTTP
+  wrapper on top.
+- `backend-ci.yml`'s `test` job now runs a `postgres:16-alpine` service
+  container with `TEST_DATABASE_URL` set as a job-level env var. Locally,
+  set `TEST_DATABASE_URL` in `.env.local` (or rely on the default) —
+  never point it at the same database `DATABASE_URL` uses, since tables
+  are created/dropped every test session.
 
 ### A note on the first migration
 
@@ -86,24 +116,22 @@ again:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- Endpoint/integration tests — every backend test so far is a pure
-  schema/unit test (no DB, no HTTP client); there's no `conftest.py`,
-  test-DB fixture, or auth-test-client pattern anywhere yet. `GET
-  /contacts` is the first endpoint that specifically needs one (to verify
-  cross-application aggregation and, critically, that one user can't see
-  another's contacts). Note for whoever builds this first: `Contact.
-  application_id` uses the Postgres-specific `UUID` dialect type, so an
-  in-memory SQLite test DB won't work as-is — needs a real Postgres test
-  instance (or a dialect-agnostic UUID type change, which is out of scope
-  for just adding tests).
+- Integration tests for the remaining endpoints — Applications,
+  Interviews, and Documents CRUD still only have schema-level unit tests;
+  `GET /contacts` is the only endpoint with a full integration suite so
+  far (see note above). The fixtures in `conftest.py` are already
+  reusable, so this is now a matter of writing the tests, not building
+  infrastructure.
 
 ## Development workflow
 
 CI runs automatically on push/PR to `main` (see `.github/workflows/backend-ci.yml`):
-lint (`ruff check`), format check (`ruff format --check`), and unit tests
-with coverage.
+lint (`ruff check`), format check (`ruff format --check`), and tests
+with coverage — the `test` job now runs a `postgres:16-alpine` service
+container, since `pytest` includes both schema unit tests and the
+`GET /contacts` integration test.
 
-To catch the same issues locally *before* pushing:
+To catch the same issues locally _before_ pushing:
 
 ```bash
 pip install pre-commit
@@ -112,7 +140,13 @@ pre-commit install        # one-time, from the repo root
 
 From then on, `ruff check --fix` and `ruff format` run automatically on
 every `git commit` touching `backend/`. To run everything manually without
-committing:
+committing, you'll first need a throwaway test database (once, not per
+run) — point `TEST_DATABASE_URL` at it via `.env.local` if you're not
+using the default `lwkapply_test` name:
+
+```bash
+docker compose exec <db-service> psql -U postgres -c "CREATE DATABASE lwkapply_test;"
+```
 
 ```bash
 cd backend
