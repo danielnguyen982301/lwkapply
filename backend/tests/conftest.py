@@ -24,7 +24,6 @@ other. This is the standard SQLAlchemy "join a session into an external
 transaction" recipe.
 """
 
-import os
 import uuid
 from collections.abc import Generator
 
@@ -33,6 +32,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.core.config import settings
 
 # Importing these registers every mapped class on Base's registry before
 # create_all() / mapper configuration runs. Application.py declares
@@ -53,24 +54,20 @@ from app.db.session import get_db
 from app.main import app
 from app.models.user import User
 
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply_test",
-)
-
 
 @pytest.fixture(scope="session")
 def engine() -> Generator[Engine, None, None]:
-    eng = create_engine(TEST_DATABASE_URL)
+    eng = create_engine(settings.TEST_DATABASE_URL)
     try:
         Base.metadata.create_all(bind=eng)
     except Exception as exc:  # pragma: no cover - fails fast with a clear hint
         raise RuntimeError(
             "Could not connect to the test database at "
-            f"{TEST_DATABASE_URL!r}. Integration tests need a real "
-            "Postgres instance (SQLite won't work - see the module "
-            "docstring in conftest.py). Set TEST_DATABASE_URL or create "
-            "the default 'lwkapply_test' database."
+            f"{settings.TEST_DATABASE_URL!r}. Integration tests need a "
+            "real Postgres instance (SQLite won't work - see the module "
+            "docstring in conftest.py). Set TEST_DATABASE_URL in "
+            "backend/.env.local (or as a real env var, e.g. in CI) or "
+            "create the default database it points at."
         ) from exc
     yield eng
     Base.metadata.drop_all(bind=eng)
