@@ -27,10 +27,6 @@ Two things specific to this resource, worth calling out:
    under Application A must not be reachable via Application B's URL,
    even when the same user owns both applications. See
    TestInterviewApplicationScoping.
-
-3. InterviewListResponse has no page/page_size - the list endpoint isn't
-   paginated (unlike Contacts/Applications), so there are no pagination
-   tests here.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -605,6 +601,93 @@ class TestListInterviewsOrdering:
         body = response.json()
         assert body["items"] == []
         assert body["total"] == 0
+        assert body["page"] == 1
+        assert body["page_size"] == 20
+
+
+class TestListInterviewsPagination:
+    def test_paginates_results(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        application = _make_application(db_session, user)
+        for i in range(5):
+            _make_interview(
+                db_session,
+                application,
+                scheduled_at=BASE_SCHEDULED_AT + timedelta(days=i),
+            )
+
+        page_1 = client.get(
+            _interviews_url(application.id),
+            params={"page": 1, "page_size": 2},
+            headers=auth_headers(user),
+        )
+        page_2 = client.get(
+            _interviews_url(application.id),
+            params={"page": 2, "page_size": 2},
+            headers=auth_headers(user),
+        )
+
+        assert page_1.status_code == 200
+        assert page_2.status_code == 200
+        assert page_1.json()["total"] == 5
+        assert page_2.json()["total"] == 5
+        assert len(page_1.json()["items"]) == 2
+        assert len(page_2.json()["items"]) == 2
+
+        page_1_ids = {item["id"] for item in page_1.json()["items"]}
+        page_2_ids = {item["id"] for item in page_2.json()["items"]}
+        assert page_1_ids.isdisjoint(page_2_ids)
+
+    def test_pagination_preserves_scheduled_at_ordering(
+        self, client, db_session, make_user, auth_headers
+    ):
+        """Pagination and ordering are independent concerns - offset/
+        limit must apply on top of the ORDER BY, not instead of it."""
+        user = make_user()
+        application = _make_application(db_session, user)
+        interviews = [
+            _make_interview(
+                db_session,
+                application,
+                scheduled_at=BASE_SCHEDULED_AT + timedelta(days=i),
+            )
+            for i in range(4)
+        ]
+
+        page_2 = client.get(
+            _interviews_url(application.id),
+            params={"page": 2, "page_size": 2},
+            headers=auth_headers(user),
+        )
+
+        ids_in_order = [item["id"] for item in page_2.json()["items"]]
+        assert ids_in_order == [str(interviews[2].id), str(interviews[3].id)]
+
+    def test_page_size_is_capped_at_100(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        response = client.get(
+            _interviews_url(application.id),
+            params={"page_size": 500},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+
+    def test_page_below_one_is_rejected(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        response = client.get(
+            _interviews_url(application.id),
+            params={"page": 0},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
 
 
 class TestInterviewResultServerDefault:
