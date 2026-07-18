@@ -4,6 +4,32 @@
 
 ### Added
 
+- Backend integration test infrastructure (`backend/tests/conftest.py`):
+  session-scoped real-Postgres engine, per-test SAVEPOINT-based
+  transaction isolation (endpoint `db.commit()` calls only close a
+  savepoint, not the outer transaction, so nothing persists and tests
+  can't leak state into each other), an authenticated `TestClient`
+  fixture wired through the app's real `get_current_user`/
+  `create_access_token` path rather than mocked, and `make_user`/
+  `auth_headers` factory fixtures — the reusable base for every future
+  endpoint test, not just this one
+- `GET /contacts` integration tests
+  (`backend/tests/test_contacts_directory.py`): the first API-level
+  (DB + HTTP) test in the suite, covering authentication (missing/
+  invalid/wrong-token-type), cross-application contact aggregation, the
+  ownership/IDOR check (a user must never see another user's contacts,
+  including via the `search` param), search, and pagination
+- `Settings.TEST_DATABASE_URL` (`backend/app/core/config.py`): a
+  separate throwaway-database setting for integration tests, loaded the
+  same way as every other setting (`.env.local` locally, a real env var
+  in CI), defaulting to a `job_tracker_test` database alongside the dev
+  database
+- `backend-ci.yml`: enabled the previously-commented-out Postgres
+  `services:` block in the `test` job, with `TEST_DATABASE_URL` set as a
+  job-level env var; added `httpx` to `requirements-dev.txt`, required by
+  `fastapi.testclient.TestClient` now that a test exercises the HTTP
+  layer
+
 - Frontend project scaffold (`webapp/`): Vite + Vue 3 + TypeScript +
   Pinia + Vue Router + Tailwind CSS + PrimeVue
 - Auth screens: Login and Register, with client-side field validation,
