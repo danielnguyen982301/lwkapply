@@ -34,6 +34,8 @@ class DocumentRead(BaseModel):
 class DocumentListResponse(BaseModel):
     items: list[DocumentRead]
     total: int
+    page: int
+    page_size: int
 
 
 class DocumentDownloadResponse(BaseModel):
