@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = (
         "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply"
     )
+    TEST_DATABASE_URL: str = (
+        "postgresql+psycopg2://postgres:postgres@localhost:5432/lwkapply_test"
+    )
 
     # --- Redis / Celery ---
     REDIS_URL: str = "redis://localhost:6379/0"
