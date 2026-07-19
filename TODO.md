@@ -48,6 +48,10 @@
 - [x] Cross-application contacts directory endpoint (`GET /contacts`,
       read-only, paginated, search by name/company — see BACKEND_SUMMARY.md)
 
+Note: the nested `GET /applications/{id}/contacts` list is deliberately
+unpaginated, unlike every other list endpoint in the API — see
+BACKEND_SUMMARY.md for the reasoning.
+
 ### Documents
 
 - [x] Resume upload
@@ -151,16 +155,24 @@
       error-extraction helper; Applications/Kanban UI exists but is not yet
       covered by component/store tests; Contacts UI also not yet covered)
 - [x] Integration tests — `GET /contacts` (`test_contacts_directory.py`),
-      Applications CRUD (`test_applications_endpoints.py`, includes the
-      salary-range validator fix propagated to `ApplicationUpdate` at both
-      the schema and endpoint/merged-value level), and Interviews CRUD
-      (`test_interviews_endpoints.py`, includes the two-levels-deep
-      application-scoping check and Interviews gaining pagination — see
-      below) all now have full integration suites against a real Postgres
-      instance. `backend/tests/conftest.py` provides the reusable fixtures
-      (real-Postgres engine, per-test SAVEPOINT isolation, authenticated
-      `TestClient`, `make_user`/`auth_headers` factories) every one of
-      these builds on directly
-- [ ] Integration tests (Documents) — still only schema-level unit tests;
-      will additionally need S3 interaction mocked/stubbed
+      nested Contacts CRUD (`test_contacts_endpoints.py` — the
+      create/get/update/delete/list routes under
+      `/applications/{id}/contacts`, separate from the directory route
+      above), Applications CRUD (`test_applications_endpoints.py`,
+      includes the salary-range validator fix propagated to
+      `ApplicationUpdate` at both the schema and endpoint/merged-value
+      level), Interviews CRUD (`test_interviews_endpoints.py`, includes
+      the two-levels-deep application-scoping check and Interviews
+      gaining pagination), and Documents CRUD
+      (`test_documents_endpoints.py`, upload/download/delete against a
+      mocked `boto3` client — only `app.services.s3._s3_client` is
+      faked, so content-type validation, chunked size-limit enforcement,
+      and object-key construction all still run for real; also confirms
+      best-effort S3 cleanup on delete failure, and Documents gaining
+      pagination) all now have full integration suites against a real
+      Postgres instance. `backend/tests/conftest.py` provides the
+      reusable fixtures (real-Postgres engine, per-test SAVEPOINT
+      isolation, authenticated `TestClient`, `make_user`/`auth_headers`
+      factories) every one of these builds on directly — every backend
+      CRUD endpoint now has integration coverage
 - [ ] End-to-end tests
