@@ -10,15 +10,17 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   password reset (request/confirm)
 - **Applications**: full CRUD, pagination, status filter, company/position
   search — all scoped to the authenticated user
-- **Interviews**: full CRUD, nested under `/applications/{application_id}/interviews`
-- **Contacts**: full CRUD, nested under `/applications/{application_id}/contacts`;
+- **Interviews**: full CRUD, pagination, nested under
+  `/applications/{application_id}/interviews`
+- **Contacts**: full CRUD, nested under `/applications/{application_id}/contacts`
+  (that nested list route is deliberately unpaginated — see note below);
   plus a read-only, top-level `GET /contacts` — a cross-application
   directory of every contact the authenticated user owns, with the parent
   application's company/position/status attached, paginated and
   search-by-name-or-company (backs the webapp's "Contacts" nav item)
-- **Documents**: upload (multipart, streamed to S3), list, get metadata,
-  presigned download URLs, update (`file_type` only), delete — nested under
-  `/applications/{application_id}/documents`
+- **Documents**: upload (multipart, streamed to S3), list (paginated), get
+  metadata, presigned download URLs, update (`file_type` only), delete —
+  nested under `/applications/{application_id}/documents`
 - **Users**: the current endpoints only contain `/users/me`, this is moved from `/auth/me` to
   reflect the users route better.
 - **Models**: User, Application, Interview, Document, Contact (matches
@@ -31,12 +33,22 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   `ContactWithApplicationListResponse` (the `GET /contacts` response
   shapes), including construction from ORM-style attribute objects via
   `model_validate`, not just dicts. Integration test suites (real
-  Postgres + HTTP layer, not just schema validation) exist for
-  `GET /contacts`, Applications CRUD, and Interviews CRUD — the latter
-  additionally covers the two-levels-deep ownership scoping (an interview
-  under one application must not be reachable via a sibling application's
-  URL, even for the same user) and confirms `Interview.result`'s
-  `server_default` behavior directly (see note below)
+  Postgres + HTTP layer, not just schema validation) now exist for every
+  CRUD endpoint in the API: `GET /contacts`
+  (`test_contacts_directory.py`), nested Contacts CRUD
+  (`test_contacts_endpoints.py`), Applications CRUD
+  (`test_applications_endpoints.py`), Interviews CRUD
+  (`test_interviews_endpoints.py`), and Documents CRUD
+  (`test_documents_endpoints.py`). Interviews and Documents additionally
+  cover the two-levels-deep ownership scoping (a resource under one
+  application must not be reachable via a sibling application's URL,
+  even for the same user) — Contacts' nested CRUD suite mirrors that same
+  check. Interviews also confirms `Interview.result`'s `server_default`
+  behavior directly (see note below), and Documents mocks only the actual
+  `boto3` client boundary (`app.services.s3._s3_client`), so the real
+  content-type validation, chunked size-limit enforcement, and
+  best-effort S3-cleanup-on-delete-failure logic all still run for real
+  in those tests
 
 All Interview/Document/Contact endpoints enforce ownership by joining
 through `Application.user_id`, the same IDOR-prevention approach the
@@ -60,6 +72,17 @@ the one Contact route that isn't nested under `/applications/{id}`:
   across applications, and it's a meaningfully bigger change (join table,
   migration, dedupe/merge UX) — worth revisiting if that need shows up.
 - Create/update/delete remain nested-only; this route is read-only.
+- This route is paginated; the nested `GET /applications/{id}/contacts`
+  list isn't. Deliberate, not an oversight: a single application's
+  contact list is bounded by how many people are realistically involved
+  in one hiring process (recruiter, a handful of interviewers) — small
+  enough that pagination adds UI complexity without solving a real
+  problem. The directory aggregates across every application a user has
+  ever tracked, which has no natural ceiling and can genuinely grow large
+  over time, so it needs pagination the nested route doesn't. Revisit if
+  the nested route's usage pattern ever changes (e.g. contacts get reused
+  across applications per the note above, or some other pattern emerges
+  that inflates a single application's contact count).
 
 ### A note on the integration test setup
 
@@ -67,7 +90,7 @@ the one Contact route that isn't nested under `/applications/{id}`:
 test (Applications, Interviews, Documents) can reuse as-is:
 
 - Real Postgres only, via `Settings.TEST_DATABASE_URL` (defaults to a
-  separate `lwkapply_test` database) — same constraint as the
+  separate `job_tracker_test` database) — same constraint as the
   migration note below: Postgres-specific `UUID` and enum types don't
   behave the same, or at all, against an in-memory SQLite DB.
 - Per-test isolation via SAVEPOINT nesting rather than truncating tables
@@ -123,12 +146,6 @@ again:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- Integration tests for Documents CRUD — Contacts, Applications, and
-  Interviews now all have full integration suites (real Postgres + HTTP
-  layer); Documents still only has schema-level unit tests. The fixtures
-  in `conftest.py` are already reusable, so this is a matter of writing
-  the tests, not building infrastructure — Documents will also need S3
-  interaction mocked/stubbed, which the other three didn't.
 
 ## Development workflow
 
