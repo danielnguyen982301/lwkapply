@@ -43,11 +43,11 @@
 - `ApplicationUpdate` salary-range validation
   (`backend/app/schemas/application.py`,
   `backend/app/api/v1/endpoints/applications.py`): the `salary_min <=
-  salary_max` check previously only existed on `ApplicationCreate`, so a
+salary_max` check previously only existed on `ApplicationCreate`, so a
   PATCH could silently invert a valid range. Fixed at two levels: a
   shared `SalaryRangeValidationMixin` now backs both `ApplicationCreate`
   and `ApplicationUpdate` (catches both fields sent inconsistently in one
-  request), and `update_application` additionally checks the *merged*
+  request), and `update_application` additionally checks the _merged_
   effective range (request value if provided, otherwise the value
   already on the row) before applying any change, since the schema alone
   can't see a partial PATCH that conflicts with existing stored data
@@ -57,7 +57,7 @@
   across users, and — specific to this resource, since it's nested two
   levels deep (Interview -> Application -> User) — a dedicated scoping
   check confirming an interview under one application isn't reachable
-  through a *sibling* application's URL even for the same user. Also
+  through a _sibling_ application's URL even for the same user. Also
   directly verifies `Interview.result`'s `server_default` behavior
   end-to-end (see Fixed, below)
 - Pagination for `GET /applications/{id}/interviews`
@@ -66,6 +66,36 @@
   params and response fields, matching the existing Applications/Contacts
   pattern; previously this was the only list endpoint returning every row
   unpaginated
+- Documents CRUD integration tests
+  (`backend/tests/test_documents_endpoints.py`): upload (content-type
+  rejection, chunked size-limit enforcement, simulated S3 failure),
+  download (presigned URL, confirms the exact S3 object key used matches
+  the stored `file_url`), update, delete, ownership/IDOR, and the same
+  sibling-application scoping check as Interviews. Only
+  `app.services.s3._s3_client` (the actual `boto3.client(...)` factory)
+  is mocked — everything else in `s3.py` (content-type validation, the
+  chunked size check, object-key construction) runs for real against the
+  fake client, so these tests exercise that logic rather than assuming
+  it works. Also confirms delete still succeeds and removes the DB row
+  even when the S3-side delete fails, per `delete_document`'s
+  best-effort-cleanup contract
+- Pagination for `GET /applications/{id}/documents`
+  (`backend/app/schemas/document.py`,
+  `backend/app/api/v1/endpoints/documents.py`): same `page`/`page_size`
+  pattern as Applications/Interviews/Contacts-directory
+- Nested Contacts CRUD integration tests
+  (`backend/tests/test_contacts_endpoints.py`): covers
+  create/get/update/delete/list under
+  `/applications/{application_id}/contacts` — previously only the
+  separate, flat `GET /contacts` directory route had integration
+  coverage (`test_contacts_directory.py`). Same auth, ownership/IDOR, and
+  sibling-application-scoping shape as the Interviews/Documents suites.
+  Confirmed as a deliberate design decision (not an oversight,
+  previously flagged as an open gap in docs): the nested list stays
+  unpaginated, since a single application's contact count is naturally
+  small, while the directory route — which aggregates across every
+  application a user has ever tracked — keeps its existing pagination.
+  See BACKEND_SUMMARY.md's note on the contacts directory endpoint.
 
 - Frontend project scaffold (`webapp/`): Vite + Vue 3 + TypeScript +
   Pinia + Vue Router + Tailwind CSS + PrimeVue
