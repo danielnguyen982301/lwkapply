@@ -16,6 +16,7 @@ import { useApplicationsStore } from '@/stores/applications'
 import { applicationStatusOptions } from '@/lib/application-ui'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
 import InterviewsPanel from '@/components/applications/InterviewsPanel.vue'
+import DocumentsPanel from '@/components/applications/DocumentsPanel.vue'
 import {
   type Application,
   type ApplicationCreatePayload,
@@ -405,5 +406,6 @@ function handleCancel() {
 
     <ContactsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
     <InterviewsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
+    <DocumentsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
   </div>
 </template>
