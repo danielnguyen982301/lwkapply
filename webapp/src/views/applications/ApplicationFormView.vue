@@ -15,6 +15,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { useApplicationsStore } from '@/stores/applications'
 import { applicationStatusOptions } from '@/lib/application-ui'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
+import InterviewsPanel from '@/components/applications/InterviewsPanel.vue'
 import {
   type Application,
   type ApplicationCreatePayload,
@@ -403,5 +404,6 @@ function handleCancel() {
     </Card>
 
     <ContactsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
+    <InterviewsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
   </div>
 </template>
