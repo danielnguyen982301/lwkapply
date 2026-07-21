@@ -6,11 +6,11 @@ This repository contains a full-stack Job Application Tracker platform that help
 
 The project serves both as a production-style SaaS application and a learning platform for:
 
-* Full-stack engineering
-* System design
-* Cloud deployment
-* DevOps workflows
-* AI-assisted productivity features
+- Full-stack engineering
+- System design
+- Cloud deployment
+- DevOps workflows
+- AI-assisted productivity features
 
 AI assistants working on this repository should preserve architectural consistency, prioritize maintainability, and align new work with the roadmap and existing implementation summaries.
 
@@ -28,9 +28,9 @@ When determining current project status:
 
 If documentation conflicts:
 
-* Trust implementation summaries first.
-* Trust actual code over documentation.
-* Treat roadmap items as planned, not implemented.
+- Trust implementation summaries first.
+- Trust actual code over documentation.
+- Treat roadmap items as planned, not implemented.
 
 ---
 
@@ -38,23 +38,23 @@ If documentation conflicts:
 
 The platform manages the full job application lifecycle:
 
-* User registration and authentication
-* Application tracking
-* Resume and document management
-* Interview scheduling and notes
-* Contact management
-* Analytics and reporting
-* AI-assisted job-search tools
+- User registration and authentication
+- Application tracking
+- Resume and document management
+- Interview scheduling and notes
+- Contact management
+- Analytics and reporting
+- AI-assisted job-search tools
 
 Primary user type:
 
-* Individual job seekers
+- Individual job seekers
 
 Potential future expansion:
 
-* Premium subscriptions
-* Multi-tenant SaaS architecture
-* Administrative tooling
+- Premium subscriptions
+- Multi-tenant SaaS architecture
+- Administrative tooling
 
 ---
 
@@ -80,34 +80,34 @@ Postgres Redis    S3
 
 Stack:
 
-* Vue 3
-* TypeScript
-* Pinia
-* Vue Router
-* PrimeVue
-* Tailwind CSS
+- Vue 3
+- TypeScript
+- Pinia
+- Vue Router
+- PrimeVue
+- Tailwind CSS
 
 Responsibilities:
 
-* User interface
-* State management
-* Forms
-* Application workflows
-* Analytics visualization
+- User interface
+- State management
+- Forms
+- Application workflows
+- Analytics visualization
 
 #### Mobile Application
 
 Planned stack:
 
-* Flutter
-* Riverpod
-* Dio
+- Flutter
+- Riverpod
+- Dio
 
 Responsibilities:
 
-* Application management
-* Notifications
-* Offline access
+- Application management
+- Notifications
+- Offline access
 
 Mobile is planned but not yet considered a primary implementation target.
 
@@ -117,20 +117,20 @@ Mobile is planned but not yet considered a primary implementation target.
 
 Stack:
 
-* FastAPI
-* SQLAlchemy
-* PostgreSQL
-* Redis
-* Celery
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Redis
+- Celery
 
 Responsibilities:
 
-* Authentication
-* Authorization
-* Business logic
-* Validation
-* File handling
-* AI integrations
+- Authentication
+- Authorization
+- Business logic
+- Validation
+- File handling
+- AI integrations
 
 Preferred architectural separation:
 
@@ -152,7 +152,7 @@ Backend code should remain business-logic-centric and avoid leaking database con
 
 Primary database:
 
-* PostgreSQL
+- PostgreSQL
 
 Core entities:
 
@@ -160,16 +160,16 @@ Core entities:
 
 Stores:
 
-* Identity
-* Authentication
-* Role information
+- Identity
+- Authentication
+- Role information
 
 Key fields:
 
-* id
-* email
-* password_hash
-* role
+- id
+- email
+- password_hash
+- role
 
 ---
 
@@ -179,13 +179,13 @@ Represents a job application.
 
 Key fields:
 
-* company
-* position
-* location
-* status
-* salary range
-* application date
-* notes
+- company
+- position
+- location
+- status
+- salary range
+- application date
+- notes
 
 ---
 
@@ -195,10 +195,10 @@ Associated with applications.
 
 Stores:
 
-* Interview type
-* Schedule
-* Feedback
-* Outcome
+- Interview type
+- Schedule
+- Feedback
+- Outcome
 
 ---
 
@@ -208,9 +208,9 @@ Stores metadata for uploaded files.
 
 Examples:
 
-* Resumes
-* Cover letters
-* Attachments
+- Resumes
+- Cover letters
+- Attachments
 
 Actual file storage is external (S3).
 
@@ -222,9 +222,9 @@ People associated with an application.
 
 Examples:
 
-* Recruiters
-* Hiring managers
-* Interviewers
+- Recruiters
+- Hiring managers
+- Interviewers
 
 ---
 
@@ -250,22 +250,22 @@ Ownership should always be enforced through user/application relationships.
 
 Authentication model:
 
-* JWT access tokens
-* Refresh tokens
+- JWT access tokens
+- Refresh tokens
 
 Current implementation notes from TODO:
 
-* Refresh token flow exists
-* httpOnly cookie refresh token
-* CSRF double-submit protection on refresh/logout
+- Refresh token flow exists
+- httpOnly cookie refresh token
+- CSRF double-submit protection on refresh/logout
 
 Security expectations:
 
-* Never store plaintext passwords
-* Use bcrypt hashing
-* Validate all JWTs
-* Protect authenticated routes
-* Enforce ownership checks
+- Never store plaintext passwords
+- Use bcrypt hashing
+- Validate all JWTs
+- Protect authenticated routes
+- Enforce ownership checks
 
 ---
 
@@ -273,9 +273,9 @@ Security expectations:
 
 Roles:
 
-* User
-* Premium User
-* Admin
+- User
+- Premium User
+- Admin
 
 Future features should consider RBAC requirements from the beginning.
 
@@ -287,17 +287,21 @@ Do not hardcode assumptions that all authenticated users are identical.
 
 Provider:
 
-* AWS S3
+- AWS S3
 
 Documents should not be stored directly in PostgreSQL.
 
 Current approach:
 
-* Server-mediated uploads
+- Server-mediated uploads
 
 Future consideration:
 
-* Direct presigned uploads to S3 if scaling requires it
+- Direct presigned uploads to S3 if scaling requires it
+- Migrating the provider itself from AWS S3 to Cloudflare R2 — the AWS
+  free tier expires 6 months after account creation, so this is time-
+  boxed, not just aspirational. See CHANGELOG.md / BACKEND_SUMMARY.md for
+  scope before starting any storage-layer work
 
 ---
 
@@ -305,15 +309,15 @@ Future consideration:
 
 Technologies:
 
-* Celery
-* Redis
+- Celery
+- Redis
 
 Intended uses:
 
-* Resume parsing
-* Analytics generation
-* Email notifications
-* AI processing
+- Resume parsing
+- Analytics generation
+- Email notifications
+- AI processing
 
 Heavy or long-running operations should be delegated to background jobs whenever practical.
 
@@ -323,28 +327,28 @@ Heavy or long-running operations should be delegated to background jobs whenever
 
 Current web stack:
 
-* Vue 3
-* TypeScript
-* Pinia
-* Vue Router
-* PrimeVue
-* Tailwind CSS
+- Vue 3
+- TypeScript
+- Pinia
+- Vue Router
+- PrimeVue
+- Tailwind CSS
 
 Existing implementation includes:
 
-* Authentication screens
-* Protected routes
-* Router guards
-* Typed API client
-* Token refresh handling
+- Authentication screens
+- Protected routes
+- Router guards
+- Typed API client
+- Token refresh handling
 
 When adding features:
 
-* Prefer strongly typed APIs
-* Keep business logic out of views
-* Centralize API interactions
-* Use Pinia for shared state
-* Use composables when appropriate
+- Prefer strongly typed APIs
+- Keep business logic out of views
+- Centralize API interactions
+- Use Pinia for shared state
+- Use composables when appropriate
 
 ---
 
@@ -352,32 +356,32 @@ When adding features:
 
 Backend:
 
-* pytest
+- pytest
 
 Frontend:
 
-* Vitest
-* Vue Test Utils
+- Vitest
+- Vue Test Utils
 
 End-to-end:
 
-* Playwright (planned)
+- Playwright (planned)
 
 Project goal:
 
-* 80%+ coverage
+- 80%+ coverage
 
 New backend features should include:
 
-* Schema tests
-* Service tests
-* Endpoint tests
+- Schema tests
+- Service tests
+- Endpoint tests
 
 New frontend features should include:
 
-* Component tests
-* State-management tests
-* Routing tests where relevant
+- Component tests
+- State-management tests
+- Routing tests where relevant
 
 ---
 
@@ -385,23 +389,23 @@ New frontend features should include:
 
 Frontend:
 
-* Vercel
+- Vercel
 
 Backend:
 
-* Railway or Render
+- Railway or Render
 
 Database:
 
-* PostgreSQL (Supabase)
+- PostgreSQL (Supabase)
 
 Storage:
 
-* AWS S3
+- AWS S3
 
 CI/CD:
 
-* GitHub Actions
+- GitHub Actions
 
 Pipeline philosophy:
 
@@ -418,18 +422,18 @@ Changes should preserve automated deployment compatibility.
 
 Always maintain:
 
-* JWT authentication
-* RBAC enforcement
-* Input validation
-* Rate limiting
-* Secure CORS configuration
-* Secure file uploads
+- JWT authentication
+- RBAC enforcement
+- Input validation
+- Rate limiting
+- Secure CORS configuration
+- Secure file uploads
 
 Never:
 
-* Commit secrets
-* Store credentials in code
-* Disable authentication checks for convenience
+- Commit secrets
+- Store credentials in code
+- Disable authentication checks for convenience
 
 Configuration belongs in environment variables.
 
@@ -439,12 +443,12 @@ Configuration belongs in environment variables.
 
 Planned capabilities:
 
-* Resume review
-* ATS scoring
-* Resume parsing
-* Job matching
-* Cover letter generation
-* Interview question generation
+- Resume review
+- ATS scoring
+- Resume parsing
+- Job matching
+- Cover letter generation
+- Interview question generation
 
 AI functionality should be designed as modular services rather than deeply coupling AI logic into core CRUD workflows.
 
@@ -467,9 +471,9 @@ Development phases:
 
 When proposing work:
 
-* Prioritize unfinished items from TODO.
-* Respect roadmap ordering unless implementation summaries indicate otherwise.
-* Avoid introducing large architectural changes without clear justification.
+- Prioritize unfinished items from TODO.
+- Respect roadmap ordering unless implementation summaries indicate otherwise.
+- Avoid introducing large architectural changes without clear justification.
 
 ---
 
@@ -494,12 +498,12 @@ Do not assume a roadmap feature already exists.
 
 When making changes:
 
-* Prefer incremental improvements.
-* Maintain existing architecture.
-* Preserve type safety.
-* Preserve security controls.
-* Add tests alongside new functionality.
-* Update documentation when behavior changes.
+- Prefer incremental improvements.
+- Maintain existing architecture.
+- Preserve type safety.
+- Preserve security controls.
+- Add tests alongside new functionality.
+- Update documentation when behavior changes.
 
 Before implementing a feature:
 
