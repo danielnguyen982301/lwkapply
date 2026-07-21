@@ -146,6 +146,18 @@ again:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
+- Migrate storage provider from AWS S3 to Cloudflare R2 — the current AWS
+  free tier expires 6 months after account creation, so this needs to
+  land before then. R2 is S3-API-compatible, so `app/services/s3.py`'s
+  upload/delete/presigned-download logic should mostly be a config change
+  (endpoint URL, credentials) rather than a rewrite, but re-verify
+  presigned-URL expiry behavior and the chunked upload size-limit check
+  against R2 specifically before cutting over — don't assume parity.
+  See CHANGELOG.md (v0.5.0 Planned)
+- `GET /interviews` and `GET /documents` cross-application directory
+  endpoints, mirroring `GET /contacts` (see "A note on the contacts
+  directory endpoint" above for the join/pagination pattern to reuse).
+  See CHANGELOG.md (v0.5.0 Planned)
 
 ## Development workflow
 
