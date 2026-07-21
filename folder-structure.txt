@@ -97,6 +97,8 @@
     │   │   └── applications
     │   │       ├── ApplicationStatusTag.vue
     │   │       ├── ContactsPanel.vue
+    │   │       ├── DocumentsPanel.vue
+    │   │       ├── InterviewsPanel.vue
     │   │       └── ViewTabs.vue
     │   ├── layouts
     │   │   ├── AppLayout.vue
@@ -105,7 +107,10 @@
     │   │   ├── __tests__
     │   │   │   └── api.spec.ts
     │   │   ├── api.ts
-    │   │   └── application-ui.ts
+    │   │   ├── application-ui.ts
+    │   │   ├── date-utils.ts
+    │   │   ├── document-ui.ts
+    │   │   └── interview-ui.ts
     │   ├── main.ts
     │   ├── router
     │   │   ├── __tests__
@@ -115,14 +120,18 @@
     │   │   ├── applications.ts
     │   │   ├── auth.ts
     │   │   ├── contactDirectory.ts
-    │   │   └── contacts.ts
+    │   │   ├── contacts.ts
+    │   │   ├── documents.ts
+    │   │   └── interviews.ts
     │   ├── style.css
     │   ├── test
     │   │   └── primevue.ts
     │   ├── types
     │   │   ├── application.ts
     │   │   ├── auth.ts
-    │   │   └── contact.ts
+    │   │   ├── contact.ts
+    │   │   ├── document.ts
+    │   │   └── interview.ts
     │   ├── views
     │   │   ├── DashboardView.vue
     │   │   ├── NotFoundView.vue
@@ -144,4 +153,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-33 directories, 112 files
+33 directories, 121 files
