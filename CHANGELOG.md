@@ -1,6 +1,29 @@
 # Changelog
 
-## v0.4.0 (in progress)
+## v0.5.0 (in progress)
+
+### Planned
+
+- Cross-application Interviews directory: a top-level, read-only view
+  listing every interview across every application the user owns — not
+  just one application's panel — mirroring the `ContactDirectoryView.vue`
+  + `GET /contacts` pattern from v0.4.0. Needs a new paginated backend
+  endpoint analogous to `GET /contacts` (`GET /interviews`, aggregating
+  via the same `Interview.application_id` → `Application.user_id` join),
+  plus a matching frontend store/view
+- Cross-application Documents directory: same shape as above (`GET
+  /documents`, `DocumentDirectoryView.vue`)
+- Migrate file storage from AWS S3 to Cloudflare (R2): the current AWS
+  free tier expires 6 months after account creation, so this needs to
+  land before that clock runs out. R2 is S3-API-compatible, so
+  `app/services/s3.py`'s upload/delete/presigned-download logic should
+  port over with mostly config changes (endpoint URL, credentials) rather
+  than a rewrite — worth confirming presigned-URL generation and
+  chunked-upload size-limit behavior still work identically against R2
+  before cutting over, and updating `BACKEND_SUMMARY.md`/`ARCHITECTURE.md`
+  once it's live rather than just prospectively here
+
+## v0.4.0
 
 ### Added
 
@@ -164,6 +187,44 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
   schemas above, including construction via `model_validate()` from
   ORM-style attribute objects (not just dicts), matching how the endpoint
   actually builds the response off `contains_eager(Contact.application)`
+- Interviews UI (Phase 4, frontend): Pinia `interviews` store
+  (`src/stores/interviews.ts`), scoped to one application's interviews at
+  a time, same application-scoping/reset-on-unmount pattern as the
+  Contacts store, plus server-side pagination (unlike Contacts, this list
+  endpoint is paginated); `InterviewsPanel.vue`, rendered on
+  `ApplicationFormView.vue` alongside `ContactsPanel.vue`. Schedule/edit
+  via a PrimeVue `Dialog` (type, date & time, duration, result, feedback);
+  delete via the existing `ConfirmDialog` pattern. Create/update refetch
+  the current page rather than patch client-side, since the list is
+  server-sorted by `scheduled_at` and a client-side guess at insert
+  position could land wrong after either a create or a date change.
+  New `src/types/interview.ts` and `src/lib/interview-ui.ts` (type/result
+  labels, select options, result-severity mapping — mirrors
+  `application-ui.ts`'s conventions)
+- Documents UI (Phase 3, frontend): Pinia `documents` store
+  (`src/stores/documents.ts`), same application-scoping pattern, plus
+  multipart upload (`FormData`) and on-demand presigned-download-URL
+  fetching (opened directly via `window.open`, never routed back through
+  the API — the endpoint returns a short-lived S3 URL, not a permanent
+  one); `DocumentsPanel.vue`, rendered alongside `ContactsPanel.vue`/
+  `InterviewsPanel.vue`. Upload dialog (native file input + type select),
+  a separate lightweight edit dialog for the one user-editable field
+  (`file_type`), download/delete actions per row. New
+  `src/types/document.ts` and `src/lib/document-ui.ts`
+
+### Known issues
+
+- `primevue` is pinned to exactly `4.5.4` in `package.json` (not a caret
+  range) — `4.5.5` has a regression affecting `DatePicker` fields where
+  manually-typed text doesn't reliably commit on blur, which surfaced on
+  both the Interviews scheduling field and the Application `applied_date`
+  field. Do not bump PrimeVue past `4.5.4` until that's confirmed fixed
+  upstream
+- The Application edit form's "Save changes" button doesn't yet track
+  dirty state (it's enabled even with no changes made). Planned, not yet
+  scheduled: adopt PrimeVue Forms + a validation library for the
+  Application form generally, with dirty-tracking as part of that change
+  rather than a one-off manual diff
 
 ### Fixed
 
@@ -213,7 +274,7 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
   purely nested-only now that `GET /contacts` exists as a flat, top-level,
   read-only route alongside the nested CRUD
 
-## v0.3.0 (in progress)
+## v0.3.0
 
 ### Added
 
@@ -263,13 +324,15 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
 
 ## Upcoming
 
-- Interviews/Documents UI (frontend Phase 2+/4; Contacts UI is now done —
-  see v0.4.0)
 - Analytics endpoints and dashboard charts
 - Celery tasks (resume parsing, email sending, AI processing)
 - RBAC beyond a `role` column
 - Interview reminder system
-- Webapp component/store tests for Applications UI and the new Contacts UI
+- Application edit form: adopt PrimeVue Forms + a validation library,
+  including dirty-state tracking for the "Save changes" button (see
+  v0.4.0's Known Issues)
+- Webapp component/store tests for Applications UI, and the Contacts/
+  Interviews/Documents UI added in v0.4.0
 - Backend endpoint/integration test harness (test DB + fixtures + auth
   test client) — none exists yet; `GET /contacts` is the first endpoint
   that needs one
