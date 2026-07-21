@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
+import { Form, type FormSubmitEvent } from '@primevue/forms'
+import { zodResolver } from '@primevue/forms/resolvers/zod'
+import { z } from 'zod'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
@@ -11,33 +14,38 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
-const form = reactive({ firstName: '', lastName: '', email: '', password: '' })
-const fieldErrors = reactive<Record<string, string | undefined>>({})
+const initialValues = { firstName: '', lastName: '', email: '', password: '' }
+
+// z.email() (Zod v4's top-level email validator) is its own schema, not a
+// ZodString method, so .pipe() is what makes .min(1, ...) run first and
+// .email() only run if that already passed — giving "Enter your email
+// address." for empty vs. "Enter a valid email address." for a bad format,
+// rather than the single shared message this form used to show either way.
+const schema = z.object({
+  firstName: z.string().min(1, 'Enter your first name.'),
+  lastName: z.string().min(1, 'Enter your last name.'),
+  email: z
+    .string()
+    .min(1, 'Enter your email address.')
+    .pipe(z.email('Enter a valid email address.')),
+  password: z.string().min(8, 'Use at least 8 characters.'),
+})
+const resolver = zodResolver(schema)
+
 const submitting = ref(false)
 const formError = ref<string | null>(null)
 
-function validate(): boolean {
-  fieldErrors.firstName = form.firstName ? undefined : 'Enter your first name.'
-  fieldErrors.lastName = form.lastName ? undefined : 'Enter your last name.'
-  fieldErrors.email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
-    ? undefined
-    : 'Enter a valid email address.'
-  fieldErrors.password = form.password.length >= 8 ? undefined : 'Use at least 8 characters.'
-
-  return Object.values(fieldErrors).every((error) => !error)
-}
-
-async function handleSubmit() {
+async function onFormSubmit({ valid, values }: FormSubmitEvent) {
   formError.value = null
-  if (!validate()) return
+  if (!valid) return
 
   submitting.value = true
   try {
     await auth.register({
-      email: form.email,
-      password: form.password,
-      first_name: form.firstName,
-      last_name: form.lastName,
+      email: values.email,
+      password: values.password,
+      first_name: values.firstName,
+      last_name: values.lastName,
     })
     await router.push('/')
   } catch {
@@ -49,7 +57,15 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <form novalidate class="space-y-5" @submit.prevent="handleSubmit">
+  <Form
+    v-slot="$form"
+    :resolver="resolver"
+    :initial-values="initialValues"
+    :validate-on-value-update="false"
+    :validate-on-blur="true"
+    class="space-y-5"
+    @submit="onFormSubmit"
+  >
     <h2 class="font-display text-lg font-bold text-ink">Create your account</h2>
 
     <Message v-if="formError" severity="error" :closable="false">
@@ -61,26 +77,26 @@ async function handleSubmit() {
         <label for="firstName" class="text-sm font-medium text-ink">First name</label>
         <InputText
           id="firstName"
-          v-model="form.firstName"
+          name="firstName"
           autocomplete="given-name"
-          :invalid="Boolean(fieldErrors.firstName)"
+          :invalid="$form.firstName?.invalid"
           class="w-full"
         />
-        <Message v-if="fieldErrors.firstName" severity="error" variant="simple" size="small">
-          {{ fieldErrors.firstName }}
+        <Message v-if="$form.firstName?.invalid" severity="error" variant="simple" size="small">
+          {{ $form.firstName.error?.message }}
         </Message>
       </div>
       <div class="flex flex-col gap-1">
         <label for="lastName" class="text-sm font-medium text-ink">Last name</label>
         <InputText
           id="lastName"
-          v-model="form.lastName"
+          name="lastName"
           autocomplete="family-name"
-          :invalid="Boolean(fieldErrors.lastName)"
+          :invalid="$form.lastName?.invalid"
           class="w-full"
         />
-        <Message v-if="fieldErrors.lastName" severity="error" variant="simple" size="small">
-          {{ fieldErrors.lastName }}
+        <Message v-if="$form.lastName?.invalid" severity="error" variant="simple" size="small">
+          {{ $form.lastName.error?.message }}
         </Message>
       </div>
     </div>
@@ -89,38 +105,38 @@ async function handleSubmit() {
       <label for="email" class="text-sm font-medium text-ink">Email</label>
       <InputText
         id="email"
-        v-model="form.email"
+        name="email"
         type="email"
         autocomplete="email"
-        :invalid="Boolean(fieldErrors.email)"
+        :invalid="$form.email?.invalid"
         class="w-full"
       />
-      <Message v-if="fieldErrors.email" severity="error" variant="simple" size="small">
-        {{ fieldErrors.email }}
+      <Message v-if="$form.email?.invalid" severity="error" variant="simple" size="small">
+        {{ $form.email.error?.message }}
       </Message>
     </div>
 
     <div class="flex flex-col gap-1">
       <label for="password" class="text-sm font-medium text-ink">Password</label>
       <Password
-        v-model="form.password"
         input-id="password"
+        name="password"
         :feedback="false"
         toggle-mask
         autocomplete="new-password"
-        :invalid="Boolean(fieldErrors.password)"
-        :aria-describedby="fieldErrors.password ? 'password-error' : 'password-hint'"
+        :invalid="$form.password?.invalid"
+        :aria-describedby="$form.password?.invalid ? 'password-error' : 'password-hint'"
         class="w-full"
         :input-props="{ class: 'w-full' }"
       />
       <Message
-        v-if="fieldErrors.password"
+        v-if="$form.password?.invalid"
         id="password-error"
         severity="error"
         variant="simple"
         size="small"
       >
-        {{ fieldErrors.password }}
+        {{ $form.password.error?.message }}
       </Message>
       <Message v-else id="password-hint" severity="secondary" variant="simple" size="small">
         At least 8 characters.
@@ -138,5 +154,5 @@ async function handleSubmit() {
       Already have an account?
       <RouterLink to="/login" class="font-medium text-teal"> Log in </RouterLink>
     </p>
-  </form>
+  </Form>
 </template>
