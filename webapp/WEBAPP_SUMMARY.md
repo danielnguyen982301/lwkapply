@@ -1,11 +1,13 @@
 # Job Tracker — Web Frontend
 
-Vue 3 + TypeScript + Vite + Pinia + Vue Router + Tailwind + PrimeVue.
+Vue 3 + TypeScript + Vite + Pinia + Vue Router + Tailwind + PrimeVue
+(`primevue` pinned to exactly `4.5.4` — `4.5.5` has a `DatePicker`
+regression, see CHANGELOG.md).
 Phase 1 (foundation, auth) and Phase 2 application tracking (list, search/
-filter, details, Kanban board) are implemented. Contact management (part
-of Phase 4) is also implemented on the frontend now — see Contacts below;
-Interview scheduling and Document upload/download, the rest of Phase 4/3,
-are not yet built.
+filter, details, Kanban board) are implemented. Phase 4's Contact
+management, Interview scheduling, and Phase 3's Document upload/download
+are now all implemented on the frontend too — see Contacts, Interviews,
+and Documents below.
 
 ## What's here
 
@@ -84,15 +86,58 @@ single application (CRUD), one a read-only cross-application listing:
   `Contact` (nested CRUD) and `ContactWithApplication` (directory, adds
   the embedded `application` summary).
 
+### Interviews
+
+- **Panel** (`InterviewsPanel.vue`): rendered inside `ApplicationFormView.vue`,
+  alongside `ContactsPanel.vue`, same `v-if="!isNew && applicationId"` gating.
+  Pinia `interviews` store (`src/stores/interviews.ts`) — same
+  application-scoping/`reset()`-on-unmount pattern as Contacts, but unlike
+  Contacts' nested list, this backend endpoint IS paginated (see
+  BACKEND_SUMMARY.md), so the store also tracks `page`/`pageSize`/`total`
+  like the Applications store, and the panel shows a `Paginator` once
+  there's more than one page.
+- Schedule/edit via a PrimeVue `Dialog`: type, date & time (`DatePicker`
+  with `show-time`), duration in minutes, result, and freeform feedback.
+  Create and update both refetch the current page afterward rather than
+  patching the item in place client-side, since the list is server-sorted
+  by `scheduled_at` and a client-side guess at where a new/edited row
+  belongs could land in the wrong spot.
+- `src/types/interview.ts` mirrors `InterviewRead`/`InterviewCreate`/
+  `InterviewUpdate`. `src/lib/interview-ui.ts` holds type/result labels,
+  select options, and result-severity mapping (mirrors
+  `application-ui.ts`'s conventions).
+
+### Documents
+
+- **Panel** (`DocumentsPanel.vue`): same location/gating as Contacts and
+  Interviews. Pinia `documents` store (`src/stores/documents.ts`) — same
+  scoping pattern, paginated like Interviews.
+- Upload dialog: plain native `<input type="file">` (not PrimeVue's
+  `FileUpload` — not currently part of this app's PrimeVue usage) plus a
+  document-type select; uploads as `multipart/form-data`. Downloading
+  fetches a short-lived presigned S3 URL from the backend per click and
+  opens it directly (`window.open`) — the API never returns a permanent
+  file URL, so nothing is cached client-side. A separate, smaller edit
+  dialog covers the one field the backend actually allows changing after
+  upload (`file_type`); delete uses the existing `ConfirmDialog` pattern.
+- `src/types/document.ts` mirrors `DocumentRead`/`DocumentUpdate`/the
+  presigned-download response. `src/lib/document-ui.ts` mirrors
+  `interview-ui.ts`'s labels/options/severity convention.
+
 ## What's deliberately not here yet
 
-- Interviews/Documents UI — Phase 2+ (backend endpoints exist; Contacts UI
-  is now done, see above)
 - Analytics dashboard and charts — Phase 5
 - RBAC-aware UI — explicitly skipped per current backend scope
+- Interviews and Documents directory views (cross-application, read-only
+  — the `ContactDirectoryView.vue`/`GET /contacts` pattern, not yet built
+  for Interviews/Documents; currently each only has the per-application
+  panel described above). See CHANGELOG.md's v0.5.0 Planned section
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts UI (panel, directory, both stores) is
-  in the same boat: no tests yet
+  views not yet covered) — Contacts, Interviews, and Documents UI (panels
+  and stores) are in the same boat: no tests yet
+- Dirty-state tracking on the Application edit form's "Save changes"
+  button — planned via PrimeVue Forms + a validation library rather than
+  a one-off manual diff; see CHANGELOG.md
 
 ## Auth cookie flow
 
@@ -133,8 +178,10 @@ Beyond the pure-function `api.spec.ts` smoke test:
 
 **Deliberately not tested yet**: `DashboardView`, `NotFoundView`,
 `AppLayout`/`AuthLayout` (minimal placeholder/shell markup), all
-Applications views/stores, and the new Contacts UI (`ContactsPanel.vue`,
+Applications views/stores, the Contacts UI (`ContactsPanel.vue`,
 `ContactDirectoryView.vue`, `stores/contacts.ts`,
-`stores/contactDirectory.ts`) — worth adding next as the UI stabilises.
+`stores/contactDirectory.ts`), and the Interviews/Documents UI
+(`InterviewsPanel.vue`, `DocumentsPanel.vue`, `stores/interviews.ts`,
+`stores/documents.ts`) — worth adding next as the UI stabilises.
 
 New devDependency: `@pinia/testing` (store stubbing for component tests).
