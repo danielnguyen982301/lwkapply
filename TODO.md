@@ -40,6 +40,9 @@
 - [x] Interview model
 - [x] CRUD endpoints
 - [ ] Reminder system
+- [ ] Cross-application interviews directory endpoint (`GET /interviews`,
+      read-only, paginated — mirrors the Contacts directory endpoint
+      below; see CHANGELOG.md v0.5.0 Planned)
 
 ### Contacts
 
@@ -59,6 +62,12 @@ BACKEND_SUMMARY.md for the reasoning.
 - [x] S3 integration
 - [ ] Presigned direct-to-S3 upload (currently server-proxied; revisit if
       file size/volume grows)
+- [ ] Migrate storage provider from AWS S3 to Cloudflare R2 — AWS's free
+      tier expires 6 months after account creation; see CHANGELOG.md
+      (v0.5.0 Planned) for scope
+- [ ] Cross-application documents directory endpoint (`GET /documents`,
+      read-only, paginated — mirrors the Contacts directory endpoint;
+      see CHANGELOG.md v0.5.0 Planned)
 
 ### Analytics
 
@@ -100,11 +109,19 @@ BACKEND_SUMMARY.md for the reasoning.
 
 ### Interviews / Contacts / Documents
 
-- [ ] Interview scheduling UI
+- [x] Interview scheduling UI — `InterviewsPanel.vue` + Pinia `interviews`
+      store, on the application detail page alongside Contacts (see
+      WEBAPP_SUMMARY.md; `primevue` pinned to `4.5.4`, see CHANGELOG.md)
 - [x] Contact management UI — per-application panel (add/edit/delete,
       on the application detail page) and a cross-application directory
       view (`/contacts` nav item) — see WEBAPP_SUMMARY.md
-- [ ] Document upload/download UI
+- [x] Document upload/download UI — `DocumentsPanel.vue` + Pinia
+      `documents` store, same location as Interviews/Contacts (see
+      WEBAPP_SUMMARY.md)
+- [ ] Interviews directory view (cross-application, mirrors
+      `ContactDirectoryView.vue`) — see CHANGELOG.md v0.5.0 Planned
+- [ ] Documents directory view (cross-application, mirrors
+      `ContactDirectoryView.vue`) — see CHANGELOG.md v0.5.0 Planned
 
 ### Analytics
 
@@ -153,7 +170,8 @@ BACKEND_SUMMARY.md for the reasoning.
       `GET /contacts` directory response shapes)
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
       error-extraction helper; Applications/Kanban UI exists but is not yet
-      covered by component/store tests; Contacts UI also not yet covered)
+      covered by component/store tests; Contacts, Interviews, and
+      Documents UI also not yet covered)
 - [x] Integration tests — `GET /contacts` (`test_contacts_directory.py`),
       nested Contacts CRUD (`test_contacts_endpoints.py` — the
       create/get/update/delete/list routes under
