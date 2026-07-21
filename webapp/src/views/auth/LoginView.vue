@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
+import { Form, type FormSubmitEvent } from '@primevue/forms'
+import { zodResolver } from '@primevue/forms/resolvers/zod'
+import { z } from 'zod'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
@@ -11,35 +14,36 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-const form = reactive({ email: '', password: '' })
-const fieldErrors = reactive<{ email?: string; password?: string }>({})
+// Keys here must line up with each field's `name` prop below — that's how
+// PrimeVue Forms matches values/errors back to inputs.
+const initialValues = { email: '', password: '' }
+
+// z.email() (Zod v4's top-level email validator, replacing the deprecated
+// z.string().email() chain method) is its own schema, not a ZodString
+// method — so .pipe() is what preserves "empty first, bad-format second"
+// ordering: the .min(1, ...) check runs first, and .email() only runs if
+// that already passed. This is what LoginView.spec.ts expects: an empty
+// field reports "Enter your email address.", not "Enter a valid email
+// address."
+const schema = z.object({
+  email: z
+    .string()
+    .min(1, 'Enter your email address.')
+    .pipe(z.email('Enter a valid email address.')),
+  password: z.string().min(1, 'Enter your password.'),
+})
+const resolver = zodResolver(schema)
+
 const submitting = ref(false)
 const formError = ref<string | null>(null)
 
-function validate(): boolean {
-  fieldErrors.email = undefined
-  fieldErrors.password = undefined
-
-  if (!form.email) {
-    fieldErrors.email = 'Enter your email address.'
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    fieldErrors.email = 'Enter a valid email address.'
-  }
-
-  if (!form.password) {
-    fieldErrors.password = 'Enter your password.'
-  }
-
-  return !fieldErrors.email && !fieldErrors.password
-}
-
-async function handleSubmit() {
+async function onFormSubmit({ valid, values }: FormSubmitEvent) {
   formError.value = null
-  if (!validate()) return
+  if (!valid) return
 
   submitting.value = true
   try {
-    await auth.login({ email: form.email, password: form.password })
+    await auth.login({ email: values.email, password: values.password })
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     await router.push(redirect)
   } catch {
@@ -51,7 +55,15 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <form novalidate class="space-y-5" @submit.prevent="handleSubmit">
+  <Form
+    v-slot="$form"
+    :resolver="resolver"
+    :initial-values="initialValues"
+    :validate-on-value-update="false"
+    :validate-on-blur="true"
+    class="space-y-5"
+    @submit="onFormSubmit"
+  >
     <h2 class="font-display text-lg font-bold text-ink">Log in</h2>
 
     <Message v-if="formError" severity="error" :closable="false">
@@ -62,45 +74,45 @@ async function handleSubmit() {
       <label for="email" class="text-sm font-medium text-ink">Email</label>
       <InputText
         id="email"
-        v-model="form.email"
+        name="email"
         type="email"
         autocomplete="email"
-        :invalid="Boolean(fieldErrors.email)"
-        :aria-describedby="fieldErrors.email ? 'email-error' : undefined"
+        :invalid="$form.email?.invalid"
+        :aria-describedby="$form.email?.invalid ? 'email-error' : undefined"
         class="w-full"
       />
       <Message
-        v-if="fieldErrors.email"
+        v-if="$form.email?.invalid"
         id="email-error"
         severity="error"
         variant="simple"
         size="small"
       >
-        {{ fieldErrors.email }}
+        {{ $form.email.error?.message }}
       </Message>
     </div>
 
     <div class="flex flex-col gap-1">
       <label for="password" class="text-sm font-medium text-ink">Password</label>
       <Password
-        v-model="form.password"
         input-id="password"
+        name="password"
         :feedback="false"
         toggle-mask
         autocomplete="current-password"
-        :invalid="Boolean(fieldErrors.password)"
-        :aria-describedby="fieldErrors.password ? 'password-error' : undefined"
+        :invalid="$form.password?.invalid"
+        :aria-describedby="$form.password?.invalid ? 'password-error' : undefined"
         class="w-full"
         :input-props="{ class: 'w-full' }"
       />
       <Message
-        v-if="fieldErrors.password"
+        v-if="$form.password?.invalid"
         id="password-error"
         severity="error"
         variant="simple"
         size="small"
       >
-        {{ fieldErrors.password }}
+        {{ $form.password.error?.message }}
       </Message>
     </div>
 
@@ -115,5 +127,5 @@ async function handleSubmit() {
       No account?
       <RouterLink to="/register" class="font-medium text-teal"> Sign up </RouterLink>
     </p>
-  </form>
+  </Form>
 </template>
