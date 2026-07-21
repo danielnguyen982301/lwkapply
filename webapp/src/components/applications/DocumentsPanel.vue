@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { DateTime } from 'luxon'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -120,7 +121,7 @@ function onPageChange(event: { page: number }) {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  return DateTime.fromISO(iso).toLocaleString(DateTime.DATE_MED)
 }
 
 onMounted(() => loadDocuments())

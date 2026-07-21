@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { DateTime } from 'luxon'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -14,6 +15,7 @@ import { useConfirm } from 'primevue/useconfirm'
 
 import { useApplicationsStore } from '@/stores/applications'
 import { applicationStatusOptions } from '@/lib/application-ui'
+import { formatJSDate } from '@/lib/date-utils'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
 import InterviewsPanel from '@/components/applications/InterviewsPanel.vue'
 import DocumentsPanel from '@/components/applications/DocumentsPanel.vue'
@@ -65,10 +67,10 @@ const validationErrors = ref<Partial<Record<keyof FormState, string>>>({})
 const appliedDate = computed({
   get(): Date | null {
     if (!form.applied_date) return null
-    return new Date(`${form.applied_date}T00:00:00`)
+    return DateTime.fromISO(form.applied_date).toJSDate()
   },
   set(value: Date | null) {
-    form.applied_date = value ? value.toISOString().slice(0, 10) : ''
+    form.applied_date = value ? formatJSDate(value, 'yyyy-MM-dd') : ''
   },
 })
 
