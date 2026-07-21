@@ -124,6 +124,8 @@ Technologies:
 - Event-driven processing
 - AI microservices
 - Multi-tenant support
+- Migrate object storage from AWS S3 to Cloudflare R2 (S3-API-compatible;
+  see CHANGELOG.md / BACKEND_SUMMARY.md for scope and reasoning)
 
 ## Mobile Application
 
