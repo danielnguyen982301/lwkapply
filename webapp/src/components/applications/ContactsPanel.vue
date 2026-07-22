@@ -1,84 +1,95 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useConfirm } from 'primevue/useconfirm'
+import { toTypedSchema } from '@vee-validate/zod'
+import z from 'zod'
+import { useForm } from 'vee-validate'
 
 import { useContactsStore } from '@/stores/contacts'
 import type { Contact, ContactCreatePayload } from '@/types/contact'
+import CustomInputText from '../custom_form_fields/CustomInputText.vue'
 
-const props = defineProps<{ applicationId: string }>()
-
-const store = useContactsStore()
-const confirm = useConfirm()
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-interface FormState {
+interface FormValues {
   name: string
   title: string
   email: string
   linkedin_url: string
 }
 
-function blankForm(): FormState {
+const props = defineProps<{ applicationId: string }>()
+
+const store = useContactsStore()
+const confirm = useConfirm()
+
+function blankForm(): FormValues {
   return { name: '', title: '', email: '', linkedin_url: '' }
 }
 
+function populateForm(contact: Contact): FormValues {
+  const { name, title, email, linkedin_url } = contact
+  return {
+    name,
+    title: title ?? '',
+    email: email ?? '',
+    linkedin_url: linkedin_url ?? '',
+  }
+}
+
+const validationSchema = toTypedSchema(
+  z.object({
+    name: z.string().trim().min(1, 'Name is required'),
+    title: z.string().trim().nullable(),
+    email: z.union([z.string().trim().email('Enter a valid email address.'), z.literal('')]),
+    linkedin_url: z.string().trim().nullable(),
+  }),
+)
+
+const { errors, handleSubmit, meta, resetForm } = useForm<FormValues>({
+  validationSchema,
+  initialValues: { ...blankForm() },
+})
+
 const dialogVisible = ref(false)
 const editingContact = ref<Contact | null>(null)
-const form = reactive<FormState>(blankForm())
-const validationErrors = ref<Partial<Record<keyof FormState, string>>>({})
 
 const dialogTitle = computed(() => (editingContact.value ? 'Edit contact' : 'Add contact'))
 
 function openAddDialog() {
   editingContact.value = null
-  Object.assign(form, blankForm())
-  validationErrors.value = {}
   dialogVisible.value = true
+  resetForm({
+    values: { ...blankForm() },
+  })
 }
 
 function openEditDialog(contact: Contact) {
   editingContact.value = contact
-  form.name = contact.name
-  form.title = contact.title ?? ''
-  form.email = contact.email ?? ''
-  form.linkedin_url = contact.linkedin_url ?? ''
-  validationErrors.value = {}
   dialogVisible.value = true
+  resetForm({
+    values: { ...populateForm(contact) },
+  })
 }
 
 function closeDialog() {
   dialogVisible.value = false
 }
 
-function validate(): boolean {
-  const errors: Partial<Record<keyof FormState, string>> = {}
-  if (!form.name.trim()) errors.name = 'Name is required.'
-  if (form.email.trim() && !EMAIL_PATTERN.test(form.email.trim())) {
-    errors.email = 'Enter a valid email address.'
-  }
-  validationErrors.value = errors
-  return Object.keys(errors).length === 0
-}
-
-function buildPayload(): ContactCreatePayload {
+function buildPayload(formValues: FormValues): ContactCreatePayload {
   return {
-    name: form.name.trim(),
-    title: form.title.trim() || null,
-    email: form.email.trim() || null,
-    linkedin_url: form.linkedin_url.trim() || null,
+    name: formValues.name.trim(),
+    title: formValues.title.trim() || null,
+    email: formValues.email.trim() || null,
+    linkedin_url: formValues.linkedin_url.trim() || null,
   }
 }
 
-async function handleSubmit() {
-  if (!validate()) return
-  const payload = buildPayload()
+const onFormSubmit = handleSubmit(async (formValues) => {
+  const payload = buildPayload(formValues)
   try {
     if (editingContact.value) {
       await store.updateContact(props.applicationId, editingContact.value.id, payload)
@@ -89,7 +100,7 @@ async function handleSubmit() {
   } catch {
     // store.mutationError is already set and rendered in the dialog below.
   }
-}
+})
 
 function confirmDelete(contact: Contact) {
   confirm.require({
@@ -218,63 +229,46 @@ onBeforeUnmount(() => {
     class="w-full max-w-md"
     @hide="closeDialog"
   >
-    <form class="space-y-4" @submit.prevent="handleSubmit">
+    <form class="space-y-4" @submit.prevent="onFormSubmit">
       <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
         {{ store.mutationError }}
       </Message>
 
       <div class="flex flex-col gap-1">
         <label for="contact-name" class="text-sm font-medium text-ink">Name *</label>
-        <InputText
+        <CustomInputText
           id="contact-name"
-          v-model="form.name"
-          :invalid="!!validationErrors.name"
-          :aria-describedby="validationErrors.name ? 'contact-name-error' : undefined"
+          name="name"
+          :invalid="!!errors.name"
+          :aria-describedby="!!errors.name ? 'contact-name-error' : undefined"
           class="w-full"
           autofocus
         />
-        <Message
-          v-if="validationErrors.name"
-          id="contact-name-error"
-          severity="error"
-          variant="simple"
-          size="small"
-        >
-          {{ validationErrors.name }}
-        </Message>
       </div>
 
       <div class="flex flex-col gap-1">
         <label for="contact-title" class="text-sm font-medium text-ink">Title</label>
-        <InputText id="contact-title" v-model="form.title" class="w-full" />
+        <!-- <InputText id="contact-title" v-model="form.title" class="w-full" /> -->
+        <CustomInputText id="contact-title" name="title" class="w-full" />
       </div>
 
       <div class="flex flex-col gap-1">
         <label for="contact-email" class="text-sm font-medium text-ink">Email</label>
-        <InputText
+        <CustomInputText
           id="contact-email"
-          v-model="form.email"
+          name="email"
           type="email"
-          :invalid="!!validationErrors.email"
-          :aria-describedby="validationErrors.email ? 'contact-email-error' : undefined"
+          :invalid="!!errors.email"
+          :aria-describedby="errors.email ? 'contact-email-error' : undefined"
           class="w-full"
         />
-        <Message
-          v-if="validationErrors.email"
-          id="contact-email-error"
-          severity="error"
-          variant="simple"
-          size="small"
-        >
-          {{ validationErrors.email }}
-        </Message>
       </div>
 
       <div class="flex flex-col gap-1">
         <label for="contact-linkedin" class="text-sm font-medium text-ink">LinkedIn URL</label>
-        <InputText
+        <CustomInputText
           id="contact-linkedin"
-          v-model="form.linkedin_url"
+          name="linkedin_url"
           type="url"
           placeholder="https://linkedin.com/in/…"
           class="w-full"
@@ -293,6 +287,7 @@ onBeforeUnmount(() => {
                 : 'Add contact'
           "
           :loading="store.mutationStatus === 'loading'"
+          :disabled="(!!editingContact && !meta.dirty) || store.mutationStatus === 'loading'"
         />
       </div>
     </form>
