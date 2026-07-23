@@ -59,12 +59,11 @@ BACKEND_SUMMARY.md for the reasoning.
 
 - [x] Resume upload
 - [x] Cover letter upload
-- [x] S3 integration
-- [ ] Presigned direct-to-S3 upload (currently server-proxied; revisit if
+- [x] Cloudflare R2 integration (migrated off AWS S3 before S3 carried any
+      real traffic — see BACKEND_SUMMARY.md's note on the migration and
+      CHANGELOG.md v0.5.0)
+- [ ] Presigned direct-to-R2 upload (currently server-proxied; revisit if
       file size/volume grows)
-- [ ] Migrate storage provider from AWS S3 to Cloudflare R2 — AWS's free
-      tier expires 6 months after account creation; see CHANGELOG.md
-      (v0.5.0 Planned) for scope
 - [ ] Cross-application documents directory endpoint (`GET /documents`,
       read-only, paginated — mirrors the Contacts directory endpoint;
       see CHANGELOG.md v0.5.0 Planned)
@@ -203,10 +202,10 @@ BACKEND_SUMMARY.md for the reasoning.
       the two-levels-deep application-scoping check and Interviews
       gaining pagination), and Documents CRUD
       (`test_documents_endpoints.py`, upload/download/delete against a
-      mocked `boto3` client — only `app.services.s3._s3_client` is
+      mocked `boto3` client — only `app.services.r2._r2_client` is
       faked, so content-type validation, chunked size-limit enforcement,
       and object-key construction all still run for real; also confirms
-      best-effort S3 cleanup on delete failure, and Documents gaining
+      best-effort R2 cleanup on delete failure, and Documents gaining
       pagination) all now have full integration suites against a real
       Postgres instance. `backend/tests/conftest.py` provides the
       reusable fixtures (real-Postgres engine, per-test SAVEPOINT
