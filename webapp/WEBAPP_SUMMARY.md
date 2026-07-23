@@ -48,6 +48,51 @@ and Documents below.
 - **Shared UI helpers**: `src/lib/application-ui.ts` (status severities,
   select options), `src/components/applications/ApplicationStatusTag.vue`
 
+### Form validation
+
+All forms (`LoginView.vue`, `RegisterView.vue`, `ApplicationFormView.vue`,
+and the Contacts/Interviews panel dialogs) run on
+**vee-validate** + **`@vee-validate/zod`**, replacing the hand-rolled
+`reactive()` + manual `validate()` function pattern each used to have.
+
+- **Schema-per-form**, defined with `zod` and wrapped in
+  `toTypedSchema()`, passed to `useForm({ validationSchema, initialValues })`.
+  `zod` is pinned to `^3.24.0` — `@vee-validate/zod`'s `toTypedSchema`
+  has a hard peer dependency on Zod v3 and does not support v4 (see
+  CHANGELOG.md, v0.5.0). Don't bump `zod` past v3 until vee-validate v5
+  (which drops `toTypedSchema` for Standard Schema support) is stable.
+- **Reusable field components**
+  (`src/components/custom_form_fields/CustomInputText.vue`,
+  `CustomPassword.vue`) wrap the corresponding PrimeVue input and call
+  `useField(() => props.name)` internally, exposing the bound `value` via
+  `v-model` to the underlying PrimeVue component and rendering the
+  field's `errorMessage` itself. Consuming views just render
+  `<CustomInputText name="email" ... />` — they don't touch `useField`
+  directly, similar in spirit to how PrimeVue Forms' `name`-based
+  auto-registration was meant to work, but without depending on PrimeVue's
+  own (buggier) Forms package.
+- **Dirty-tracking / disabled-Save-button** on edit forms
+  (`ApplicationFormView.vue` and the panel edit dialogs) is intended to
+  use vee-validate's field `meta.dirty`, which reflects "differs from the
+  form's current initial values" (not "was ever touched") — the semantics
+  the Save button needs — with re-baselining after an async data load via
+  vee-validate's documented pattern of watching the fetched data and
+  calling `resetForm()` with the new values once it arrives.
+- **PrimeVue's own `@primevue/forms` package was evaluated and rejected**
+  first — see CHANGELOG.md (v0.5.0) for the specific, confirmed upstream
+  bugs that drove the switch (DatePicker formatting/typing bugs, unreliable
+  post-load dirty-tracking, stale cross-field validation).
+
+**Testing gotcha, worth knowing before writing new form tests**:
+vee-validate's validation doesn't resolve synchronously the way the old
+hand-rolled `validate()` functions did. A test that does
+`await wrapper.find('form').trigger('submit')` and then immediately
+asserts on error text or a `handleSubmit`-gated store call can fail even
+when the form logic is correct, simply because the assertion runs before
+validation has resolved — even an extra `await flushPromises()` isn't
+always enough. Wrap the assertion itself in `vi.waitFor(() => { ... })`
+instead. This bit `LoginView.spec.ts` directly during the migration.
+
 ### PrimeVue usage
 
 Configured in `src/main.ts` (Aura theme, `ConfirmationService`,
@@ -135,9 +180,6 @@ single application (CRUD), one a read-only cross-application listing:
 - Component/store tests for Applications UI (auth tests exist; application
   views not yet covered) — Contacts, Interviews, and Documents UI (panels
   and stores) are in the same boat: no tests yet
-- Dirty-state tracking on the Application edit form's "Save changes"
-  button — planned via PrimeVue Forms + a validation library rather than
-  a one-off manual diff; see CHANGELOG.md
 
 ## Auth cookie flow
 
