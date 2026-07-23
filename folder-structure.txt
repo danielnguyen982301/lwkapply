@@ -94,12 +94,19 @@
     ├── src
     │   ├── App.vue
     │   ├── components
-    │   │   └── applications
-    │   │       ├── ApplicationStatusTag.vue
-    │   │       ├── ContactsPanel.vue
-    │   │       ├── DocumentsPanel.vue
-    │   │       ├── InterviewsPanel.vue
-    │   │       └── ViewTabs.vue
+    │   │   ├── applications
+    │   │   │   ├── ApplicationStatusTag.vue
+    │   │   │   ├── ContactsPanel.vue
+    │   │   │   ├── DocumentsPanel.vue
+    │   │   │   ├── InterviewsPanel.vue
+    │   │   │   └── ViewTabs.vue
+    │   │   └── custom_form_fields
+    │   │       ├── CustomDatePicker.vue
+    │   │       ├── CustomInputNumber.vue
+    │   │       ├── CustomInputText.vue
+    │   │       ├── CustomPassword.vue
+    │   │       ├── CustomSelect.vue
+    │   │       └── CustomTextarea.vue
     │   ├── layouts
     │   │   ├── AppLayout.vue
     │   │   └── AuthLayout.vue
@@ -153,4 +160,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-33 directories, 121 files
+34 directories, 127 files
