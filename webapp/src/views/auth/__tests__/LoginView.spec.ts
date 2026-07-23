@@ -47,9 +47,11 @@ describe('LoginView', () => {
 
     await wrapper.find('form').trigger('submit')
 
-    expect(wrapper.text()).toContain('Enter your email address.')
-    expect(wrapper.text()).toContain('Enter your password.')
-    expect(auth.login).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Enter your email address.')
+      expect(wrapper.text()).toContain('Enter your password.')
+      expect(auth.login).not.toHaveBeenCalled()
+    })
   })
 
   it('calls auth.login with the entered credentials and redirects to the intended page on success', async () => {
@@ -61,11 +63,13 @@ describe('LoginView', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(auth.login).toHaveBeenCalledWith({
-      email: 'jane@example.com',
-      password: 'correct-horse-battery-staple',
+    await vi.waitFor(() => {
+      expect(auth.login).toHaveBeenCalledWith({
+        email: 'jane@example.com',
+        password: 'correct-horse-battery-staple',
+      })
+      expect(router.currentRoute.value.fullPath).toBe('/applications/42')
     })
-    expect(router.currentRoute.value.fullPath).toBe('/applications/42')
   })
 
   it('shows the store error message when login fails', async () => {
@@ -78,6 +82,8 @@ describe('LoginView', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Incorrect email or password')
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Incorrect email or password')
+    })
   })
 })
