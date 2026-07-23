@@ -51,6 +51,17 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     AWS_S3_BUCKET: str = "lwkapply-documents"
 
+    # --- Cloudflare R2 (object storage for documents) ---
+    # R2_ACCOUNT_ID determines the S3-compatible endpoint
+    # (https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com) - see
+    # app/services/r2.py. No region setting: R2 requires the literal
+    # string "auto", which is hardcoded in r2.py rather than exposed here,
+    # since it isn't actually configurable.
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET: str = "lwkapply-documents"
+
     # --- Rate limiting / misc ---
     MAX_UPLOAD_SIZE_MB: int = 10
 
