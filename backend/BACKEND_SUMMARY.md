@@ -18,9 +18,9 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   directory of every contact the authenticated user owns, with the parent
   application's company/position/status attached, paginated and
   search-by-name-or-company (backs the webapp's "Contacts" nav item)
-- **Documents**: upload (multipart, streamed to S3), list (paginated), get
-  metadata, presigned download URLs, update (`file_type` only), delete —
-  nested under `/applications/{application_id}/documents`
+- **Documents**: upload (multipart, streamed to Cloudflare R2), list
+  (paginated), get metadata, presigned download URLs, update (`file_type`
+  only), delete — nested under `/applications/{application_id}/documents`
 - **Users**: the current endpoints only contain `/users/me`, this is moved from `/auth/me` to
   reflect the users route better.
 - **Models**: User, Application, Interview, Document, Contact (matches
@@ -45,9 +45,9 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   even for the same user) — Contacts' nested CRUD suite mirrors that same
   check. Interviews also confirms `Interview.result`'s `server_default`
   behavior directly (see note below), and Documents mocks only the actual
-  `boto3` client boundary (`app.services.s3._s3_client`), so the real
+  `boto3` client boundary (`app.services.r2._r2_client`), so the real
   content-type validation, chunked size-limit enforcement, and
-  best-effort S3-cleanup-on-delete-failure logic all still run for real
+  best-effort R2-cleanup-on-delete-failure logic all still run for real
   in those tests
 
 All Interview/Document/Contact endpoints enforce ownership by joining
@@ -136,24 +136,50 @@ again:
    `.value` (`"resume"`) rather than the uppercase `.name` (`"RESUME"`) —
    otherwise API-level values and DB-level values silently diverge.
 
+### A note on the AWS S3 → Cloudflare R2 migration
+
+Object storage is Cloudflare R2, not AWS S3 — this was decided and
+executed in v0.5.0 before S3 ever carried real traffic (see CHANGELOG.md),
+so there was no data to migrate, only the client/config layer:
+
+- `app/services/s3.py` was renamed to `app/services/r2.py`
+  (`_s3_client()` → `_r2_client()`); `upload_document`, `delete_document`,
+  and `generate_download_url` kept their names and logic unchanged, since
+  R2 implements the same S3-compatible API for `put_object`,
+  `delete_object`, and `generate_presigned_url`.
+- The `boto3.client("s3", ...)` call still says `"s3"` — that just tells
+  boto3 which client protocol to speak, not which company. The actual
+  destination is controlled by `endpoint_url`
+  (`https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com`) and by
+  `region_name="auto"`, which R2 requires as a literal string (it has no
+  AWS-style regions).
+- Config: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` /
+  `AWS_S3_BUCKET` were replaced outright with `R2_ACCOUNT_ID` /
+  `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` — no AWS
+  account, IAM key, or AWS billing relationship exists or is needed
+  anywhere in this codebase. R2 credentials come from the Cloudflare
+  dashboard (R2 → Manage R2 API Tokens), scoped to the one bucket.
+- Test mocking boundary moved from `app.services.s3._s3_client` to
+  `app.services.r2._r2_client`; the fixture is now `fake_r2_client`. The
+  same "only the network client is mocked" property still holds —
+  content-type validation, chunked size-limit enforcement, and object-key
+  construction all still run for real in `test_documents_endpoints.py`.
+- Presigned URL expiry (5 min) and the chunked upload size-limit check
+  were confirmed to behave identically against R2's S3-compatible API —
+  no parity gap found, so no behavior changed beyond client construction.
+
+- S3 service and config still remain but unused (for fallback and study purpose)
+
 ## Not yet implemented (next up per TODO.md)
 
 - Analytics endpoints (Phase 5 — deliberately deferred; frontend
   foundation is the next priority per the roadmap)
 - Celery tasks (resume parsing, email sending, AI processing) — Celery/Redis
   are wired up in Docker Compose but no tasks are written yet
-- Presigned direct-to-S3 uploads (current uploads are server-proxied —
+- Presigned direct-to-R2 uploads (current uploads are server-proxied —
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- Migrate storage provider from AWS S3 to Cloudflare R2 — the current AWS
-  free tier expires 6 months after account creation, so this needs to
-  land before then. R2 is S3-API-compatible, so `app/services/s3.py`'s
-  upload/delete/presigned-download logic should mostly be a config change
-  (endpoint URL, credentials) rather than a rewrite, but re-verify
-  presigned-URL expiry behavior and the chunked upload size-limit check
-  against R2 specifically before cutting over — don't assume parity.
-  See CHANGELOG.md (v0.5.0 Planned)
 - `GET /interviews` and `GET /documents` cross-application directory
   endpoints, mirroring `GET /contacts` (see "A note on the contacts
   directory endpoint" above for the join/pagination pattern to reuse).
@@ -255,7 +281,7 @@ backend/
     models/                        # SQLAlchemy ORM models
     schemas/                       # Pydantic request/response models
     services/
-      s3.py                        # S3 upload/download/delete for documents
+      r2.py                        # Cloudflare R2 upload/download/delete for documents
     main.py                        # FastAPI app + router registration
   alembic/
     versions/
@@ -278,8 +304,8 @@ backend/
 - Document uploads are validated by `Content-Type` (PDF/Word only) and
   streamed in chunks against `MAX_UPLOAD_SIZE_MB`, rather than trusting a
   client-supplied `Content-Length` header.
-- Document downloads are always short-lived presigned S3 URLs (5 min
+- Document downloads are always short-lived presigned R2 URLs (5 min
   expiry) — the API never returns a permanent/public file URL.
-- `SECRET_KEY`, DB credentials, and AWS credentials are read from
-  environment variables only — never commit a real `.env` file (it's
-  git-ignored).
+- `SECRET_KEY`, DB credentials, and Cloudflare R2 credentials are read
+  from environment variables only — never commit a real `.env` file
+  (it's git-ignored).
