@@ -71,7 +71,7 @@ Web Application (Vue 3)
   -----------------
   |       |       |
   v       v       v
-Postgres Redis    S3
+Postgres Redis    R2
 ```
 
 ### Clients
@@ -212,7 +212,7 @@ Examples:
 - Cover letters
 - Attachments
 
-Actual file storage is external (S3).
+Actual file storage is external (Cloudflare R2).
 
 ---
 
@@ -287,7 +287,11 @@ Do not hardcode assumptions that all authenticated users are identical.
 
 Provider:
 
-- AWS S3
+- Cloudflare R2 (migrated from AWS S3 in v0.5.0, before S3 ever carried
+  real traffic — no AWS account is used or required; R2's S3-compatible
+  API means `boto3` is still the client library, just pointed at R2's
+  endpoint with R2 credentials. See BACKEND_SUMMARY.md /
+  `app/services/r2.py` for details.)
 
 Documents should not be stored directly in PostgreSQL.
 
@@ -297,11 +301,7 @@ Current approach:
 
 Future consideration:
 
-- Direct presigned uploads to S3 if scaling requires it
-- Migrating the provider itself from AWS S3 to Cloudflare R2 — the AWS
-  free tier expires 6 months after account creation, so this is time-
-  boxed, not just aspirational. See CHANGELOG.md / BACKEND_SUMMARY.md for
-  scope before starting any storage-layer work
+- Direct presigned uploads to R2 if scaling requires it
 
 ---
 
@@ -401,7 +401,7 @@ Database:
 
 Storage:
 
-- AWS S3
+- Cloudflare R2
 
 CI/CD:
 
