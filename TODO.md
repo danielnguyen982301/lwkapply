@@ -107,6 +107,23 @@ BACKEND_SUMMARY.md for the reasoning.
 - [x] PrimeVue components across existing UI (forms, tables, alerts,
       confirm dialogs, status badges)
 
+### Form validation
+
+- [x] Replace hand-rolled `reactive()` + manual `validate()` functions
+      with a real form-validation library, webapp-wide — see
+      CHANGELOG.md (v0.5.0) for the PrimeVue Forms attempt/rejection and
+      why vee-validate + `@vee-validate/zod` was adopted instead
+- [x] Reusable field-wrapper components
+      (`src/components/custom_form_fields/CustomInputText.vue`,
+      `CustomPassword.vue`) so views bind fields by `name` instead of
+      repeating `useField()` wiring per input
+- [x] `zod` pinned to `^3.24.0` — `@vee-validate/zod`'s peer dependency;
+      do not bump to v4 until vee-validate v5 (Standard Schema) is stable
+- [ ] Component tests for the new vee-validate pattern beyond
+      `LoginView.spec.ts` — `RegisterView.vue`, `ApplicationFormView.vue`,
+      and the Contacts/Interviews/Documents panel forms have no
+      form-submission test coverage yet (see Testing below)
+
 ### Interviews / Contacts / Documents
 
 - [x] Interview scheduling UI — `InterviewsPanel.vue` + Pinia `interviews`
@@ -171,7 +188,10 @@ BACKEND_SUMMARY.md for the reasoning.
 - [x] Webapp unit tests (started — `authGuard`, `LoginView`, the API
       error-extraction helper; Applications/Kanban UI exists but is not yet
       covered by component/store tests; Contacts, Interviews, and
-      Documents UI also not yet covered)
+      Documents UI also not yet covered). `LoginView.spec.ts` needed
+      `vi.waitFor()` around post-submit assertions after the vee-validate
+      migration — see the Form validation section above and CHANGELOG.md
+      (v0.5.0 Known issues) before writing new form-submission tests
 - [x] Integration tests — `GET /contacts` (`test_contacts_directory.py`),
       nested Contacts CRUD (`test_contacts_endpoints.py` — the
       create/get/update/delete/list routes under
