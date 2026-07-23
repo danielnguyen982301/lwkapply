@@ -4,6 +4,34 @@
 
 ### Changed
 
+- **Migrated document storage from AWS S3 to Cloudflare R2**, ahead of
+  ever putting real traffic on S3, so this was a client/config swap with
+  no data to migrate:
+  - Created `app/services/r2.py`; `upload_document`, `delete_document`, and
+    `generate_download_url` kept their existing logic unchanged, since R2
+    implements the same S3-compatible API for `put_object`,
+    `delete_object`, and `generate_presigned_url` — confirmed against
+    Cloudflare's current docs rather than assumed, per the "don't assume
+    parity" note this item carried as a Planned item
+  - `boto3.client("s3", ...)` is still the call used — that argument
+    selects boto3's client protocol, not a company — now pointed at R2 via
+    `endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"` and
+    `region_name="auto"` (R2 has no AWS-style regions; `"auto"` is a
+    required literal, not a placeholder)
+  - Config: Added `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` /
+    `R2_SECRET_ACCESS_KEY` / `R2_BUCKET`
+  - `documents.py` endpoint import updated to `app.services.r2`
+  - Test mocking boundary moved to `app.services.r2._r2_client`
+    (`test_documents_endpoints.py`'s fixture renamed `fake_r2_client`);
+    content-type validation, chunked size-limit enforcement, and
+    object-key construction still run for real against the fake client,
+    unchanged from the S3 version's mocking strategy
+  - Presigned URL expiry (5 min) and the chunked upload size-limit check
+    confirmed to behave identically against R2 — no parity gap found
+  - `BACKEND_SUMMARY.md`, `ARCHITECTURE.md`, `AI_CONTEXT.md`, and
+    `TODO.md` updated to reflect R2 as the live provider, per this same
+    Planned item's original note to update docs once it's live rather
+    than prospectively
 - Form validation library, webapp-wide: replaced hand-rolled `reactive()` +
   manual `validate()` functions (`LoginView.vue`, `RegisterView.vue`,
   `ApplicationFormView.vue`, and the Contacts/Interviews/Documents panel
@@ -69,15 +97,6 @@
     plus a matching frontend store/view
 - Cross-application Documents directory: same shape as above (`GET
 /documents`, `DocumentDirectoryView.vue`)
-- Migrate file storage from AWS S3 to Cloudflare (R2): the current AWS
-  free tier expires 6 months after account creation, so this needs to
-  land before that clock runs out. R2 is S3-API-compatible, so
-  `app/services/s3.py`'s upload/delete/presigned-download logic should
-  port over with mostly config changes (endpoint URL, credentials) rather
-  than a rewrite — worth confirming presigned-URL generation and
-  chunked-upload size-limit behavior still work identically against R2
-  before cutting over, and updating `BACKEND_SUMMARY.md`/`ARCHITECTURE.md`
-  once it's live rather than just prospectively here
 
 ## v0.4.0
 
