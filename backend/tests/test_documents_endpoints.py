@@ -4,17 +4,17 @@ Integration tests for /applications/{application_id}/documents
 
 Uses the same fixtures as the other endpoint test files (client,
 db_session, make_user, auth_headers - see conftest.py), plus a local,
-file-scoped `fake_s3_client` fixture.
+file-scoped `fake_r2_client` fixture.
 
-Mocking strategy: only app.services.s3._s3_client (the actual boto3
-client factory - the real boundary to AWS) is patched, not
+Mocking strategy: only app.services.r2._r2_client (the actual boto3
+client factory - the real boundary to Cloudflare R2) is patched, not
 upload_document/delete_document/generate_download_url themselves. That
 means validate_upload's content-type check, the chunked
 MAX_UPLOAD_SIZE_MB enforcement, and _build_object_key's key format all
-still run for real in these tests - only the actual network call to S3
-is faked. Patching app.services.s3._s3_client (not e.g. a reference in
+still run for real in these tests - only the actual network call to R2
+is faked. Patching app.services.r2._r2_client (not e.g. a reference in
 the documents endpoint module) works because upload_document/
-delete_document/generate_download_url all call _s3_client() by name at
+delete_document/generate_download_url all call _r2_client() by name at
 call time, resolved through their own module's globals - unaffected by
 how those functions were themselves imported into documents.py.
 
@@ -33,7 +33,7 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
-import app.services.s3 as s3_service
+import app.services.r2 as r2_service
 from app.models.application import Application, ApplicationStatus
 from app.models.document import Document, DocumentType
 
@@ -79,21 +79,21 @@ def _make_document(db_session, application, **overrides):
 
 
 @pytest.fixture(autouse=True)
-def fake_s3_client(monkeypatch):
-    """Applies to every test in this file automatically - real S3 calls
+def fake_r2_client(monkeypatch):
+    """Applies to every test in this file automatically - real R2 calls
     would fail anyway (no network, no real bucket). Tests that care can
-    still accept fake_s3_client as a normal fixture param to inspect
+    still accept fake_r2_client as a normal fixture param to inspect
     calls (e.g. .put_object.call_args) or set a .side_effect to simulate
-    an S3-side failure - pytest caches fixture results per test, so an
+    an R2-side failure - pytest caches fixture results per test, so an
     autouse fixture and one explicitly requested by name resolve to the
     same instance within a single test."""
     fake_client = MagicMock()
     fake_client.put_object.return_value = {}
     fake_client.delete_object.return_value = {}
     fake_client.generate_presigned_url.return_value = (
-        "https://fake-bucket.s3.amazonaws.com/presigned-fake-key"
+        "https://fake-bucket.r2.cloudflarestorage.com/presigned-fake-key"
     )
-    monkeypatch.setattr(s3_service, "_s3_client", lambda: fake_client)
+    monkeypatch.setattr(r2_service, "_r2_client", lambda: fake_client)
     return fake_client
 
 
@@ -116,7 +116,7 @@ class TestDocumentsAuth:
 
 class TestUploadDocument:
     def test_uploads_document_for_owned_application(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -132,7 +132,7 @@ class TestUploadDocument:
         assert body["file_name"] == "resume.pdf"
         assert body["application_id"] == str(application.id)
         assert "file_url" not in body
-        fake_s3_client.put_object.assert_called_once()
+        fake_r2_client.put_object.assert_called_once()
 
     def test_defaults_to_other_file_type(
         self, client, db_session, make_user, auth_headers
@@ -164,7 +164,7 @@ class TestUploadDocument:
         assert response.json()["file_type"] == "resume"
 
     def test_rejects_unsupported_content_type(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -176,7 +176,7 @@ class TestUploadDocument:
         )
 
         assert response.status_code == 415
-        fake_s3_client.put_object.assert_not_called()
+        fake_r2_client.put_object.assert_not_called()
         assert (
             db_session.query(Document)
             .filter(Document.application_id == application.id)
@@ -185,12 +185,12 @@ class TestUploadDocument:
         )
 
     def test_rejects_file_over_size_limit(
-        self, client, db_session, make_user, auth_headers, fake_s3_client, monkeypatch
+        self, client, db_session, make_user, auth_headers, fake_r2_client, monkeypatch
     ):
         # Lowering MAX_UPLOAD_SIZE_MB rather than generating a real
         # 10MB+ payload - exercises the same chunked size-check code
-        # path in s3.upload_document without the overhead.
-        monkeypatch.setattr(s3_service.settings, "MAX_UPLOAD_SIZE_MB", 1)
+        # path in r2.upload_document without the overhead.
+        monkeypatch.setattr(r2_service.settings, "MAX_UPLOAD_SIZE_MB", 1)
         user = make_user()
         application = _make_application(db_session, user)
         oversized_bytes = b"x" * (2 * 1024 * 1024)  # 2MB > the 1MB limit above
@@ -202,7 +202,7 @@ class TestUploadDocument:
         )
 
         assert response.status_code == 413
-        fake_s3_client.put_object.assert_not_called()
+        fake_r2_client.put_object.assert_not_called()
         assert (
             db_session.query(Document)
             .filter(Document.application_id == application.id)
@@ -210,10 +210,10 @@ class TestUploadDocument:
             == 0
         )
 
-    def test_s3_failure_during_upload_returns_502(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+    def test_r2_failure_during_upload_returns_502(
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
-        fake_s3_client.put_object.side_effect = ClientError(
+        fake_r2_client.put_object.side_effect = ClientError(
             {"Error": {"Code": "500", "Message": "boom"}}, "PutObject"
         )
         user = make_user()
@@ -234,7 +234,7 @@ class TestUploadDocument:
         )
 
     def test_cannot_upload_to_nonexistent_application(
-        self, client, make_user, auth_headers, fake_s3_client
+        self, client, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         response = client.post(
@@ -243,10 +243,10 @@ class TestUploadDocument:
             headers=auth_headers(user),
         )
         assert response.status_code == 404
-        fake_s3_client.put_object.assert_not_called()
+        fake_r2_client.put_object.assert_not_called()
 
     def test_cannot_upload_to_another_users_application(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         owner = make_user()
         other_user = make_user()
@@ -259,7 +259,7 @@ class TestUploadDocument:
         )
 
         assert response.status_code == 404
-        fake_s3_client.put_object.assert_not_called()
+        fake_r2_client.put_object.assert_not_called()
 
 
 class TestGetDocument:
@@ -337,7 +337,7 @@ class TestDocumentOwnership:
         assert document.file_type == DocumentType.OTHER
 
     def test_cannot_delete_another_users_document(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         owner = make_user()
         other_user = make_user()
@@ -349,7 +349,7 @@ class TestDocumentOwnership:
             headers=auth_headers(other_user),
         )
         assert response.status_code == 404
-        fake_s3_client.delete_object.assert_not_called()
+        fake_r2_client.delete_object.assert_not_called()
 
         still_there = (
             db_session.query(Document).filter(Document.id == document.id).first()
@@ -357,7 +357,7 @@ class TestDocumentOwnership:
         assert still_there is not None
 
     def test_cannot_download_another_users_document(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         owner = make_user()
         other_user = make_user()
@@ -369,7 +369,7 @@ class TestDocumentOwnership:
             headers=auth_headers(other_user),
         )
         assert response.status_code == 404
-        fake_s3_client.generate_presigned_url.assert_not_called()
+        fake_r2_client.generate_presigned_url.assert_not_called()
 
     def test_cannot_list_another_users_documents(
         self, client, db_session, make_user, auth_headers
@@ -405,7 +405,7 @@ class TestDocumentApplicationScoping:
         assert response.status_code == 404
 
     def test_cannot_delete_document_via_sibling_application(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application_a = _make_application(db_session, user, company="Initech")
@@ -417,12 +417,12 @@ class TestDocumentApplicationScoping:
             headers=auth_headers(user),
         )
         assert response.status_code == 404
-        fake_s3_client.delete_object.assert_not_called()
+        fake_r2_client.delete_object.assert_not_called()
 
 
 class TestDownloadDocument:
     def test_returns_presigned_url(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -436,17 +436,17 @@ class TestDownloadDocument:
         assert response.status_code == 200
         body = response.json()
         assert body["download_url"] == (
-            "https://fake-bucket.s3.amazonaws.com/presigned-fake-key"
+            "https://fake-bucket.r2.cloudflarestorage.com/presigned-fake-key"
         )
         assert body["expires_in_seconds"] == 300
 
-        _, call_kwargs = fake_s3_client.generate_presigned_url.call_args
+        _, call_kwargs = fake_r2_client.generate_presigned_url.call_args
         assert call_kwargs["Params"]["Key"] == document.file_url
 
-    def test_s3_failure_returns_502(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+    def test_s2_failure_returns_502(
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
-        fake_s3_client.generate_presigned_url.side_effect = ClientError(
+        fake_r2_client.generate_presigned_url.side_effect = ClientError(
             {"Error": {"Code": "500", "Message": "boom"}}, "GeneratePresignedUrl"
         )
         user = make_user()
@@ -460,7 +460,7 @@ class TestDownloadDocument:
         assert response.status_code == 502
 
     def test_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -470,7 +470,7 @@ class TestDownloadDocument:
             headers=auth_headers(user),
         )
         assert response.status_code == 404
-        fake_s3_client.generate_presigned_url.assert_not_called()
+        fake_r2_client.generate_presigned_url.assert_not_called()
 
 
 class TestUpdateDocument:
@@ -507,7 +507,7 @@ class TestUpdateDocument:
     ):
         """DocumentUpdate only has file_type - file_name/file_url aren't
         fields on it at all, so pydantic's default extra='ignore' drops
-        them. A client can't redirect a document's stored S3 key to an
+        them. A client can't redirect a document's stored R2 key to an
         object it doesn't own by PATCHing file_url."""
         user = make_user()
         application = _make_application(db_session, user)
@@ -557,7 +557,7 @@ class TestUpdateDocument:
 
 class TestDeleteDocument:
     def test_deletes_owned_document(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -571,8 +571,8 @@ class TestDeleteDocument:
         )
 
         assert response.status_code == 204
-        fake_s3_client.delete_object.assert_called_once()
-        _, call_kwargs = fake_s3_client.delete_object.call_args
+        fake_r2_client.delete_object.assert_called_once()
+        _, call_kwargs = fake_r2_client.delete_object.call_args
         assert call_kwargs["Key"] == "users/x/apps/y/key.pdf"
 
         get_response = client.get(
@@ -581,15 +581,15 @@ class TestDeleteDocument:
         )
         assert get_response.status_code == 404
 
-    def test_delete_succeeds_even_if_s3_cleanup_fails(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+    def test_delete_succeeds_even_if_r2_cleanup_fails(
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
-        """delete_document() in s3.py deliberately swallows S3 errors -
+        """delete_document() in r2.py deliberately swallows R2 errors -
         the DB row is the source of truth for whether a document exists,
         per its own docstring. Confirms that contract holds end-to-end
         through the actual endpoint, not just in the service function
         in isolation."""
-        fake_s3_client.delete_object.side_effect = ClientError(
+        fake_r2_client.delete_object.side_effect = ClientError(
             {"Error": {"Code": "500", "Message": "boom"}}, "DeleteObject"
         )
         user = make_user()
@@ -608,7 +608,7 @@ class TestDeleteDocument:
         assert still_there is None
 
     def test_deleting_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers, fake_s3_client
+        self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
         application = _make_application(db_session, user)
@@ -618,7 +618,7 @@ class TestDeleteDocument:
             headers=auth_headers(user),
         )
         assert response.status_code == 404
-        fake_s3_client.delete_object.assert_not_called()
+        fake_r2_client.delete_object.assert_not_called()
 
 
 class TestListDocumentsOrdering:
