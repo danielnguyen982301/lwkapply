@@ -2,11 +2,12 @@
 Document endpoints, nested under an application.
 
 Unlike Interview/Contact, Document creation isn't a plain JSON POST - it's
-a multipart file upload that we stream to S3 (see app/services/s3.py)
-before writing the resulting object key to the DB in the same request.
-Reads never return a permanent file_url; GET /{document_id}/download
-mints a short-lived presigned S3 URL instead, so a leaked API response
-can't be used to fetch someone's resume indefinitely.
+a multipart file upload that we stream to Cloudflare R2 (see
+app/services/r2.py) before writing the resulting object key to the DB in
+the same request. Reads never return a permanent file_url; GET
+/{document_id}/download mints a short-lived presigned R2 URL instead, so
+a leaked API response can't be used to fetch someone's resume
+indefinitely.
 """
 
 import uuid
@@ -34,7 +35,7 @@ from app.schemas.document import (
     DocumentRead,
     DocumentUpdate,
 )
-from app.services.s3 import (
+from app.services.r2 import (
     PRESIGNED_URL_EXPIRY_SECONDS,
     delete_document,
     generate_download_url,
