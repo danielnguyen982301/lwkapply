@@ -94,7 +94,8 @@ Examples:
 
 Storage provider:
 
-- AWS S3
+- Cloudflare R2 (migrated from AWS S3 in v0.5.0 — see CHANGELOG.md /
+  BACKEND_SUMMARY.md)
 
 ## Background Processing
 
@@ -124,8 +125,6 @@ Technologies:
 - Event-driven processing
 - AI microservices
 - Multi-tenant support
-- Migrate object storage from AWS S3 to Cloudflare R2 (S3-API-compatible;
-  see CHANGELOG.md / BACKEND_SUMMARY.md for scope and reasoning)
 
 ## Mobile Application
 
