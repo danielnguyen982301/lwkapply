@@ -2,17 +2,73 @@
 
 ## v0.5.0 (in progress)
 
+### Changed
+
+- Form validation library, webapp-wide: replaced hand-rolled `reactive()` +
+  manual `validate()` functions (`LoginView.vue`, `RegisterView.vue`,
+  `ApplicationFormView.vue`, and the Contacts/Interviews/Documents panel
+  dialogs) with **vee-validate** + **`@vee-validate/zod`**'s
+  `toTypedSchema`, backed by reusable field-wrapper components
+  (`src/components/custom_form_fields/CustomInputText.vue`,
+  `CustomPassword.vue`) that internalize `useField()` binding and
+  error-message display — consuming views just pass `name` plus
+  presentational props, matching the `name`-based ergonomics we originally
+  wanted from PrimeVue Forms, without PrimeVue Forms itself
+- **`zod` pinned to `^3.24.0`** (not v4): `@vee-validate/zod`'s
+  `toTypedSchema` declares a hard peer dependency on `zod@^3.24.0` and does
+  not support Zod v4 — its typed-schema introspection reaches into Zod's
+  internal schema representation, which changed shape in v4 (see
+  [logaretm/vee-validate#5091](https://github.com/logaretm/vee-validate/issues/5091),
+  [#5024](https://github.com/logaretm/vee-validate/issues/5024)). vee-validate
+  v5 removes `toTypedSchema` in favor of Standard Schema (which would
+  support Zod v4 natively) but was still beta and reportedly broken at the
+  time of this migration
+  ([#5151](https://github.com/logaretm/vee-validate/issues/5151)) — revisit
+  the Zod v4 upgrade once v5 is stable, not before
+- **Abandoned an earlier attempt on PrimeVue Forms** (`@primevue/forms` +
+  its own `zodResolver`) after hitting several confirmed, currently-open
+  upstream bugs rather than app-level mistakes:
+  - `DatePicker` bound via Forms' `name` system ignores `dateFormat` and
+    displays the raw `Date.toString()` instead of a formatted string
+    ([primefaces/primevue#7995](https://github.com/primefaces/primevue/issues/7995));
+    manually-typed dates are relayed to the form as the formatted display
+    string rather than a `Date`/ISO value
+    ([#7545](https://github.com/primefaces/primevue/issues/7545))
+  - No reliable way to re-baseline a form's dirty-tracking after loading
+    existing data asynchronously (the whole point of an edit form):
+    reactively reassigning `:initial-values` after a fetch isn't
+    consistently picked up
+    ([#7184](https://github.com/primefaces/primevue/issues/7184)), and
+    working around it via `$form`'s per-field `.dirty` plus the exposed
+    `setValues()` instance method still left the Save button permanently
+    enabled on `ApplicationFormView.vue`'s edit route
+  - Cross-field validation (the salary-range `min <= max` check) went
+    stale: editing one field after the other had already been validated
+    didn't reliably re-run the shared `.refine()`, requiring a manual
+    forced revalidation workaround that still wasn't a real fix
+
+### Known issues
+
+- vee-validate + `@vee-validate/zod` validation does not resolve
+  synchronously (unlike the hand-rolled `validate()` functions it
+  replaced) — any test asserting on validation-error text or a
+  `handleSubmit`-gated store call after `trigger('submit')` must wrap that
+  assertion in `vi.waitFor(() => { ... })`. `LoginView.spec.ts` hit this
+  directly: `auth.login` appeared to never be called even with valid
+  input, and field-error text appeared to never render, purely because
+  the assertions ran before validation had actually resolved
+
 ### Planned
 
 - Cross-application Interviews directory: a top-level, read-only view
   listing every interview across every application the user owns — not
   just one application's panel — mirroring the `ContactDirectoryView.vue`
-  + `GET /contacts` pattern from v0.4.0. Needs a new paginated backend
-  endpoint analogous to `GET /contacts` (`GET /interviews`, aggregating
-  via the same `Interview.application_id` → `Application.user_id` join),
-  plus a matching frontend store/view
+  - `GET /contacts` pattern from v0.4.0. Needs a new paginated backend
+    endpoint analogous to `GET /contacts` (`GET /interviews`, aggregating
+    via the same `Interview.application_id` → `Application.user_id` join),
+    plus a matching frontend store/view
 - Cross-application Documents directory: same shape as above (`GET
-  /documents`, `DocumentDirectoryView.vue`)
+/documents`, `DocumentDirectoryView.vue`)
 - Migrate file storage from AWS S3 to Cloudflare (R2): the current AWS
   free tier expires 6 months after account creation, so this needs to
   land before that clock runs out. R2 is S3-API-compatible, so
