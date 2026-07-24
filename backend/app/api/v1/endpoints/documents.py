@@ -1,13 +1,28 @@
 """
-Document endpoints, nested under an application.
+Document endpoints.
 
-Unlike Interview/Contact, Document creation isn't a plain JSON POST - it's
-a multipart file upload that we stream to Cloudflare R2 (see
-app/services/r2.py) before writing the resulting object key to the DB in
-the same request. Reads never return a permanent file_url; GET
-/{document_id}/download mints a short-lived presigned R2 URL instead, so
-a leaked API response can't be used to fetch someone's resume
-indefinitely.
+`router` holds CRUD, nested under an application. Unlike Interview/Contact,
+Document creation isn't a plain JSON POST - it's a multipart file upload
+that we stream to Cloudflare R2 (see app/services/r2.py) before writing the
+resulting object key to the DB in the same request. Reads never return a
+permanent file_url; GET /{document_id}/download mints a short-lived
+presigned R2 URL instead, so a leaked API response can't be used to fetch
+someone's resume indefinitely.
+
+`directory_router` holds one read-only route: GET /documents, a flat
+listing across every application the user owns (mirrors contacts.py's /
+interviews.py's directory_router pattern). A document still only ever
+exists nested under one application - this doesn't change ownership or
+add a new way to create one, it's just a different read path over the
+same rows, scoped via the same Application.user_id join the nested routes
+already use for ownership checks. Registered in router.py under the
+top-level /documents prefix.
+
+Unlike Contacts (search only) or Interviews (result filter only), Document
+has both a name-like field (file_name) and an enum field (file_type), so
+the directory route supports both: `search` matches file_name or the
+parent application's company (same fields Contacts' search matches),
+`file_type` filters the exact enum (same shape as Interviews' `result`).
 """
 
 import uuid
@@ -22,7 +37,8 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, contains_eager
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
@@ -34,6 +50,8 @@ from app.schemas.document import (
     DocumentListResponse,
     DocumentRead,
     DocumentUpdate,
+    DocumentWithApplicationListResponse,
+    DocumentWithApplicationRead,
 )
 from app.services.r2 import (
     PRESIGNED_URL_EXPIRY_SECONDS,
@@ -43,6 +61,7 @@ from app.services.r2 import (
 )
 
 router = APIRouter()
+directory_router = APIRouter()
 
 
 def _get_owned_application(
@@ -188,3 +207,49 @@ def delete_document_endpoint(
     db.delete(document)
     db.commit()
     return None
+
+
+@directory_router.get("", response_model=DocumentWithApplicationListResponse)
+def list_all_documents(
+    search: str | None = None,
+    file_type: DocumentType | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Same join Application already used for ownership on every nested
+    # route above (Document -> Application -> User) - just not scoped down
+    # to one application_id here. `contains_eager` reuses this join to
+    # populate `Document.application` instead of firing a second query per
+    # row; it relies on the join/filter below being the exact source of
+    # that relationship's rows, so don't reorder without care.
+    query = (
+        db.query(Document)
+        .join(Application, Document.application_id == Application.id)
+        .options(contains_eager(Document.application))
+        .filter(Application.user_id == current_user.id)
+    )
+
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(Document.file_name.ilike(like), Application.company.ilike(like))
+        )
+
+    if file_type:
+        query = query.filter(Document.file_type == file_type)
+
+    total = query.count()
+    items = (
+        query.order_by(Document.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return DocumentWithApplicationListResponse(
+        items=[DocumentWithApplicationRead.model_validate(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
