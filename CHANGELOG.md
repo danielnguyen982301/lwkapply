@@ -4,6 +4,72 @@
 
 ### Added
 
+- **Cross-application Documents directory** (backend + frontend), the
+  third and final directory in the Contacts/Interviews/Documents set:
+  - `GET /documents` (`app/api/v1/endpoints/documents.py ::
+directory_router`, registered at the top-level `/documents` prefix in
+    `router.py`, alongside the existing nested
+    `/applications/{id}/documents` CRUD in the same file): a flat,
+    read-only, paginated listing of every document across every
+    application the authenticated user owns. Same
+    `Document.application_id` → `Application.user_id` join used for
+    ownership on the nested CRUD route, with `contains_eager` on
+    `Document.application` so the parent application's
+    company/position/status come back in one query, not N+1 — same
+    pattern as the Contacts/Interviews directories
+  - New schemas (`app/schemas/document.py`): `ApplicationSummary`,
+    `DocumentWithApplicationRead`, `DocumentWithApplicationListResponse`
+    — duplicated rather than shared with `contact.py`/`interview.py`'s
+    equivalents, matching those files' own precedent
+  - One deliberate divergence from both prior directories: Document has
+    both a name-like field (`file_name`, like Contacts' `search`) _and_
+    an enum field (`file_type`, like Interviews' `result`), so this
+    route supports both filters at once (`?search=` and `?file_type=`,
+    combining with AND) rather than picking one. Ordering is
+    `created_at` descending, matching the nested
+    `GET /applications/{id}/documents` route and Contacts' directory
+    (not Interviews', which orders by `scheduled_at`)
+  - `backend/tests/test_documents_directory.py`: full integration suite
+    against a real Postgres instance, mirroring
+    `test_interviews_directory.py`'s shape — auth (including the
+    refresh-token-as-access-token check), aggregation, the
+    `contains_eager` correctness check, the ownership/IDOR check
+    (including that neither `search` nor `file_type` can be used to leak
+    another user's documents), search, file-type filtering, the two
+    filters combined, and pagination. `file_url` is also asserted absent
+    from this response, same contract as the nested `DocumentRead`
+  - Frontend: `DocumentDirectoryView.vue` (route `/documents`, the
+    "Documents" nav item — no longer disabled) + Pinia
+    `documentDirectory` store (`src/stores/documentDirectory.ts`), same
+    `DataTable`/`Paginator` skeleton as the other two directories, but
+    combining Contacts' debounced `IconField`/`InputText` search with
+    Interviews' PrimeVue `Select` filter, since the backend supports
+    both at once here. New `DocumentApplicationSummary` /
+    `DocumentWithApplication` / `DocumentWithApplicationListResponse` /
+    `DocumentDirectoryParams` types (`src/types/document.ts`) and
+    `documentTypeFilterOptions()` (`src/lib/document-ui.ts`), mirroring
+    the other two directories' equivalents
+  - Deliberately a separate store from `stores/documents.ts`, not an
+    extension of it — same reasoning as `contactDirectory.ts`/
+    `interviewDirectory.ts` vs. their per-application counterparts:
+    different shape (read-only, cross-application), different endpoint,
+    different lifecycle
+  - Not included in this pass: component/store tests for the new
+    view/store (no directory view has these yet — see TODO.md's Testing
+    section) and schema-unit-test coverage of the new
+    `DocumentWithApplicationRead`/etc. shapes (only integration tests
+    were added, same gap the Interviews directory shipped with — see
+    `test_document_schema.py`'s note, if/when added)
+  - Caught during review: the directory's `created_at`-descending
+    ordering test initially relied on wall-clock separation between two
+    inserts to produce different timestamps, which is flaky under this
+    test suite's SAVEPOINT-per-test isolation (every insert in a test
+    shares one real outer transaction, so Postgres's `now()` — and
+    `created_at`'s `server_default=func.now()` — can resolve to the
+    _same_ instant for both rows). Fixed by setting `created_at`
+    explicitly on both rows, the same fix already applied to
+    `test_applications_endpoints.py`'s ordering test — worth remembering
+    for any future test asserting on `created_at`/`updated_at` ordering
 - **Cross-application Interviews directory** (backend + frontend),
   mirroring the `GET /contacts` / `ContactDirectoryView.vue` pattern from
   v0.4.0:
@@ -142,11 +208,6 @@ directory_router`, registered at the top-level `/interviews` prefix
   directly: `auth.login` appeared to never be called even with valid
   input, and field-error text appeared to never render, purely because
   the assertions ran before validation had actually resolved
-
-### Planned
-
-- Cross-application Documents directory: same shape as the Interviews
-  directory above (`GET /documents`, `DocumentDirectoryView.vue`)
 
 ## v0.4.0
 
@@ -458,6 +519,3 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
   v0.4.0's Known Issues)
 - Webapp component/store tests for Applications UI, and the Contacts/
   Interviews/Documents UI added in v0.4.0
-- Backend endpoint/integration test harness (test DB + fixtures + auth
-  test client) — none exists yet; `GET /contacts` is the first endpoint
-  that needs one
