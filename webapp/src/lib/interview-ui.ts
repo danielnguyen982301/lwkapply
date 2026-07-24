@@ -40,3 +40,19 @@ export function interviewTypeOptions() {
 export function interviewResultOptions() {
   return INTERVIEW_RESULTS.map((value) => ({ label: INTERVIEW_RESULT_LABELS[value], value }))
 }
+
+export interface InterviewResultFilterOption {
+  label: string
+  value: InterviewResult | null
+}
+
+// Used by InterviewDirectoryView.vue's result filter — mirrors
+// applicationStatusFilterOptions() in application-ui.ts (an extra
+// "All results" option representing "no filter", alongside every real
+// value).
+export function interviewResultFilterOptions(): InterviewResultFilterOption[] {
+  return [
+    { label: 'All results', value: null },
+    ...INTERVIEW_RESULTS.map((value) => ({ label: INTERVIEW_RESULT_LABELS[value], value })),
+  ]
+}
