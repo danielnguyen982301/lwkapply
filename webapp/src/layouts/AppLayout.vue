@@ -4,15 +4,22 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 
+type NavItem = {
+  name: string
+  label: string
+  to: string
+  disabled?: boolean
+}
+
 const auth = useAuthStore()
 const router = useRouter()
 
-const navItems = [
+const navItems: NavItem[] = [
   { name: 'dashboard', label: 'Dashboard', to: '/' },
   { name: 'applications', label: 'Applications', to: '/applications' },
   { name: 'interviews', label: 'Interviews', to: '/interviews' },
   { name: 'contacts', label: 'Contacts', to: '/contacts' },
-  { name: 'documents', label: 'Documents', to: '/', disabled: true },
+  { name: 'documents', label: 'Documents', to: '/documents' },
 ]
 
 async function handleLogout() {
