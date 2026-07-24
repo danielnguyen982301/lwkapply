@@ -24,7 +24,13 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   search-by-name-or-company (backs the webapp's "Contacts" nav item)
 - **Documents**: upload (multipart, streamed to Cloudflare R2), list
   (paginated), get metadata, presigned download URLs, update (`file_type`
-  only), delete — nested under `/applications/{application_id}/documents`
+  only), delete — nested under `/applications/{application_id}/documents`;
+  plus a read-only, top-level `GET /documents` — a cross-application
+  directory of every document the authenticated user owns, with the parent
+  application's company/position/status attached, paginated, filterable by
+  `file_type`, and searchable by `file_name`/company — the one directory
+  that supports both a text search and an enum filter at once, since
+  Document has both fields (backs the webapp's "Documents" nav item)
 - **Users**: the current endpoints only contain `/users/me`, this is moved from `/auth/me` to
   reflect the users route better.
 - **Models**: User, Application, Interview, Document, Contact (matches
@@ -36,14 +42,18 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   `ApplicationSummary` / `ContactWithApplicationRead` /
   `ContactWithApplicationListResponse` (the `GET /contacts` response
   shapes), including construction from ORM-style attribute objects via
-  `model_validate`, not just dicts (the equivalent Interview directory
-  schemas — `InterviewWithApplicationRead` etc. — only have integration
-  coverage so far, not this schema-unit-test treatment; see the note
-  below). Integration test suites (real Postgres + HTTP layer, not just
+  `model_validate`, not just dicts (the equivalent Interview and Document
+  directory schemas — `InterviewWithApplicationRead`,
+  `DocumentWithApplicationRead`, etc. — only have integration coverage so
+  far, not this schema-unit-test treatment; see the notes below).
+  Integration test suites (real Postgres + HTTP layer, not just
   schema validation) now exist for every CRUD endpoint in the API, plus
-  both cross-application directory endpoints: `GET /contacts`
+  all three cross-application directory endpoints: `GET /contacts`
   (`test_contacts_directory.py`), `GET /interviews`
-  (`test_interviews_directory.py`), nested Contacts CRUD
+  (`test_interviews_directory.py`), `GET /documents`
+  (`test_documents_directory.py` — the only one of the three that tests
+  two filter dimensions combined, since Document is the only resource
+  with both a name-like field and an enum), nested Contacts CRUD
   (`test_contacts_endpoints.py`), Applications CRUD
   (`test_applications_endpoints.py`), Interviews CRUD
   (`test_interviews_endpoints.py`), and Documents CRUD
@@ -114,6 +124,43 @@ built the same way as the contacts directory above:
   route is paginated regardless (an interview count across every
   application a user has ever tracked has no natural ceiling, same
   reasoning as the Contacts directory's pagination note).
+
+### A note on the documents directory endpoint
+
+`GET /documents` (`app/api/v1/endpoints/documents.py::directory_router`)
+is the one Document route that isn't nested under `/applications/{id}`,
+built the same way as the Contacts/Interviews directories above, and the
+last of the three directory endpoints in the roadmap's directory set:
+
+- The response embeds a minimal `ApplicationSummary` (company, position,
+  status) per document, via `contains_eager(Document.application)` on
+  the same join used for the ownership filter — one query, not N+1. Same
+  caution as the Contacts/Interviews versions: don't reorder the query
+  without care.
+- Unlike Contacts (search only) or Interviews (`result` filter only),
+  Document has both a name-like field (`file_name`) and an enum field
+  (`file_type`), so this route supports both at once: `search` (matching
+  `file_name` or the parent application's `company`, same fields Contacts
+  checks) and `file_type` (`resume`/`cover_letter`/`other`, same shape as
+  Interviews' `result`). Both are scoped by the same
+  `Application.user_id` ownership filter, so neither can be used to find
+  another user's documents, and they combine with AND when both are
+  present.
+- Create/update/delete remain nested-only; this route is read-only. It
+  also never returns the raw R2 object key (`file_url`), same contract as
+  the nested `DocumentRead` — downloads still only ever happen via the
+  short-lived presigned URL from `GET /{document_id}/download`.
+- Ordered by `created_at` descending, matching the nested
+  `GET /applications/{id}/documents` route's ordering and the Contacts
+  directory (not Interviews', which orders by `scheduled_at`). This
+  route is paginated regardless, same reasoning as the other two
+  directories' pagination notes.
+- The integration test suite's ordering test needed an explicit
+  `created_at` on each row rather than relying on wall-clock separation
+  between two inserts — see "A note on the integration test setup" below;
+  `created_at` comes from `server_default=func.now()`, and every insert
+  in a test shares one real outer transaction under SAVEPOINT isolation,
+  so Postgres's `now()` can resolve identically for both rows otherwise.
 
 ### A note on the integration test setup
 
@@ -211,10 +258,6 @@ so there was no data to migrate, only the client/config layer:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- `GET /documents` cross-application directory endpoint, mirroring
-  `GET /contacts` / `GET /interviews` (see "A note on the interviews
-  directory endpoint" above for the join/pagination pattern to reuse).
-  See CHANGELOG.md (v0.5.0 Planned)
 
 ## Development workflow
 
@@ -305,7 +348,9 @@ backend/
           interviews.py            # nested under /applications/{id}/interviews;
                                     # also GET /interviews (directory_router),
                                     # registered separately at the top level
-          documents.py             # nested under /applications/{id}/documents
+          documents.py             # nested under /applications/{id}/documents;
+                                    # also GET /documents (directory_router),
+                                    # registered separately at the top level
           contacts.py              # nested under /applications/{id}/contacts;
                                     # also GET /contacts (directory_router),
                                     # registered separately at the top level
