@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.application import ApplicationStatus
 from app.models.document import DocumentType
 
 
@@ -41,3 +42,34 @@ class DocumentListResponse(BaseModel):
 class DocumentDownloadResponse(BaseModel):
     download_url: str
     expires_in_seconds: int
+
+
+# --- Cross-application document directory ----------------------------------
+# Everything below supports GET /documents
+# (app/api/v1/endpoints/documents.py :: directory_router), the flat "all my
+# documents" listing, mirroring ContactWithApplicationRead/
+# InterviewWithApplicationRead in contact.py/interview.py. Duplicated here
+# rather than shared, matching those files' own precedent - each directory
+# response is a different join with its own row shape.
+
+
+class ApplicationSummary(BaseModel):
+    """Minimal parent-application context for a document in the directory view."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    company: str
+    position: str
+    status: ApplicationStatus
+
+
+class DocumentWithApplicationRead(DocumentRead):
+    application: ApplicationSummary
+
+
+class DocumentWithApplicationListResponse(BaseModel):
+    items: list[DocumentWithApplicationRead]
+    total: int
+    page: int
+    page_size: int
