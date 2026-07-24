@@ -7,8 +7,10 @@ Phase 1 (foundation, auth) and Phase 2 application tracking (list, search/
 filter, details, Kanban board) are implemented. Phase 4's Contact
 management, Interview scheduling, and Phase 3's Document upload/download
 are now all implemented on the frontend too — see Contacts, Interviews,
-and Documents below. Interviews also now has a cross-application
-directory view, mirroring Contacts' — see Interviews below.
+and Documents below. All three now also have a cross-application
+directory view (Contacts, Interviews, and — as of this pass — Documents),
+each mirroring the same `DataTable`/`Paginator` skeleton — see each
+section below.
 
 ## What's here
 
@@ -179,6 +181,10 @@ cross-application listing:
 
 ### Documents
 
+Two separate pieces, backed by two separate stores — same split as
+Contacts and Interviews, one scoped to a single application (upload/
+update/delete), one a read-only cross-application listing:
+
 - **Panel** (`DocumentsPanel.vue`): same location/gating as Contacts and
   Interviews. Pinia `documents` store (`src/stores/documents.ts`) — same
   scoping pattern, paginated like Interviews.
@@ -190,22 +196,39 @@ cross-application listing:
   file URL, so nothing is cached client-side. A separate, smaller edit
   dialog covers the one field the backend actually allows changing after
   upload (`file_type`); delete uses the existing `ConfirmDialog` pattern.
+- **Directory view** (`DocumentDirectoryView.vue`, route `/documents`,
+  the "Documents" nav item in `AppLayout.vue` — no longer disabled):
+  every document across every application the user owns, with the
+  parent application's company/position/status shown per row and
+  linking back to `application-detail`. Read-only by design, same
+  reasoning as the Contacts/Interviews directories — the empty state and
+  copy point the user back to the relevant application to upload/edit a
+  document. Pinia `documentDirectory` store
+  (`src/stores/documentDirectory.ts`) — paginated, same
+  `DataTable`/`Paginator` skeleton as the other two directories. One
+  deliberate divergence from both: this is the only directory combining
+  Contacts' debounced `IconField`/`InputText` search (matching
+  `file_name` or company) _with_ Interviews' PrimeVue `Select` filter
+  (`file_type`), since Document has both a name-like field and an enum,
+  and the backend supports filtering on both at once. Table columns show
+  file name, type as a `Tag` (`documentTypeSeverity()`), company,
+  position, application status, and upload date.
 - `src/types/document.ts` mirrors `DocumentRead`/`DocumentUpdate`/the
-  presigned-download response. `src/lib/document-ui.ts` mirrors
-  `interview-ui.ts`'s labels/options/severity convention.
+  presigned-download response, plus `DocumentApplicationSummary` /
+  `DocumentWithApplication` (directory, adds the embedded `application`
+  summary) and `DocumentDirectoryParams`. `src/lib/document-ui.ts`
+  mirrors `interview-ui.ts`'s labels/options/severity convention, plus
+  `documentTypeFilterOptions()` (mirrors
+  `interviewResultFilterOptions()`'s "All types" / `null`-option
+  convention).
 
 ## What's deliberately not here yet
 
 - Analytics dashboard and charts — Phase 5
 - RBAC-aware UI — explicitly skipped per current backend scope
-- Documents directory view (cross-application, read-only — the
-  `ContactDirectoryView.vue`/`InterviewDirectoryView.vue` /
-  `GET /contacts`/`GET /interviews` pattern, not yet built for Documents;
-  currently only has the per-application panel described above). See
-  CHANGELOG.md's v0.5.0 Planned section
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts, Interviews (including the new
-  directory view/store), and Documents UI (panels and stores) are in the
+  views not yet covered) — Contacts, Interviews, and Documents (including
+  their directory views/stores) are in the
   same boat: no tests yet
 
 ## Auth cookie flow
@@ -251,7 +274,8 @@ Applications views/stores, the Contacts UI (`ContactsPanel.vue`,
 `ContactDirectoryView.vue`, `stores/contacts.ts`,
 `stores/contactDirectory.ts`), and the Interviews/Documents UI
 (`InterviewsPanel.vue`, `InterviewDirectoryView.vue`, `DocumentsPanel.vue`,
-`stores/interviews.ts`, `stores/interviewDirectory.ts`,
-`stores/documents.ts`) — worth adding next as the UI stabilises.
+`DocumentDirectoryView.vue`, `stores/interviews.ts`,
+`stores/interviewDirectory.ts`, `stores/documents.ts`,
+`stores/documentDirectory.ts`) — worth adding next as the UI stabilises.
 
 New devDependency: `@pinia/testing` (store stubbing for component tests).
