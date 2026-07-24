@@ -10,7 +10,7 @@ const router = useRouter()
 const navItems = [
   { name: 'dashboard', label: 'Dashboard', to: '/' },
   { name: 'applications', label: 'Applications', to: '/applications' },
-  { name: 'interviews', label: 'Interviews', to: '/', disabled: true },
+  { name: 'interviews', label: 'Interviews', to: '/interviews' },
   { name: 'contacts', label: 'Contacts', to: '/contacts' },
   { name: 'documents', label: 'Documents', to: '/', disabled: true },
 ]
