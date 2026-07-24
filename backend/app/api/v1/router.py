@@ -25,6 +25,14 @@ api_router.include_router(
     prefix="/applications/{application_id}/interviews",
     tags=["interviews"],
 )
+
+# Interviews additionally has one flat, top-level, read-only route: a
+# cross-application directory of every interview the user owns (mirrors
+# the Contacts directory route below). Creation/update/delete stay
+# nested above - this is just a different read path over the same rows.
+api_router.include_router(
+    interviews.directory_router, prefix="/interviews", tags=["interviews"]
+)
 api_router.include_router(
     documents.router,
     prefix="/applications/{application_id}/documents",
