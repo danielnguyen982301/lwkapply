@@ -67,6 +67,11 @@ const router = createRouter({
           name: 'interviews',
           component: () => import('@/views/interviews/InterviewDirectoryView.vue'),
         },
+        {
+          path: 'documents',
+          name: 'documents',
+          component: () => import('@/views/documents/DocumentDirectoryView.vue'),
+        },
       ],
     },
     {
