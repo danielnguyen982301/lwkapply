@@ -73,6 +73,7 @@
 │       ├── test_contacts_directory.py
 │       ├── test_contacts_endpoints.py
 │       ├── test_document_schema.py
+│       ├── test_documents_directory.py
 │       ├── test_documents_endpoints.py
 │       ├── test_interview_schema.py
 │       ├── test_interviews_directory.py
@@ -130,6 +131,7 @@
     │   │   ├── auth.ts
     │   │   ├── contactDirectory.ts
     │   │   ├── contacts.ts
+    │   │   ├── documentDirectory.ts
     │   │   ├── documents.ts
     │   │   ├── interviewDirectory.ts
     │   │   └── interviews.ts
@@ -156,6 +158,8 @@
     │   │   │       └── LoginView.spec.ts
     │   │   ├── contacts
     │   │   │   └── ContactDirectoryView.vue
+    │   │   ├── documents
+    │   │   │   └── DocumentDirectoryView.vue
     │   │   └── interviews
     │   │       └── InterviewDirectoryView.vue
     │   └── vite-env.d.ts
@@ -165,4 +169,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-35 directories, 131 files
+36 directories, 134 files
