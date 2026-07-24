@@ -65,9 +65,10 @@ BACKEND_SUMMARY.md for the reasoning.
       CHANGELOG.md v0.5.0)
 - [ ] Presigned direct-to-R2 upload (currently server-proxied; revisit if
       file size/volume grows)
-- [ ] Cross-application documents directory endpoint (`GET /documents`,
-      read-only, paginated — mirrors the Contacts directory endpoint;
-      see CHANGELOG.md v0.5.0 Planned)
+- [x] Cross-application documents directory endpoint (`GET /documents`,
+      read-only, paginated, filter by `file_type`, search by
+      `file_name`/company — mirrors the Contacts/Interviews directory
+      endpoints above; see BACKEND_SUMMARY.md and CHANGELOG.md v0.5.0)
 
 ### Analytics
 
@@ -140,8 +141,12 @@ BACKEND_SUMMARY.md for the reasoning.
       `interviewDirectory` store, filter by result instead of Contacts'
       text search (Interview has no name-like field); nav item enabled.
       See WEBAPP_SUMMARY.md and CHANGELOG.md v0.5.0
-- [ ] Documents directory view (cross-application, mirrors
-      `ContactDirectoryView.vue`) — see CHANGELOG.md v0.5.0 Planned
+- [x] Documents directory view (cross-application, mirrors
+      `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`) —
+      `DocumentDirectoryView.vue` + Pinia `documentDirectory` store,
+      combining Contacts' debounced search with Interviews' `Select`
+      filter (Document supports both `search` and `file_type` at once);
+      nav item enabled. See WEBAPP_SUMMARY.md and CHANGELOG.md v0.5.0
 
 ### Analytics
 
@@ -199,7 +204,14 @@ BACKEND_SUMMARY.md for the reasoning.
       `GET /interviews` (`test_interviews_directory.py` — same
       auth/aggregation/IDOR/pagination shape as the Contacts directory
       suite, plus a `result`-filter test and a `scheduled_at`-ordering
-      test in place of Contacts' text-search coverage), nested Contacts
+      test in place of Contacts' text-search coverage), `GET /documents`
+      (`test_documents_directory.py` — same shape again, plus both a
+      `search` and a `file_type` filter test (and both combined at once,
+      unlike Contacts/Interviews which each only have one filter
+      dimension); its `created_at`-ordering test needed an explicit
+      timestamp rather than wall-clock separation between inserts, same
+      fix as Applications' ordering test below — see CHANGELOG.md
+      v0.5.0), nested Contacts
       CRUD (`test_contacts_endpoints.py` — the
       create/get/update/delete/list routes under
       `/applications/{id}/contacts`, separate from the directory route
