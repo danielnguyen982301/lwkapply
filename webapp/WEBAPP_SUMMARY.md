@@ -7,7 +7,8 @@ Phase 1 (foundation, auth) and Phase 2 application tracking (list, search/
 filter, details, Kanban board) are implemented. Phase 4's Contact
 management, Interview scheduling, and Phase 3's Document upload/download
 are now all implemented on the frontend too — see Contacts, Interviews,
-and Documents below.
+and Documents below. Interviews also now has a cross-application
+directory view, mirroring Contacts' — see Interviews below.
 
 ## What's here
 
@@ -133,24 +134,48 @@ single application (CRUD), one a read-only cross-application listing:
 
 ### Interviews
 
-- **Panel** (`InterviewsPanel.vue`): rendered inside `ApplicationFormView.vue`,
-  alongside `ContactsPanel.vue`, same `v-if="!isNew && applicationId"` gating.
-  Pinia `interviews` store (`src/stores/interviews.ts`) — same
-  application-scoping/`reset()`-on-unmount pattern as Contacts, but unlike
-  Contacts' nested list, this backend endpoint IS paginated (see
-  BACKEND_SUMMARY.md), so the store also tracks `page`/`pageSize`/`total`
-  like the Applications store, and the panel shows a `Paginator` once
-  there's more than one page.
-- Schedule/edit via a PrimeVue `Dialog`: type, date & time (`DatePicker`
+Two separate pieces, backed by two separate stores — same split as
+Contacts, one scoped to a single application (CRUD), one a read-only
+cross-application listing:
+
+- **Per-application panel** (`InterviewsPanel.vue`): rendered inside
+  `ApplicationFormView.vue`, alongside `ContactsPanel.vue`, same
+  `v-if="!isNew && applicationId"` gating. Pinia `interviews` store
+  (`src/stores/interviews.ts`) — same application-scoping/`reset()`-on-
+  unmount pattern as Contacts, but unlike Contacts' nested list, this
+  backend endpoint IS paginated (see BACKEND_SUMMARY.md), so the store
+  also tracks `page`/`pageSize`/`total` like the Applications store, and
+  the panel shows a `Paginator` once there's more than one page.
+  Schedule/edit via a PrimeVue `Dialog`: type, date & time (`DatePicker`
   with `show-time`), duration in minutes, result, and freeform feedback.
   Create and update both refetch the current page afterward rather than
-  patching the item in place client-side, since the list is server-sorted
-  by `scheduled_at` and a client-side guess at where a new/edited row
-  belongs could land in the wrong spot.
+  patching the item in place client-side, since the list is
+  server-sorted by `scheduled_at` and a client-side guess at where a
+  new/edited row belongs could land in the wrong spot.
+- **Directory view** (`InterviewDirectoryView.vue`, route `/interviews`,
+  the "Interviews" nav item in `AppLayout.vue` — no longer disabled):
+  every interview across every application the user owns, with the
+  parent application's company/position/status shown per row and
+  linking back to `application-detail`. Read-only by design, same
+  reasoning as the Contacts directory — the empty state and copy point
+  the user back to the relevant application to schedule/edit an
+  interview. Pinia `interviewDirectory` store
+  (`src/stores/interviewDirectory.ts`) — paginated, same
+  `DataTable`/`Paginator` skeleton as `ContactDirectoryView.vue`, hitting
+  the backend's `GET /interviews`. One deliberate divergence from
+  Contacts: no debounced text search — `Interview` has no name-like
+  field to filter by — so this uses a PrimeVue `Select` filtering on
+  `result` (`interviewResultFilterOptions()` in `interview-ui.ts`)
+  instead of an `IconField`/`InputText` search box. Table columns show
+  scheduled date/time, type, company, position, application status, and
+  result as a `Tag` (`interviewResultSeverity()`), plus duration.
 - `src/types/interview.ts` mirrors `InterviewRead`/`InterviewCreate`/
-  `InterviewUpdate`. `src/lib/interview-ui.ts` holds type/result labels,
-  select options, and result-severity mapping (mirrors
-  `application-ui.ts`'s conventions).
+  `InterviewUpdate`, plus `InterviewWithApplication` (directory, adds the
+  embedded `application` summary) and `InterviewDirectoryParams`.
+  `src/lib/interview-ui.ts` holds type/result labels, select options,
+  result-severity mapping, and `interviewResultFilterOptions()` (mirrors
+  `application-ui.ts`'s `applicationStatusFilterOptions()` convention —
+  an "All results" / `null` option prepended to the real values).
 
 ### Documents
 
@@ -173,13 +198,15 @@ single application (CRUD), one a read-only cross-application listing:
 
 - Analytics dashboard and charts — Phase 5
 - RBAC-aware UI — explicitly skipped per current backend scope
-- Interviews and Documents directory views (cross-application, read-only
-  — the `ContactDirectoryView.vue`/`GET /contacts` pattern, not yet built
-  for Interviews/Documents; currently each only has the per-application
-  panel described above). See CHANGELOG.md's v0.5.0 Planned section
+- Documents directory view (cross-application, read-only — the
+  `ContactDirectoryView.vue`/`InterviewDirectoryView.vue` /
+  `GET /contacts`/`GET /interviews` pattern, not yet built for Documents;
+  currently only has the per-application panel described above). See
+  CHANGELOG.md's v0.5.0 Planned section
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts, Interviews, and Documents UI (panels
-  and stores) are in the same boat: no tests yet
+  views not yet covered) — Contacts, Interviews (including the new
+  directory view/store), and Documents UI (panels and stores) are in the
+  same boat: no tests yet
 
 ## Auth cookie flow
 
@@ -223,7 +250,8 @@ Beyond the pure-function `api.spec.ts` smoke test:
 Applications views/stores, the Contacts UI (`ContactsPanel.vue`,
 `ContactDirectoryView.vue`, `stores/contacts.ts`,
 `stores/contactDirectory.ts`), and the Interviews/Documents UI
-(`InterviewsPanel.vue`, `DocumentsPanel.vue`, `stores/interviews.ts`,
+(`InterviewsPanel.vue`, `InterviewDirectoryView.vue`, `DocumentsPanel.vue`,
+`stores/interviews.ts`, `stores/interviewDirectory.ts`,
 `stores/documents.ts`) — worth adding next as the UI stabilises.
 
 New devDependency: `@pinia/testing` (store stubbing for component tests).
