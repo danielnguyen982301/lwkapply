@@ -2,6 +2,63 @@
 
 ## v0.5.0 (in progress)
 
+### Added
+
+- **Cross-application Interviews directory** (backend + frontend),
+  mirroring the `GET /contacts` / `ContactDirectoryView.vue` pattern from
+  v0.4.0:
+  - `GET /interviews` (`app/api/v1/endpoints/interviews.py ::
+directory_router`, registered at the top-level `/interviews` prefix
+    in `router.py`): a flat, read-only, paginated listing of every
+    interview across every application the authenticated user owns.
+    Same `Interview.application_id` → `Application.user_id` join used
+    for ownership on the nested CRUD routes, with `contains_eager` on
+    `Interview.application` so the parent application's
+    company/position/status come back in one query, not N+1
+  - New schemas (`app/schemas/interview.py`): `ApplicationSummary`,
+    `InterviewWithApplicationRead`, `InterviewWithApplicationListResponse`
+    — duplicated rather than shared with `contact.py`'s equivalents,
+    matching that file's own precedent of each directory response owning
+    its own row shape
+  - One deliberate divergence from the Contacts directory: no text
+    `search` param, since `Interview` has no name-like field to match
+    against. The equivalent filter is `result` (`pending` / `passed` /
+    `failed` / `cancelled`) — a query param, `?result=passed`, filtered
+    the same way the nested endpoints filter by ownership. Ordering is
+    `scheduled_at` ascending (matching the nested
+    `GET /applications/{id}/interviews` route) rather than Contacts'
+    `created_at` descending
+  - `backend/tests/test_interviews_directory.py`: full integration suite
+    against a real Postgres instance, mirroring
+    `test_contacts_directory.py`'s shape — auth (including the
+    refresh-token-as-access-token check), aggregation, the
+    `contains_eager` correctness check (an interview must be paired with
+    its own application, not the last one seen in the join), the
+    ownership/IDOR check (critical here too, since there's no
+    `application_id` path param), a check that the `result` filter can't
+    be used to leak another user's interviews, and pagination. Adds one
+    test Contacts didn't need: `scheduled_at` ordering
+  - Frontend: `InterviewDirectoryView.vue` (route `/interviews`, the
+    "Interviews" nav item — no longer disabled) + Pinia
+    `interviewDirectory` store (`src/stores/interviewDirectory.ts`),
+    same `DataTable`/`Paginator` skeleton as `ContactDirectoryView.vue`
+    but with a PrimeVue `Select` result-filter in place of a text search
+    box. New `InterviewApplicationSummary` / `InterviewWithApplication` /
+    `InterviewWithApplicationListResponse` / `InterviewDirectoryParams`
+    types (`src/types/interview.ts`) and `interviewResultFilterOptions()`
+    (`src/lib/interview-ui.ts`), mirroring the Contacts directory's
+    equivalents
+  - Deliberately a separate store from `stores/interviews.ts`, not an
+    extension of it — same reasoning as `contactDirectory.ts` vs.
+    `contacts.ts`: different shape (read-only, cross-application),
+    different endpoint, different lifecycle
+  - Not included in this pass: component/store tests for the new
+    view/store (see TODO.md's Testing section — Contacts' directory UI
+    doesn't have them yet either), and updating
+    `Document.file_type`-style schema unit tests to cover the new
+    directory response shapes (only integration tests were added,
+    unlike Contacts' schema-test coverage from v0.4.0)
+
 ### Changed
 
 - **Migrated document storage from AWS S3 to Cloudflare R2**, ahead of
@@ -88,15 +145,8 @@
 
 ### Planned
 
-- Cross-application Interviews directory: a top-level, read-only view
-  listing every interview across every application the user owns — not
-  just one application's panel — mirroring the `ContactDirectoryView.vue`
-  - `GET /contacts` pattern from v0.4.0. Needs a new paginated backend
-    endpoint analogous to `GET /contacts` (`GET /interviews`, aggregating
-    via the same `Interview.application_id` → `Application.user_id` join),
-    plus a matching frontend store/view
-- Cross-application Documents directory: same shape as above (`GET
-/documents`, `DocumentDirectoryView.vue`)
+- Cross-application Documents directory: same shape as the Interviews
+  directory above (`GET /documents`, `DocumentDirectoryView.vue`)
 
 ## v0.4.0
 
