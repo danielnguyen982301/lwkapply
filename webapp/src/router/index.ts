@@ -62,6 +62,11 @@ const router = createRouter({
           name: 'contacts',
           component: () => import('@/views/contacts/ContactDirectoryView.vue'),
         },
+        {
+          path: 'interviews',
+          name: 'interviews',
+          component: () => import('@/views/interviews/InterviewDirectoryView.vue'),
+        },
       ],
     },
     {
