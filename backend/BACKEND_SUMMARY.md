@@ -11,7 +11,11 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
 - **Applications**: full CRUD, pagination, status filter, company/position
   search — all scoped to the authenticated user
 - **Interviews**: full CRUD, pagination, nested under
-  `/applications/{application_id}/interviews`
+  `/applications/{application_id}/interviews`; plus a read-only, top-level
+  `GET /interviews` — a cross-application directory of every interview
+  the authenticated user owns, with the parent application's
+  company/position/status attached, paginated and filterable by `result`
+  (backs the webapp's "Interviews" nav item)
 - **Contacts**: full CRUD, nested under `/applications/{application_id}/contacts`
   (that nested list route is deliberately unpaginated — see note below);
   plus a read-only, top-level `GET /contacts` — a cross-application
@@ -32,10 +36,14 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
   `ApplicationSummary` / `ContactWithApplicationRead` /
   `ContactWithApplicationListResponse` (the `GET /contacts` response
   shapes), including construction from ORM-style attribute objects via
-  `model_validate`, not just dicts. Integration test suites (real
-  Postgres + HTTP layer, not just schema validation) now exist for every
-  CRUD endpoint in the API: `GET /contacts`
-  (`test_contacts_directory.py`), nested Contacts CRUD
+  `model_validate`, not just dicts (the equivalent Interview directory
+  schemas — `InterviewWithApplicationRead` etc. — only have integration
+  coverage so far, not this schema-unit-test treatment; see the note
+  below). Integration test suites (real Postgres + HTTP layer, not just
+  schema validation) now exist for every CRUD endpoint in the API, plus
+  both cross-application directory endpoints: `GET /contacts`
+  (`test_contacts_directory.py`), `GET /interviews`
+  (`test_interviews_directory.py`), nested Contacts CRUD
   (`test_contacts_endpoints.py`), Applications CRUD
   (`test_applications_endpoints.py`), Interviews CRUD
   (`test_interviews_endpoints.py`), and Documents CRUD
@@ -83,6 +91,29 @@ the one Contact route that isn't nested under `/applications/{id}`:
   the nested route's usage pattern ever changes (e.g. contacts get reused
   across applications per the note above, or some other pattern emerges
   that inflates a single application's contact count).
+
+### A note on the interviews directory endpoint
+
+`GET /interviews` (`app/api/v1/endpoints/interviews.py::directory_router`)
+is the one Interview route that isn't nested under `/applications/{id}`,
+built the same way as the contacts directory above:
+
+- The response embeds a minimal `ApplicationSummary` (company, position,
+  status) per interview, via `contains_eager(Interview.application)` on
+  the same join used for the ownership filter — one query, not N+1. Same
+  caution as the Contacts version: don't reorder the query without care.
+- No text `search` param, unlike Contacts — `Interview` has no name-like
+  field to match against. The filter here is `result`
+  (`pending`/`passed`/`failed`/`cancelled`), scoped by the same
+  `Application.user_id` ownership filter so it can't be used to find
+  another user's interviews.
+- Create/update/delete remain nested-only; this route is read-only.
+- Ordered by `scheduled_at` ascending, matching the nested
+  `GET /applications/{id}/interviews` route's ordering — unlike the
+  Contacts directory, which orders by `created_at` descending. This
+  route is paginated regardless (an interview count across every
+  application a user has ever tracked has no natural ceiling, same
+  reasoning as the Contacts directory's pagination note).
 
 ### A note on the integration test setup
 
@@ -180,8 +211,8 @@ so there was no data to migrate, only the client/config layer:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
-- `GET /interviews` and `GET /documents` cross-application directory
-  endpoints, mirroring `GET /contacts` (see "A note on the contacts
+- `GET /documents` cross-application directory endpoint, mirroring
+  `GET /contacts` / `GET /interviews` (see "A note on the interviews
   directory endpoint" above for the join/pagination pattern to reuse).
   See CHANGELOG.md (v0.5.0 Planned)
 
@@ -271,7 +302,9 @@ backend/
         endpoints/
           auth.py
           applications.py
-          interviews.py            # nested under /applications/{id}/interviews
+          interviews.py            # nested under /applications/{id}/interviews;
+                                    # also GET /interviews (directory_router),
+                                    # registered separately at the top level
           documents.py             # nested under /applications/{id}/documents
           contacts.py              # nested under /applications/{id}/contacts;
                                     # also GET /contacts (directory_router),
