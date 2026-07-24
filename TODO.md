@@ -40,9 +40,10 @@
 - [x] Interview model
 - [x] CRUD endpoints
 - [ ] Reminder system
-- [ ] Cross-application interviews directory endpoint (`GET /interviews`,
-      read-only, paginated — mirrors the Contacts directory endpoint
-      below; see CHANGELOG.md v0.5.0 Planned)
+- [x] Cross-application interviews directory endpoint (`GET /interviews`,
+      read-only, paginated, filter by `result` — mirrors the Contacts
+      directory endpoint below; see BACKEND_SUMMARY.md and CHANGELOG.md
+      v0.5.0)
 
 ### Contacts
 
@@ -134,8 +135,11 @@ BACKEND_SUMMARY.md for the reasoning.
 - [x] Document upload/download UI — `DocumentsPanel.vue` + Pinia
       `documents` store, same location as Interviews/Contacts (see
       WEBAPP_SUMMARY.md)
-- [ ] Interviews directory view (cross-application, mirrors
-      `ContactDirectoryView.vue`) — see CHANGELOG.md v0.5.0 Planned
+- [x] Interviews directory view (cross-application, mirrors
+      `ContactDirectoryView.vue`) — `InterviewDirectoryView.vue` + Pinia
+      `interviewDirectory` store, filter by result instead of Contacts'
+      text search (Interview has no name-like field); nav item enabled.
+      See WEBAPP_SUMMARY.md and CHANGELOG.md v0.5.0
 - [ ] Documents directory view (cross-application, mirrors
       `ContactDirectoryView.vue`) — see CHANGELOG.md v0.5.0 Planned
 
@@ -192,7 +196,11 @@ BACKEND_SUMMARY.md for the reasoning.
       migration — see the Form validation section above and CHANGELOG.md
       (v0.5.0 Known issues) before writing new form-submission tests
 - [x] Integration tests — `GET /contacts` (`test_contacts_directory.py`),
-      nested Contacts CRUD (`test_contacts_endpoints.py` — the
+      `GET /interviews` (`test_interviews_directory.py` — same
+      auth/aggregation/IDOR/pagination shape as the Contacts directory
+      suite, plus a `result`-filter test and a `scheduled_at`-ordering
+      test in place of Contacts' text-search coverage), nested Contacts
+      CRUD (`test_contacts_endpoints.py` — the
       create/get/update/delete/list routes under
       `/applications/{id}/contacts`, separate from the directory route
       above), Applications CRUD (`test_applications_endpoints.py`,
