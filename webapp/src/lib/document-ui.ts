@@ -20,3 +20,18 @@ export function documentTypeSeverity(type: DocumentType): string {
 export function documentTypeOptions() {
   return DOCUMENT_TYPES.map((value) => ({ label: DOCUMENT_TYPE_LABELS[value], value }))
 }
+
+export interface DocumentTypeFilterOption {
+  label: string
+  value: DocumentType | null
+}
+
+// Used by DocumentDirectoryView.vue's file-type filter — mirrors
+// interviewResultFilterOptions() in interview-ui.ts (an extra "All types"
+// option representing "no filter", alongside every real value).
+export function documentTypeFilterOptions(): DocumentTypeFilterOption[] {
+  return [
+    { label: 'All types', value: null },
+    ...DOCUMENT_TYPES.map((value) => ({ label: DOCUMENT_TYPE_LABELS[value], value })),
+  ]
+}
