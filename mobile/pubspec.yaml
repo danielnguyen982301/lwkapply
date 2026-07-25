@@ -1,0 +1,45 @@
+name: lwkapply_mobile
+description: "LwkApply - Job Application Tracker — mobile client"
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Networking
+  dio: ^5.5.0+1
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Token storage (see auth/token-strategy notes before implementing auth screen)
+  flutter_secure_storage: ^9.2.2
+
+  # Environment config (dev/staging/prod API base URLs)
+  flutter_dotenv: ^5.1.0
+
+  # Icons / basic UI polish
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  riverpod_generator: ^2.4.0
+  build_runner: ^2.4.11
+  custom_lint: ^0.6.4
+  riverpod_lint: ^2.3.10
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env.development
+    - .env.production
