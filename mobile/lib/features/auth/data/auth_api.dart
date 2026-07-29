@@ -1,0 +1,144 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/config/env_config.dart';
+import '../domain/user.dart';
+
+/// Thrown for any non-2xx auth response so callers get a message worth
+/// showing a user, instead of a raw DioException.
+class AuthException implements Exception {
+  AuthException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class AuthTokenResponse {
+  AuthTokenResponse({required this.accessToken, required this.refreshToken});
+
+  final String accessToken;
+  final String refreshToken;
+
+  factory AuthTokenResponse.fromJson(Map<String, dynamic> json) {
+    // NOTE (backend TODO): `refresh_token` in the JSON body only exists
+    // for requests carrying `X-Client-Platform: mobile`. Web keeps getting
+    // the refresh token ONLY via httpOnly cookie — do not change that.
+    // See BACKEND_SUMMARY.md's auth section once this lands.
+    final refreshToken = json['refresh_token'] as String?;
+    if (refreshToken == null) {
+      throw AuthException(
+        'Server did not return a refresh_token for this client. '
+        'Backend needs the mobile-client branch in /auth/login '
+        'and /auth/refresh',
+      );
+    }
+    return AuthTokenResponse(
+      accessToken: json['access_token'] as String,
+      refreshToken: refreshToken,
+    );
+  }
+}
+
+/// Raw HTTP calls against the auth endpoints. Uses its own bare Dio
+/// instance (base URL only, no interceptors) rather than the shared
+/// `apiClientProvider` — the shared client's interceptor will call back
+/// into refresh logic on a 401, and auth calls must never recurse into
+/// that.
+class AuthApi {
+  AuthApi(this._dio);
+
+  final Dio _dio;
+
+  static const _mobileHeader = {'X-Client-Platform': 'mobile'};
+
+  Future<AuthTokenResponse> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+        options: Options(headers: _mobileHeader),
+      );
+      return AuthTokenResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
+  Future<AuthTokenResponse> register({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/register',
+        data: {'email': email, 'password': password},
+        options: Options(headers: _mobileHeader),
+      );
+      return AuthTokenResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
+  Future<AuthTokenResponse> refresh({required String refreshToken}) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken},
+        options: Options(headers: _mobileHeader),
+      );
+      return AuthTokenResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
+  Future<User> fetchMe({required String accessToken}) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/users/me',
+        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+      );
+      return User.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
+  Future<void> logout({required String refreshToken}) async {
+    try {
+      await _dio.post<void>(
+        '/auth/logout',
+        data: {'refresh_token': refreshToken},
+        options: Options(headers: _mobileHeader),
+      );
+    } on DioException {
+      // Best-effort: even if the server call fails, the caller still
+      // clears local state/secure storage. A stale refresh token left
+      // on the server expires on its own.
+    }
+  }
+
+  String _messageFor(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['detail'] is String) {
+      return data['detail'] as String;
+    }
+    return switch (e.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout =>
+        'Connection timed out. Try again.',
+      DioExceptionType.connectionError => 'No connection. Check your network.',
+      _ => 'Something went wrong. Please try again.',
+    };
+  }
+}
+
+final authApiProvider = Provider<AuthApi>((ref) {
+  final dio = Dio(BaseOptions(baseUrl: EnvConfig.apiBaseUrl));
+  return AuthApi(dio);
+});
