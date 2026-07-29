@@ -42,16 +42,21 @@ class AuthRepository {
   }
 
   /// Called on app startup. Returns null if there's no stored refresh
-  /// token or it's no longer valid — caller should treat that as
-  /// "go to login", not an error to surface to the user.
+  /// token, it's no longer valid, or reading it fails for any reason
+  /// (e.g. a platform-storage error) — caller should treat that as
+  /// "go to login", not an error to surface to the user, and definitely
+  /// not something that leaves the app stuck mid-restore.
   Future<AuthResult?> tryRestoreSession() async {
-    final storedRefreshToken = await _tokenStorage.readRefreshToken();
-    if (storedRefreshToken == null) return null;
-
     try {
+      final storedRefreshToken = await _tokenStorage.readRefreshToken();
+      if (storedRefreshToken == null) return null;
       return await _refreshWith(storedRefreshToken);
     } on AuthException {
       await _tokenStorage.clear();
+      return null;
+    } catch (_) {
+      // Any other failure (storage/platform error) — fail safe rather
+      // than leave AuthController stuck at AuthStatus.unknown.
       return null;
     }
   }
