@@ -78,7 +78,7 @@ class _PlaceholderHomeScreen extends ConsumerWidget {
       ),
       body: Center(
         child: Text(
-          user == null ? 'Loading...' : 'Signed in as ${user.email}',
+          user == null ? 'Loading...' : 'Signed in as ${user.fullName}',
         ),
       ),
     );
