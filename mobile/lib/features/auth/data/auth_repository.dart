@@ -34,8 +34,15 @@ class AuthRepository {
   Future<AuthResult> register({
     required String email,
     required String password,
+    required String firstName,
+    required String lastName,
   }) async {
-    final tokens = await _api.register(email: email, password: password);
+    final tokens = await _api.register(
+      email: email,
+      password: password,
+      firstName: firstName,
+      lastName: lastName,
+    );
     await _tokenStorage.saveRefreshToken(tokens.refreshToken);
     final user = await _api.fetchMe(accessToken: tokens.accessToken);
     return AuthResult(user: user, accessToken: tokens.accessToken);
