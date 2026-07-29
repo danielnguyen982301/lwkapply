@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:form_builder_validators/form_builder_validators.dart';
 
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -12,35 +14,17 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormBuilderState>();
   bool _obscurePassword = true;
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Email is required';
-    final emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!emailPattern.hasMatch(value.trim())) return 'Enter a valid email';
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) return 'Password is required';
-    return null;
-  }
-
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final isValid = _formKey.currentState?.saveAndValidate() ?? false;
+    if (!isValid) return;
+
+    final values = _formKey.currentState!.value;
     await ref.read(authControllerProvider.notifier).login(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
+          email: (values['email'] as String).trim(),
+          password: values['password'] as String,
         );
   }
 
@@ -65,7 +49,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Form(
+            child: FormBuilder(
               key: _formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
@@ -79,8 +63,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     semanticsLabel: 'LwkApply — sign in',
                   ),
                   const SizedBox(height: 32),
-                  TextFormField(
-                    controller: _emailController,
+                  FormBuilderTextField(
+                    name: 'email',
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     autofillHints: const [AutofillHints.email],
@@ -89,11 +73,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       labelText: 'Email',
                       border: OutlineInputBorder(),
                     ),
-                    validator: _validateEmail,
+                    // Composable validators, same spirit as vee-validate's
+                    // schema-per-field, just function-composition instead
+                    // of a single zod schema.
+                    validator: FormBuilderValidators.compose([
+                      FormBuilderValidators.required(
+                        errorText: 'Email is required',
+                      ),
+                      FormBuilderValidators.email(
+                        errorText: 'Enter a valid email',
+                      ),
+                    ]),
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
+                  FormBuilderTextField(
+                    name: 'password',
                     obscureText: _obscurePassword,
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.password],
@@ -115,8 +109,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
-                    validator: _validatePassword,
-                    onFieldSubmitted: (_) => _submit(),
+                    validator: FormBuilderValidators.required(
+                      errorText: 'Password is required',
+                    ),
+                    onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
