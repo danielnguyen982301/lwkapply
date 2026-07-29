@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -49,7 +49,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LwkApply'), findsWidgets);
-    expect(find.widgetWithText(TextFormField, 'Email'), findsOneWidget);
-    expect(find.widgetWithText(TextFormField, 'Password'), findsOneWidget);
+    expect(find.widgetWithText(FormBuilderTextField, 'Email'), findsOneWidget);
+    expect(
+      find.widgetWithText(FormBuilderTextField, 'Password'),
+      findsOneWidget,
+    );
   });
 }
