@@ -2,7 +2,7 @@ name: Mobile CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "mobile/**"
   pull_request:
@@ -27,7 +27,7 @@ jobs:
         run: flutter pub get
 
       - name: Create env files
-        # .env.development / .env.production are gitignored (see SETUP.md) —
+        # .env.development / .env.production are gitignored —
         # CI needs them to exist on disk too, since pubspec.yaml declares
         # them as assets and `flutter analyze`/build fail if a declared
         # asset is missing. Values here only need to be *present*, not
