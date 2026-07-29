@@ -21,10 +21,6 @@ class AuthTokenResponse {
   final String refreshToken;
 
   factory AuthTokenResponse.fromJson(Map<String, dynamic> json) {
-    // NOTE (backend TODO): `refresh_token` in the JSON body only exists
-    // for requests carrying `X-Client-Platform: mobile`. Web keeps getting
-    // the refresh token ONLY via httpOnly cookie — do not change that.
-    // See BACKEND_SUMMARY.md's auth section once this lands.
     final refreshToken = json['refresh_token'] as String?;
     if (refreshToken == null) {
       throw AuthException(
@@ -71,14 +67,25 @@ class AuthApi {
   Future<AuthTokenResponse> register({
     required String email,
     required String password,
+    required String firstName,
+    required String lastName,
   }) async {
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
+      // Backend's POST /auth/register only creates the account and
+      // returns UserRead — it does not log the user in or issue tokens
+      // (see backend/app/api/v1/endpoints/auth.py::register). Chain an
+      // explicit login call afterward rather than assuming register
+      // returns a token response.
+      await _dio.post<Map<String, dynamic>>(
         '/auth/register',
-        data: {'email': email, 'password': password},
-        options: Options(headers: _mobileHeader),
+        data: {
+          'email': email,
+          'password': password,
+          'first_name': firstName,
+          'last_name': lastName,
+        },
       );
-      return AuthTokenResponse.fromJson(response.data!);
+      return login(email: email, password: password);
     } on DioException catch (e) {
       throw AuthException(_messageFor(e));
     }
