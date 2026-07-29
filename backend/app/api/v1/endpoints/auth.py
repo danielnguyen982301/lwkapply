@@ -15,6 +15,7 @@ Design notes:
 """
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -25,7 +26,7 @@ from app.core.cookies import (
     set_auth_cookies,
     clear_auth_cookies,
 )
-from app.api.deps import verify_csrf
+from app.api.deps import is_mobile_client, verify_csrf_unless_mobile
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -39,6 +40,7 @@ from app.schemas.auth import (
     LoginRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
+    RefreshRequest,
     TokenResponse,
 )
 from app.schemas.user import UserCreate, UserRead
@@ -47,8 +49,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _issue_tokens(user_id) -> TokenResponse:
-    return TokenResponse(access_token=create_access_token(str(user_id)))
+def _issue_tokens(user_id, refresh_token: Optional[str] = None) -> TokenResponse:
+    """Builds the JSON response body for /login and /refresh.
+
+    `refresh_token` must only ever be passed by mobile call sites (see
+    `is_mobile_client`) - never pass it unconditionally, or web's fetch
+    response would carry the refresh token in plaintext JSON, defeating
+    the httpOnly-cookie protection entirely.
+    """
+    return TokenResponse(
+        access_token=create_access_token(str(user_id)),
+        refresh_token=refresh_token,
+    )
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -73,7 +85,12 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
@@ -83,18 +100,38 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     refresh_token = create_refresh_token(str(user.id))
     csrf_token = generate_csrf_token()
 
+    # Always set the cookie pair, even on a mobile request - mobile just
+    # ignores it, and it keeps this one code path identical for both
+    # client types. Only the JSON body branches on client type below.
     set_auth_cookies(response, refresh_token, csrf_token)
 
-    return _issue_tokens(user.id)
+    return _issue_tokens(
+        user.id,
+        refresh_token=refresh_token if is_mobile_client(request) else None,
+    )
 
 
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    dependencies=[Depends(verify_csrf)],
+    dependencies=[Depends(verify_csrf_unless_mobile)],
 )
-def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
-    token = request.cookies.get(REFRESH_COOKIE_NAME)
+def refresh(
+    request: Request,
+    response: Response,
+    payload: Optional[RefreshRequest] = None,
+    db: Session = Depends(get_db),
+):
+    mobile = is_mobile_client(request)
+
+    if mobile:
+        # Mobile has no cookie to read from - it sends the refresh token
+        # explicitly in the body instead (see mobile/lib/features/auth/
+        # data/auth_api.dart::refresh).
+        token = payload.refresh_token if payload else None
+    else:
+        token = request.cookies.get(REFRESH_COOKIE_NAME)
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
@@ -115,9 +152,14 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     new_refresh_token = create_refresh_token(str(user.id))
     new_csrf_token = generate_csrf_token()
 
+    # Always set the cookie pair, same reasoning as /login - mobile
+    # ignores it, one code path for both client types.
     set_auth_cookies(response, new_refresh_token, new_csrf_token)
 
-    return _issue_tokens(user.id)
+    return _issue_tokens(
+        user.id,
+        refresh_token=new_refresh_token if mobile else None,
+    )
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
@@ -154,8 +196,14 @@ def confirm_password_reset(
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(verify_csrf)],
+    dependencies=[Depends(verify_csrf_unless_mobile)],
 )
 def logout(response: Response):
+    # No server-side refresh-token store exists for either client type -
+    # refresh tokens are stateless, signature-verified JWTs, not tracked
+    # in the DB - so there's nothing to revoke here beyond the cookie.
+    # Mobile's logout is effectively just deleting its local secure-
+    # storage copy (see AuthRepository.logout()); this call is best-effort
+    # for it and a no-op response either way.
     clear_auth_cookies(response)
     return None
