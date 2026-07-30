@@ -86,6 +86,133 @@
 │   ├── DATABASE.md
 │   └── ROADMAP.md
 ├── folder-structure.txt
+├── mobile
+│   ├── MOBILE_SUMMARY.md
+│   ├── analysis_options.yaml
+│   ├── android
+│   │   ├── app
+│   │   │   ├── build.gradle.kts
+│   │   │   └── src
+│   │   │       ├── debug
+│   │   │       │   └── AndroidManifest.xml
+│   │   │       ├── main
+│   │   │       │   ├── AndroidManifest.xml
+│   │   │       │   ├── kotlin
+│   │   │       │   │   └── io
+│   │   │       │   │       └── github
+│   │   │       │   │           └── danielnguyen982301
+│   │   │       │   │               └── mobile
+│   │   │       │   │                   └── MainActivity.kt
+│   │   │       │   └── res
+│   │   │       │       ├── drawable
+│   │   │       │       │   └── launch_background.xml
+│   │   │       │       ├── drawable-v21
+│   │   │       │       │   └── launch_background.xml
+│   │   │       │       ├── mipmap-hdpi
+│   │   │       │       │   └── ic_launcher.png
+│   │   │       │       ├── mipmap-mdpi
+│   │   │       │       │   └── ic_launcher.png
+│   │   │       │       ├── mipmap-xhdpi
+│   │   │       │       │   └── ic_launcher.png
+│   │   │       │       ├── mipmap-xxhdpi
+│   │   │       │       │   └── ic_launcher.png
+│   │   │       │       ├── mipmap-xxxhdpi
+│   │   │       │       │   └── ic_launcher.png
+│   │   │       │       ├── values
+│   │   │       │       │   └── styles.xml
+│   │   │       │       └── values-night
+│   │   │       │           └── styles.xml
+│   │   │       └── profile
+│   │   │           └── AndroidManifest.xml
+│   │   ├── build.gradle.kts
+│   │   ├── gradle
+│   │   │   └── wrapper
+│   │   │       └── gradle-wrapper.properties
+│   │   ├── gradle.properties
+│   │   └── settings.gradle.kts
+│   ├── ios
+│   │   ├── Flutter
+│   │   │   ├── AppFrameworkInfo.plist
+│   │   │   ├── Debug.xcconfig
+│   │   │   └── Release.xcconfig
+│   │   ├── Runner
+│   │   │   ├── AppDelegate.swift
+│   │   │   ├── Assets.xcassets
+│   │   │   │   ├── AppIcon.appiconset
+│   │   │   │   │   ├── Contents.json
+│   │   │   │   │   ├── Icon-App-1024x1024@1x.png
+│   │   │   │   │   ├── Icon-App-20x20@1x.png
+│   │   │   │   │   ├── Icon-App-20x20@2x.png
+│   │   │   │   │   ├── Icon-App-20x20@3x.png
+│   │   │   │   │   ├── Icon-App-29x29@1x.png
+│   │   │   │   │   ├── Icon-App-29x29@2x.png
+│   │   │   │   │   ├── Icon-App-29x29@3x.png
+│   │   │   │   │   ├── Icon-App-40x40@1x.png
+│   │   │   │   │   ├── Icon-App-40x40@2x.png
+│   │   │   │   │   ├── Icon-App-40x40@3x.png
+│   │   │   │   │   ├── Icon-App-60x60@2x.png
+│   │   │   │   │   ├── Icon-App-60x60@3x.png
+│   │   │   │   │   ├── Icon-App-76x76@1x.png
+│   │   │   │   │   ├── Icon-App-76x76@2x.png
+│   │   │   │   │   └── Icon-App-83.5x83.5@2x.png
+│   │   │   │   └── LaunchImage.imageset
+│   │   │   │       ├── Contents.json
+│   │   │   │       ├── LaunchImage.png
+│   │   │   │       ├── LaunchImage@2x.png
+│   │   │   │       ├── LaunchImage@3x.png
+│   │   │   │       └── README.md
+│   │   │   ├── Base.lproj
+│   │   │   │   ├── LaunchScreen.storyboard
+│   │   │   │   └── Main.storyboard
+│   │   │   ├── Info.plist
+│   │   │   ├── Runner-Bridging-Header.h
+│   │   │   └── SceneDelegate.swift
+│   │   ├── Runner.xcodeproj
+│   │   │   ├── project.pbxproj
+│   │   │   ├── project.xcworkspace
+│   │   │   │   ├── contents.xcworkspacedata
+│   │   │   │   └── xcshareddata
+│   │   │   │       ├── IDEWorkspaceChecks.plist
+│   │   │   │       └── WorkspaceSettings.xcsettings
+│   │   │   └── xcshareddata
+│   │   │       └── xcschemes
+│   │   │           └── Runner.xcscheme
+│   │   ├── Runner.xcworkspace
+│   │   │   ├── contents.xcworkspacedata
+│   │   │   └── xcshareddata
+│   │   │       ├── IDEWorkspaceChecks.plist
+│   │   │       └── WorkspaceSettings.xcsettings
+│   │   └── RunnerTests
+│   │       └── RunnerTests.swift
+│   ├── lib
+│   │   ├── app
+│   │   │   ├── app.dart
+│   │   │   └── router.dart
+│   │   ├── core
+│   │   │   ├── config
+│   │   │   │   └── env_config.dart
+│   │   │   ├── network
+│   │   │   │   └── api_client.dart
+│   │   │   └── theme
+│   │   │       └── app_theme.dart
+│   │   ├── features
+│   │   │   └── auth
+│   │   │       ├── data
+│   │   │       │   ├── auth_api.dart
+│   │   │       │   ├── auth_repository.dart
+│   │   │       │   └── token_storage.dart
+│   │   │       ├── domain
+│   │   │       │   ├── auth_state.dart
+│   │   │       │   └── user.dart
+│   │   │       └── presentation
+│   │   │           ├── auth_controller.dart
+│   │   │           ├── login_screen.dart
+│   │   │           └── register_screen.dart
+│   │   └── main.dart
+│   ├── pubspec.lock
+│   ├── pubspec.yaml
+│   └── test
+│       └── app_smoke_test.dart
 ├── pyrightconfig.json
 └── webapp
     ├── WEBAPP_SUMMARY.md
@@ -169,4 +296,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-36 directories, 134 files
+87 directories, 210 files
