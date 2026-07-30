@@ -2,7 +2,7 @@
 
 ## Project Setup
 
-- [ ] Create repository structure
+- [x] Create repository structure
 - [x] Configure Docker environment
 - [x] Configure development workflow
 - [x] Setup GitHub Actions
@@ -27,6 +27,11 @@
 - [x] Password reset
 - [x] httpOnly-cookie refresh token + CSRF double-submit check on
       `/auth/refresh` and `/auth/logout` (see BACKEND-SUMMARY.md)
+- [x] Mobile-client support for `/auth/login`, `/auth/refresh`,
+      `/auth/logout` (`X-Client-Platform: mobile` header, optional
+      `refresh_token` in the JSON body, CSRF skipped for mobile since it
+      never holds the cookie CSRF protects) — see BACKEND_SUMMARY.md and
+      MOBILE_SUMMARY.md
 
 ### Applications
 
@@ -158,10 +163,17 @@ BACKEND_SUMMARY.md for the reasoning.
 
 ## Mobile
 
-- [ ] Initialize Flutter project
-- [ ] Authentication flow
+- [x] Initialize Flutter project — Riverpod + go_router + Dio scaffold,
+      lint config, CI workflow (`mobile-ci.yml`) — see MOBILE_SUMMARY.md
+- [x] Authentication flow — login + registration screens
+      (`flutter_form_builder`), silent session restore on app start,
+      refresh token in `flutter_secure_storage`, bearer + refresh-on-401
+      Dio interceptor — see MOBILE_SUMMARY.md
+- [ ] Password reset screen (backend endpoints already exist; no mobile
+      UI/repository method calls them yet)
 - [ ] Application management
 - [ ] Notifications
+- [ ] Offline support
 
 ---
 
