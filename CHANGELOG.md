@@ -1,5 +1,125 @@
 # Changelog
 
+## v0.6.0 (in progress)
+
+### Added
+
+- **Mobile app scaffold** (`mobile/`), the start of Phase 6 (Mobile
+  Application): Flutter + Riverpod + go_router + Dio, per the
+  architecture doc's planned stack. Feature-based `lib/` folder
+  structure (`app/`, `core/`, `features/`, `shared/`) mirroring the
+  backend's API/Service/Repository layering; `analysis_options.yaml`
+  roughly matching the strictness of the backend's `ruff`/webapp's
+  `eslint` configs; `.github/workflows/mobile-ci.yml` (format check →
+  analyze → test → debug APK build, `mobile/**`-scoped, Android-only for
+  now — an iOS build step needs a `macos-latest` runner, deferred on
+  cost/speed grounds until iOS testing is actually underway);
+  `flutter_dotenv`-based env config (`.env.development`/
+  `.env.production`, gitignored, `.env.example` committed as the
+  template — non-secret by design, since these are bundled as app
+  assets and technically extractable from a built app). One smoke test
+  (`test/app_smoke_test.dart`). Full detail in the new
+  `mobile/MOBILE_SUMMARY.md` (see below)
+- **Mobile authentication** (`mobile/lib/features/auth/`): login and
+  registration screens, silent session-restore on app start, and the
+  full token lifecycle:
+  - **Token storage strategy** (the one real architecture decision this
+    phase needed): access token in memory only
+    (`AuthController`'s Riverpod state), refresh token in
+    `flutter_secure_storage` (Keychain/Keystore-encrypted) — the
+    standard native-mobile pattern, chosen over persisting a cookie jar
+    that would have reused the webapp's cookie-based refresh flow
+    as-is. See `MOBILE_SUMMARY.md`'s token-storage note for the full
+    trade-off writeup (cookie-jar persistence isn't hardware-encrypted;
+    CSRF double-submit, which that approach would still need, defends
+    against a browser-specific attack mobile was never exposed to)
+  - `token_storage.dart` (secure-storage wrapper), `auth_api.dart` (raw
+    Dio calls on their own bare Dio instance, deliberately separate from
+    the shared client — see "Two Dio instances" below),
+    `auth_repository.dart` (single source of truth for reading/writing
+    the refresh token; `tryRestoreSession()` fails safe to
+    "unauthenticated" on _any_ error, not just an explicit auth
+    failure, so a storage-read error can't leave the app stuck at
+    `AuthStatus.unknown` forever)
+  - `auth_controller.dart` (Riverpod `StateNotifier<AuthState>`),
+    `login_screen.dart` / `register_screen.dart` — both built on
+    `flutter_form_builder` + `form_builder_validators` rather than bare
+    `Form`/`TextFormField`, same reasoning as the webapp's vee-validate
+    adoption (composable validators, no hand-rolled per-field
+    `validate()` functions); this is the pattern every future mobile
+    form should follow. Both forms validate on submit only
+    (no `autovalidateMode`), which sidesteps the stale cross-field
+    validation problem that made the webapp drop PrimeVue Forms
+    (CHANGELOG v0.5.0) without needing an explicit re-validation
+    trigger. Password rules mirror `backend/app/schemas/user.py` exactly
+    (8-128 characters, plus a client-side copy of the bcrypt 72-byte
+    check)
+  - `core/network/api_client.dart`'s shared Dio instance gains
+    bearer-token injection and a queued refresh-on-401 interceptor
+    (concurrent 401s share one in-flight refresh rather than each
+    triggering their own), mirroring `webapp/src/lib/api.ts`.
+    Deliberately excludes `/auth/*` routes from the retry logic — the
+    same infinite-refresh-loop trap the webapp hit and fixed in
+    CHANGELOG v0.4.0
+  - `app/router.dart` gains auth-aware redirects mirroring the webapp's
+    `authGuard`: `/login` and `/register` are guest-only routes, no
+    redirect happens while `AuthStatus.unknown` (startup restore in
+    flight), and Riverpod state changes are bridged into go_router's
+    `Listenable`-based refresh mechanism so login/logout immediately
+    re-runs the redirect logic
+- **`mobile/MOBILE_SUMMARY.md`** — new summary doc, same role as
+  `BACKEND_SUMMARY.md`/`WEBAPP_SUMMARY.md`: what's implemented, what
+  isn't yet, project structure, known gotchas, dev workflow
+
+### Changed (backend — mobile-client support)
+
+- `TokenResponse` (`app/schemas/auth.py`) gains an optional
+  `refresh_token` field, populated **only** when a request carries an
+  `X-Client-Platform: mobile` header (new
+  `app/api/deps.py::is_mobile_client()`). Web's response body is
+  completely unaffected — it keeps getting its refresh token
+  exclusively via the existing httpOnly cookie. Populating this field
+  unconditionally for every client would let an XSS payload on the web
+  app read the refresh token straight out of the fetch response,
+  defeating the entire reason that cookie is httpOnly
+- New `RefreshRequest` schema (`app/schemas/auth.py`): mobile has no
+  cookie to read a refresh token from (per the token-storage decision
+  above), so `/auth/refresh` now also accepts one explicitly in the
+  request body for mobile callers; web's refresh flow sends no body at
+  all and is unaffected (the new `payload` param is `Optional`)
+- `/auth/refresh` and `/auth/logout` moved from `Depends(verify_csrf)`
+  to a new `Depends(verify_csrf_unless_mobile)`
+  (`app/api/deps.py`) — CSRF double-submit defends against a _browser_
+  riding a cookie it holds cross-site; the mobile client never holds
+  that cookie meaningfully, so the check simply doesn't apply to it.
+  `verify_csrf` itself is untouched; the new function just wraps it
+  with an early return for mobile requests. Web's CSRF enforcement is
+  unchanged
+- `/auth/register` deliberately **left unchanged** — still returns
+  `UserRead` only, no auto-login, no tokens. The mobile client's
+  `register()` instead chains an explicit `login()` call afterward,
+  rather than the endpoint's contract changing for one client type
+- See `BACKEND_SUMMARY.md`'s new "A note on mobile-client auth support"
+  for the full writeup
+
+### Fixed
+
+Bugs caught and fixed during this pass, before landing on the working
+version described above:
+
+- `AuthRepository.tryRestoreSession()` only wrapped the refresh-call
+  failure case in error handling, not the initial secure-storage read —
+  a storage-read error (e.g. in a widget test with no real
+  Keychain/Keystore behind the platform channel, or in principle a real
+  device storage fault) could leave `AuthController` stuck at
+  `AuthStatus.unknown` indefinitely instead of falling back to the
+  login screen. Broadened to catch any error there
+- `mobile-ci.yml` failed `flutter analyze` on missing
+  `.env.development`/`.env.production` assets — both are gitignored, so
+  a clean CI checkout has nothing for `pubspec.yaml`'s asset
+  declarations to point at. Added an explicit step generating them from
+  `.env.example` before analyze/build, mirroring the local setup step
+
 ## v0.5.0 (in progress)
 
 ### Added
