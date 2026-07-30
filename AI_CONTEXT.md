@@ -22,9 +22,10 @@ When determining current project status:
 
 1. `BACKEND_SUMMARY.md` = backend implementation status
 2. `WEBAPP_SUMMARY.md` = web app implementation status
-3. `TODO.md` = high-level task tracking
-4. `ROADMAP.md` = long-term feature planning
-5. `ARCHITECTURE.md` = intended architecture
+3. `MOBILE_SUMMARY.md` = mobile client implementation status
+4. `TODO.md` = high-level task tracking
+5. `ROADMAP.md` = long-term feature planning
+6. `ARCHITECTURE.md` = intended architecture
 
 If documentation conflicts:
 
@@ -63,7 +64,7 @@ Potential future expansion:
 ## High-Level Design
 
 ```text
-Web Application (Vue 3)
+Web Application (Vue 3) / Mobile (Flutter)
          |
          v
      FastAPI API
@@ -487,8 +488,9 @@ Before modifying code:
 
 1. Read `BACKEND_SUMMARY.md`.
 2. Read `WEBAPP_SUMMARY.md`.
-3. Read `TODO.md`.
-4. Inspect the actual code.
+3. Read `MOBILE_SUMMARY.md`.
+4. Read `TODO.md`.
+5. Inspect the actual code.
 
 Do not assume a roadmap feature already exists.
 
