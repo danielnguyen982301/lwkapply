@@ -7,7 +7,9 @@ and the start of Phase 4 (Interview Management) from the project roadmap.
 ## What's implemented
 
 - **Auth**: register, login (JWT access + refresh tokens), token refresh,
-  password reset (request/confirm)
+  password reset (request/confirm). As of this pass, `/login`,
+  `/refresh`, and `/logout` also support the mobile client — see "A note
+  on mobile-client auth support" below and `mobile/MOBILE_SUMMARY.md`
 - **Applications**: full CRUD, pagination, status filter, company/position
   search — all scoped to the authenticated user
 - **Interviews**: full CRUD, pagination, nested under
@@ -72,6 +74,59 @@ All Interview/Document/Contact endpoints enforce ownership by joining
 through `Application.user_id`, the same IDOR-prevention approach the
 Applications endpoints already used, just one hop further through the FK
 chain (Interview/Document/Contact → Application → User).
+
+### A note on mobile-client auth support
+
+`/auth/login`, `/auth/refresh`, and `/auth/logout` now branch on whether
+a request came from the mobile app or the web app. Full detail on the
+mobile side of this is in `mobile/MOBILE_SUMMARY.md`; here's the
+backend half:
+
+- **Detection**: `app/api/deps.py::is_mobile_client(request)` checks for
+  an `X-Client-Platform: mobile` header. Header lookups on
+  `request.headers` are case-insensitive, so this matches regardless of
+  how a client capitalizes it.
+- **`TokenResponse.refresh_token`** (`app/schemas/auth.py`) is a new,
+  optional field, populated **only** when `is_mobile_client()` is true.
+  Web's response body never includes it — it keeps getting its refresh
+  token exclusively via the existing httpOnly cookie. This is the one
+  detail to never get wrong here: populating this field unconditionally
+  would let any XSS payload on the web app read the refresh token
+  straight out of the fetch response, defeating the entire reason that
+  cookie is httpOnly in the first place. Don't add a call site that
+  passes `refresh_token` to `_issue_tokens()` without checking
+  `is_mobile_client()` first.
+- **New `RefreshRequest` schema** (`app/schemas/auth.py`): mobile has no
+  cookie to read a refresh token from (see MOBILE_SUMMARY.md's token-
+  storage-strategy note — mobile deliberately doesn't persist a cookie
+  jar), so it sends the refresh token explicitly in the `/auth/refresh`
+  request body. Web's refresh flow sends no body at all and is
+  unaffected — the `payload` parameter on the `refresh` endpoint is
+  `Optional`.
+- **CSRF**: `/auth/refresh` and `/auth/logout` moved from
+  `Depends(verify_csrf)` to a new `Depends(verify_csrf_unless_mobile)`
+  (`app/api/deps.py`). CSRF double-submit exists specifically to stop a
+  _browser_ from silently riding a cookie it holds for our site into a
+  request from some other site's page. The mobile app never holds that
+  cookie meaningfully, so there's no cookie for a hostile page to ride
+  in the first place — the check simply doesn't apply to it. Web's CSRF
+  enforcement is completely unchanged; `verify_csrf` itself wasn't
+  touched, `verify_csrf_unless_mobile` just wraps it with an early
+  return for mobile requests.
+- **`/auth/register` deliberately NOT changed** — it still only creates
+  the account and returns `UserRead`, no auto-login, no tokens. Giving
+  mobile a different (auto-login) contract here would mean either two
+  diverging behaviors for the same endpoint, or changing web's contract
+  too for no reason tied to mobile. The mobile client instead calls
+  `/auth/register` then an explicit `/auth/login` afterward — see
+  MOBILE_SUMMARY.md's `auth_api.dart` note.
+- **No server-side refresh-token revocation exists for either client
+  type** — refresh tokens are stateless, signature-verified JWTs, not
+  tracked in the DB, so `/auth/logout` is just cookie-clearing (web) or
+  a no-op (mobile, which only deletes its local secure-storage copy
+  client-side). This was already true before mobile support was added;
+  worth remembering if a future change assumes logout revokes anything
+  server-side.
 
 ### A note on the contacts directory endpoint
 
@@ -258,6 +313,9 @@ so there was no data to migrate, only the client/config layer:
   fine for resume-sized files, revisit if upload volume/size grows)
 - RBAC beyond a `role` column (no admin endpoints protected yet)
 - Interview reminder system
+- Password-reset support in the mobile client (backend endpoints already
+  exist and are unaffected by the mobile-client changes above; no mobile
+  UI calls them yet — see MOBILE_SUMMARY.md)
 
 ## Development workflow
 
