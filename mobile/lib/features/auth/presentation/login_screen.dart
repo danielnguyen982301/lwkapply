@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
+import 'package:go_router/go_router.dart';
 
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -123,6 +124,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Log in'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: isLoading ? null : () => context.go('/register'),
+                    child: const Text("Don't have an account? Sign up"),
                   ),
                 ],
               ),
