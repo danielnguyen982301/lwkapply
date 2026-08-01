@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/applications/presentation/applications_list_screen.dart';
 import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
+import '../shared/widgets/coming_soon_screen.dart';
+import 'app_shell.dart';
 
 /// Auth-aware router, mirroring webapp's `authGuard`
 /// (src/router/index.ts): redirect unauthenticated visitors away from
@@ -13,9 +16,15 @@ import '../features/auth/presentation/register_screen.dart';
 /// guest-only routes (login, register), and show a loading state while
 /// the startup session-restore check (`AuthStatus.unknown`) is in
 /// flight.
+///
+/// The authenticated section (`/applications`, `/interviews`,
+/// `/contacts`, `/documents`) is wrapped in a StatefulShellRoute so
+/// AppShell can render a persistent bottom nav bar around whichever tab
+/// is active — see app_shell.dart for why a bottom bar was chosen over
+/// a webapp-style side menu.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: '/applications',
     refreshListenable: _AuthControllerListenable(ref),
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
@@ -30,7 +39,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
       if (authState.isAuthenticated && isGuestRoute) {
-        return '/';
+        return '/applications';
       }
       return null;
     },
@@ -45,10 +54,56 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
       ),
-      GoRoute(
-        path: '/',
-        name: 'home',
-        builder: (context, state) => const _PlaceholderHomeScreen(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/applications',
+                name: 'applications',
+                builder: (context, state) => const ApplicationsListScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/interviews',
+                name: 'interviews',
+                builder: (context, state) => const ComingSoonScreen(
+                  title: 'Interviews',
+                  icon: Icons.event_outlined,
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/contacts',
+                name: 'contacts',
+                builder: (context, state) => const ComingSoonScreen(
+                  title: 'Contacts',
+                  icon: Icons.people_outline,
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/documents',
+                name: 'documents',
+                builder: (context, state) => const ComingSoonScreen(
+                  title: 'Documents',
+                  icon: Icons.description_outlined,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   );
@@ -64,31 +119,5 @@ class _AuthControllerListenable extends ChangeNotifier {
         notifyListeners();
       }
     });
-  }
-}
-
-class _PlaceholderHomeScreen extends ConsumerWidget {
-  const _PlaceholderHomeScreen();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authControllerProvider).user;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('LwkApply'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Log out',
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
-      body: Center(
-        child: Text(
-          user == null ? 'Loading...' : 'Signed in as ${user.fullName}',
-        ),
-      ),
-    );
   }
 }
