@@ -100,6 +100,24 @@ class ApplicationsListController extends StateNotifier<ApplicationsListState> {
       setFilters(search: '', clearStatusFilter: true);
 
   Future<void> refresh() => fetchFirstPage();
+
+  /// Removes one item locally after a successful delete, no refetch.
+  ///
+  /// Unlike create/update — where `refresh()` is used instead (see
+  /// ApplicationFormResult's docs: the list is server-sorted by
+  /// `updated_at desc`, so a save can change an item's correct
+  /// position) — a delete has no such ambiguity. The item is just gone;
+  /// removing it from `items` and decrementing `total` is always
+  /// correct, and it's a nicer mobile UX (no reload flicker, keeps
+  /// scroll position) for what's usually a delete triggered right from
+  /// this list.
+  void removeById(String id) {
+    if (!state.items.any((item) => item.id == id)) return;
+    state = state.copyWith(
+      items: state.items.where((item) => item.id != id).toList(),
+      total: state.total > 0 ? state.total - 1 : 0,
+    );
+  }
 }
 
 final applicationsListControllerProvider = StateNotifierProvider.autoDispose<
