@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/application.dart';
 import 'application_formatting.dart';
+import 'application_form_result.dart';
 import 'application_status_style.dart';
 import 'applications_list_controller.dart';
 import 'applications_list_state.dart';
@@ -19,10 +21,14 @@ import 'applications_list_state.dart';
 /// - **Status filter as a bottom sheet instead of a `<Select>`**: a
 ///   full-width tappable sheet is easier to hit accurately than a
 ///   dropdown on mobile.
-/// - **No inline Edit/Delete row actions yet**: the create/edit/delete
-///   flows haven't been built for mobile yet (this pass is list-only,
-///   matching the Kanban board's Phase 2 scope) — the FAB and each card
-///   are placeholders until that ships.
+/// - **No inline swipe-to-delete on a row**: delete lives on the Edit
+///   screen (behind a confirmation dialog) rather than a swipe gesture
+///   on the list — simpler to build first; worth adding a `Dismissible`
+///   shortcut later if that turns out to be a common action.
+///
+/// The FAB and each card push `ApplicationFormScreen` (create/edit
+/// respectively) and await its result — see `_openForm` for how the
+/// list reacts to a save vs. a delete.
 class ApplicationsListScreen extends ConsumerStatefulWidget {
   const ApplicationsListScreen({super.key});
 
@@ -70,6 +76,22 @@ class _ApplicationsListScreenState
     });
     // Rebuild so the clear ("x") button's visibility follows the field.
     setState(() {});
+  }
+
+  /// Pushes `location`, awaits the form screen's result, and applies it:
+  /// a save triggers a full `refresh()` (position in the list may have
+  /// changed — see ApplicationFormResult's docs), a delete removes the
+  /// one item locally. `null` (back/cancel) does nothing.
+  Future<void> _openForm(String location) async {
+    final result = await context.push<ApplicationFormResult>(location);
+    if (!mounted || result == null) return;
+    final controller = ref.read(applicationsListControllerProvider.notifier);
+    switch (result) {
+      case ApplicationSaved():
+        await controller.refresh();
+      case ApplicationDeleted(:final id):
+        controller.removeById(id);
+    }
   }
 
   Future<void> _pickStatusFilter(ApplicationStatus? current) async {
@@ -123,17 +145,12 @@ class _ApplicationsListScreenState
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
+            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Add Application is coming soon')),
-          );
-        },
+        onPressed: () => _openForm('/applications/new'),
         tooltip: 'New Application',
         child: const Icon(Icons.add),
       ),
@@ -252,7 +269,7 @@ class _ApplicationsListScreenState
                 state.hasActiveFilters
                     ? 'Try a different search term or status filter.'
                     : 'Once you save or apply to a role, it\'ll show up '
-                          'here so you can track it through every stage.',
+                        'here so you can track it through every stage.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
@@ -273,7 +290,11 @@ class _ApplicationsListScreenState
           if (index == state.items.length) {
             return _buildFooter(state);
           }
-          return _ApplicationCard(application: state.items[index]);
+          final application = state.items[index];
+          return _ApplicationCard(
+            application: application,
+            onTap: () => _openForm('/applications/${application.id}/edit'),
+          );
         },
       ),
     );
@@ -315,61 +336,69 @@ class _ApplicationsListScreenState
 }
 
 class _ApplicationCard extends StatelessWidget {
-  const _ApplicationCard({required this.application});
+  const _ApplicationCard({required this.application, required this.onTap});
 
   final Application application;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    application.company,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      application.company,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                _StatusChip(status: application.status),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(application.position, style: theme.textTheme.bodyMedium),
-            if (application.location != null) ...[
+                  const SizedBox(width: 8),
+                  _StatusChip(status: application.status),
+                ],
+              ),
               const SizedBox(height: 2),
-              Text(
-                application.location!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
+              Text(application.position, style: theme.textTheme.bodyMedium),
+              if (application.location != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  application.location!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
                 ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    formatSalary(
+                      application.salaryMin,
+                      application.salaryMax,
+                    ),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Text(
+                    'Applied ${formatDate(application.appliedDate)}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  formatSalary(application.salaryMin, application.salaryMax),
-                  style: theme.textTheme.bodySmall,
-                ),
-                Text(
-                  'Applied ${formatDate(application.appliedDate)}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -392,9 +421,9 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         status.label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: status.foregroundColor(context),
-          fontWeight: FontWeight.w600,
-        ),
+              color: status.foregroundColor(context),
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }
