@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/applications/presentation/application_form_screen.dart';
 import '../features/applications/presentation/applications_list_screen.dart';
 import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_controller.dart';
@@ -53,6 +54,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      // Create/Edit are deliberately top-level routes, not nested inside
+      // the Applications branch below: pushing here covers the whole
+      // screen, including AppShell's bottom nav bar, which is the
+      // expected UX for a form flow (no reason to let someone flip to
+      // the Interviews tab mid-edit). They still get the same
+      // authenticated-only protection as everything else, since
+      // `redirect` above only special-cases `/login`/`/register`.
+      GoRoute(
+        path: '/applications/new',
+        name: 'application-new',
+        builder: (context, state) => const ApplicationFormScreen(),
+      ),
+      GoRoute(
+        path: '/applications/:id/edit',
+        name: 'application-edit',
+        builder: (context, state) => ApplicationFormScreen(
+          applicationId: state.pathParameters['id'],
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
