@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/application.dart';
+import '../domain/application_draft.dart';
 
 /// Thrown for any non-2xx /applications response, mirroring
 /// AuthException (features/auth/data/auth_api.dart) — a message worth
@@ -53,10 +54,82 @@ class ApplicationsApi {
     }
   }
 
+  /// Mirrors GET /applications/{id}. Used by the form screen to load
+  /// full detail on open rather than trusting whatever's already in the
+  /// list's in-memory state — keeps the edit flow correct even when
+  /// reached some way other than tapping a card in the currently-loaded
+  /// list (e.g. a future deep link).
+  Future<Application> get(String id) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/applications/$id',
+      );
+      return Application.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApplicationsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors POST /applications.
+  Future<Application> create(ApplicationDraft draft) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/applications',
+        data: draft.toJson(),
+      );
+      return Application.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApplicationsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors PATCH /applications/{id}. The backend schema allows a
+  /// partial payload (`exclude_unset=True`), but the form always has
+  /// every field in hand (prefilled on load), so there's no reason to
+  /// track "only what changed" client-side just to send a smaller body.
+  Future<Application> update(String id, ApplicationDraft draft) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/applications/$id',
+        data: draft.toJson(),
+      );
+      return Application.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApplicationsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors DELETE /applications/{id} (204 No Content on success).
+  Future<void> delete(String id) async {
+    try {
+      await _dio.delete<void>('/applications/$id');
+    } on DioException catch (e) {
+      throw ApplicationsException(_messageFor(e));
+    }
+  }
+
   String _messageFor(DioException e) {
     final data = e.response?.data;
-    if (data is Map && data['detail'] is String) {
-      return data['detail'] as String;
+    if (data is Map) {
+      final detail = data['detail'];
+      if (detail is String) {
+        return detail;
+      }
+      if (detail is List && detail.isNotEmpty) {
+        // FastAPI shapes a 422 differently depending on how it's raised:
+        // automatic Pydantic-validation errors (e.g. a missing
+        // `company`) send `detail` as a list of `{loc, msg, type}`
+        // objects; manually-raised HTTPExceptions (e.g. this API's
+        // salary-range check) send a plain string instead. The plain
+        // `data['detail'] is String` check above only ever caught the
+        // second case — this branch covers the first, which every
+        // required-field/length/type validation error on this form
+        // will actually hit.
+        final first = detail.first;
+        if (first is Map && first['msg'] is String) {
+          return first['msg'] as String;
+        }
+      }
     }
     return switch (e.type) {
       DioExceptionType.connectionTimeout ||
