@@ -67,6 +67,27 @@
     flight), and Riverpod state changes are bridged into go_router's
     `Listenable`-based refresh mechanism so login/logout immediately
     re-runs the redirect logic
+- **Bottom navigation shell** (`app/app_shell.dart` + `router.dart`'s
+  `StatefulShellRoute.indexedStack`): 4 tabs — Applications (default),
+  Interviews, Contacts, Documents — chosen over the webapp's side menu;
+  see `app_shell.dart`'s doc comment for the reasoning.
+  Interviews/Contacts/Documents render `ComingSoonScreen`
+  (`shared/widgets/coming_soon_screen.dart`) behind their tabs. Old
+  placeholder home screen at `/` is gone; `ApplicationsListScreen` at
+  `/applications` is now `initialLocation`
+- **Applications feature** (`lib/features/applications/`), the first
+  real feature screens, mirroring `webapp/src/views/applications/
+ApplicationListView.vue` / `ApplicationFormView.vue` and following the
+  same `data`/`domain`/`presentation` split as `features/auth/`: list
+  (search, status filter, infinite scroll, pull-to-refresh) and a shared
+  create/edit form with delete. Reasoning for each mobile-specific
+  choice (infinite scroll vs. the webapp's `Paginator`, the salary
+  min≤max cross-field check, why `appliedDate` avoids
+  `FormBuilderDateTimePicker`, why a save refreshes the list instead of
+  patching in place, a fix to the API error parser for FastAPI's
+  list-shaped 422s) is documented in each file directly rather than
+  repeated here — see the files under `presentation/` and
+  `data/applications_api.dart`
 - **`mobile/MOBILE_SUMMARY.md`** — new summary doc, same role as
   `BACKEND_SUMMARY.md`/`WEBAPP_SUMMARY.md`: what's implemented, what
   isn't yet, project structure, known gotchas, dev workflow
