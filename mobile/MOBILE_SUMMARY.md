@@ -1,10 +1,10 @@
 # LwkApply - Job Tracker — Mobile Client
 
-Flutter + Riverpod + go_router + Dio, implementing the start of Phase 6
-(Mobile Application) from the roadmap: project scaffold and the full
-authentication flow (login, registration, session restore). No feature
-screens (Applications, Interviews, Contacts, Documents) exist yet — this
-is foundation only.
+Flutter + Riverpod + go_router + Dio, implementing Phase 6 (Mobile
+Application): project scaffold, auth, a 4-tab bottom nav shell, and the
+first feature screens (Applications — list/create/edit/delete).
+Interviews, Contacts, Documents have nav tabs wired up but are still
+`ComingSoonScreen` placeholders.
 
 Package name: `lwkapply_mobile`.
 
@@ -103,29 +103,56 @@ start. No password-reset screen yet.
     `Form`/`TextFormField` for the same reason the webapp adopted
     vee-validate: composable validators, no per-field hand-rolled
     `validate()` functions. **Use this same pattern for every future
-    form** (Application form, Interview scheduling, Contact dialogs) —
-    don't mix bare `TextFormField` and `FormBuilderTextField` in the same
-    app. If the Application form's salary-range cross-field validation
-    (min ≤ max, same rule the backend enforces) turns out to be awkward
-    in form_builder, `reactive_forms` is the documented fallback —
-    revisit only if that actually happens, not preemptively
+    form** — don't mix bare `TextFormField` and `FormBuilderTextField` in
+    the same app (see `features/applications/presentation/
+application_form_screen.dart` for how cross-field validation ended
+    up working out fine in form_builder, no `reactive_forms` needed)
 - **`lib/core/network/api_client.dart`** — the shared Dio instance used
-  by every _other_ feature (once they exist). Bearer-token injection +
-  queued refresh-on-401 (concurrent 401s share one in-flight refresh
-  call rather than each triggering their own), mirroring
-  `webapp/src/lib/api.ts`. Deliberately excludes `/auth/*` routes from
-  the retry logic — the same infinite-refresh-loop trap the webapp hit
-  and fixed in CHANGELOG.md v0.4.0
+  by every _other_ feature. Bearer-token injection + queued
+  refresh-on-401, mirroring `webapp/src/lib/api.ts`. Excludes `/auth/*`
+  from retry logic (CHANGELOG v0.4.0's fix). `features/applications/
+data/applications_api.dart` is the first non-auth consumer
 - **`lib/app/router.dart`** — auth-aware redirects mirroring the
-  webapp's `authGuard`: `/login` and `/register` are guest-only routes,
-  everything else requires `AuthStatus.authenticated`, and no redirect
-  happens at all while `AuthStatus.unknown` (startup restore in
-  progress) so the app doesn't flash to the login screen before a
-  silent restore has a chance to complete. Bridges Riverpod state
-  changes into go_router's `Listenable`-based refresh mechanism via a
-  small `ChangeNotifier` wrapper, so login/logout immediately re-runs
-  the redirect logic without manually calling `router.refresh()`
-  anywhere
+  webapp's `authGuard`. Now also defines the bottom-nav shell route and
+  the Applications form routes — see below
+
+### Navigation shell
+
+`lib/app/app_shell.dart` + `router.dart`'s `StatefulShellRoute
+.indexedStack`: bottom `NavigationBar`, 4 tabs (Applications default,
+Interviews, Contacts, Documents). Chosen over the webapp's side menu —
+comments in `app_shell.dart` cover the reasoning (discoverability,
+`IndexedStack` keeping each tab's scroll/nav state alive). Interviews/
+Contacts/Documents render `ComingSoonScreen`
+(`lib/shared/widgets/coming_soon_screen.dart`) for now. Old placeholder
+home screen (route `/`) is gone; `ApplicationsListScreen` at
+`/applications` is `initialLocation`, and its logout button lives on
+that screen's `AppBar` now.
+
+### Applications feature (`lib/features/applications/`)
+
+First real feature screens, same `data`/`domain`/`presentation` split
+as `auth/`. Mirrors `webapp/src/views/applications/
+ApplicationListView.vue` / `ApplicationFormView.vue`. Full reasoning
+(why infinite scroll over a `Paginator`, the salary cross-field
+validation approach, why `appliedDate` avoids `FormBuilderDateTimePicker`,
+the list/form sync strategy, the FastAPI error-shape fix) is in each
+file's doc comments — worth reading there rather than duplicating here:
+
+- `domain/application.dart`, `application_draft.dart`
+- `data/applications_api.dart`
+- `presentation/applications_list_state.dart`,
+  `applications_list_controller.dart`, `applications_list_screen.dart`
+- `presentation/application_form_screen.dart`, `application_form_result.dart`
+- `presentation/application_status_style.dart`, `application_formatting.dart`
+
+One thing worth flagging at this level rather than a single file's: the
+list is ordered by `updated_at DESC` server-side
+(`backend/app/api/v1/endpoints/applications.py`), so a save refreshes
+the list instead of patching the edited item in place (its position may
+have changed) — same trap the webapp's Interviews/Documents panels hit
+in v0.5.0. A delete removes the item locally instead, since that has no
+ordering ambiguity.
 
 ### Two Dio instances, on purpose
 
@@ -142,12 +169,16 @@ auth-related network call.
 
 - Password reset screen (backend endpoints already exist per
   BACKEND_SUMMARY.md; no mobile UI/repository method calls them yet)
-- Any feature screen — Applications, Interviews, Contacts, Documents
-  (Phase 6 sub-scope 6a/6b per the mobile-first planning discussion)
+- Interviews, Contacts, Documents feature screens (tabs exist,
+  screens are `ComingSoonScreen` — follow `features/applications/`'s
+  folder split)
+- Swipe-to-delete on the Applications list row (delete only lives on
+  the Edit screen for now)
 - Push notifications (FCM/APNs, device-token model) — Phase 6c
 - Offline support/sync — Phase 6d, deliberately deferred until there's
   real usage data from 6a/6b to design against
-- Widget/unit tests beyond the one smoke test
+- Widget/unit tests beyond the one auth smoke test — Applications has
+  none yet
 - iOS build in CI (Android debug build only currently)
 - A currently-unverified assumption worth checking before building the
   profile/account-edit screen: whether `UserUpdate`'s `avatar_url` field
@@ -211,36 +242,30 @@ mobile/
     main.dart                     # entry point: loads env, wraps app in ProviderScope
     app/
       app.dart                    # MaterialApp.router root widget, localization delegates
-      router.dart                 # go_router config, auth-aware redirects
+      router.dart                 # go_router config: redirects, shell + form routes
+      app_shell.dart               # bottom NavigationBar around the shell tabs
     core/
-      config/
-        env_config.dart            # typed .env accessor
-      network/
-        api_client.dart             # shared Dio instance for feature requests (token interceptors)
-      theme/
-        app_theme.dart               # design tokens, mirrors webapp's Tailwind config
+      config/env_config.dart
+      network/api_client.dart      # shared Dio instance (token interceptors)
+      theme/app_theme.dart
+    shared/
+      widgets/coming_soon_screen.dart  # placeholder for not-yet-built tabs
     features/
       auth/
-        data/
-          token_storage.dart         # flutter_secure_storage wrapper (refresh token only)
-          auth_api.dart               # raw Dio calls, own bare Dio instance
-          auth_repository.dart         # combines the two above; single source of truth
-        domain/
-          user.dart                   # mirrors backend's UserRead exactly
-          auth_state.dart               # AuthStatus / AuthState
-        presentation/
-          auth_controller.dart          # Riverpod StateNotifier, bootstraps session restore
-          login_screen.dart              # flutter_form_builder
-          register_screen.dart            # flutter_form_builder
-    shared/
-      widgets/                     # empty so far — reusable widgets across future features
+        data/                       # token_storage.dart, auth_api.dart, auth_repository.dart
+        domain/                      # user.dart, auth_state.dart
+        presentation/                # auth_controller.dart, login/register_screen.dart
+      applications/
+        data/applications_api.dart
+        domain/                      # application.dart, application_draft.dart
+        presentation/                 # list state/controller/screen, form screen/result,
+                                       # status style, formatting
   pubspec.yaml
   analysis_options.yaml
   .env.example                    # committed template; .env.development/.env.production gitignored
   .github/workflows/mobile-ci.yml
 ```
 
-Every future feature (Applications, Interviews, Contacts, Documents)
-should get the same three-folder split as `auth/` (`data`/`domain`/
-`presentation`) — mirrors the backend's API/Service/Repository layering
-and keeps UI, state, and data-fetching from bleeding into each other.
+Every future feature (Interviews, Contacts, Documents) should get the
+same `data`/`domain`/`presentation` split as `auth/` and
+`applications/`.
