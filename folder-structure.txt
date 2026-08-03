@@ -187,6 +187,7 @@
 │   ├── lib
 │   │   ├── app
 │   │   │   ├── app.dart
+│   │   │   ├── app_shell.dart
 │   │   │   └── router.dart
 │   │   ├── core
 │   │   │   ├── config
@@ -196,6 +197,20 @@
 │   │   │   └── theme
 │   │   │       └── app_theme.dart
 │   │   ├── features
+│   │   │   ├── applications
+│   │   │   │   ├── data
+│   │   │   │   │   └── applications_api.dart
+│   │   │   │   ├── domain
+│   │   │   │   │   ├── application.dart
+│   │   │   │   │   └── application_draft.dart
+│   │   │   │   └── presentation
+│   │   │   │       ├── application_form_result.dart
+│   │   │   │       ├── application_form_screen.dart
+│   │   │   │       ├── application_formatting.dart
+│   │   │   │       ├── application_status_style.dart
+│   │   │   │       ├── applications_list_controller.dart
+│   │   │   │       ├── applications_list_screen.dart
+│   │   │   │       └── applications_list_state.dart
 │   │   │   └── auth
 │   │   │       ├── data
 │   │   │       │   ├── auth_api.dart
@@ -208,7 +223,10 @@
 │   │   │           ├── auth_controller.dart
 │   │   │           ├── login_screen.dart
 │   │   │           └── register_screen.dart
-│   │   └── main.dart
+│   │   ├── main.dart
+│   │   └── shared
+│   │       └── widgets
+│   │           └── coming_soon_screen.dart
 │   ├── pubspec.lock
 │   ├── pubspec.yaml
 │   └── test
@@ -296,4 +314,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-87 directories, 210 files
+93 directories, 222 files
