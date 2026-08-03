@@ -34,18 +34,18 @@ class ApplicationDraft {
   final String? notes;
 
   Map<String, dynamic> toJson() => {
-    'company': company,
-    'position': position,
-    'location': location,
-    'status': status.apiValue,
-    'salary_min': salaryMin,
-    'salary_max': salaryMax,
-    // Backend's `applied_date` is a plain `date`, not a `datetime` — send
-    // only the date portion (YYYY-MM-DD), not a full ISO timestamp.
-    'applied_date': appliedDate == null ? null : _dateOnly(appliedDate!),
-    'job_url': jobUrl,
-    'notes': notes,
-  };
+        'company': company,
+        'position': position,
+        'location': location,
+        'status': status.apiValue,
+        'salary_min': salaryMin,
+        'salary_max': salaryMax,
+        // Backend's `applied_date` is a plain `date`, not a `datetime` — send
+        // only the date portion (YYYY-MM-DD), not a full ISO timestamp.
+        'applied_date': appliedDate == null ? null : _dateOnly(appliedDate!),
+        'job_url': jobUrl,
+        'notes': notes,
+      };
 
   static String _dateOnly(DateTime date) {
     String pad2(int n) => n.toString().padLeft(2, '0');

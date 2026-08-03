@@ -52,9 +52,8 @@ class ApplicationsListState {
       total: total ?? this.total,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,
-      statusFilter: clearStatusFilter
-          ? null
-          : (statusFilter ?? this.statusFilter),
+      statusFilter:
+          clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
       search: search ?? this.search,
       status: status ?? this.status,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),

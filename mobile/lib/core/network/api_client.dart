@@ -42,7 +42,9 @@ final apiClientProvider = Provider<Dio>((ref) {
         final isAuthRoute = error.requestOptions.path.startsWith('/auth/');
         final alreadyRetried = error.requestOptions.extra['retried'] == true;
 
-        if (error.response?.statusCode != 401 || isAuthRoute || alreadyRetried) {
+        if (error.response?.statusCode != 401 ||
+            isAuthRoute ||
+            alreadyRetried) {
           handler.next(error);
           return;
         }
@@ -86,9 +88,7 @@ final apiClientProvider = Provider<Dio>((ref) {
 Future<void> _performRefresh(Ref ref) async {
   final repository = ref.read(authRepositoryProvider);
   final result = await repository.refreshAccessToken();
-  ref
-      .read(authControllerProvider.notifier)
-      .updateAfterSilentRefresh(
+  ref.read(authControllerProvider.notifier).updateAfterSilentRefresh(
         accessToken: result.accessToken,
         user: result.user,
       );

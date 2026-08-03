@@ -16,33 +16,32 @@ enum ApplicationStatus {
   /// enum member names are camelCase (`phoneScreen`) but the API speaks
   /// snake_case (`phone_screen`).
   String get apiValue => switch (this) {
-    ApplicationStatus.saved => 'saved',
-    ApplicationStatus.applied => 'applied',
-    ApplicationStatus.phoneScreen => 'phone_screen',
-    ApplicationStatus.interviewing => 'interviewing',
-    ApplicationStatus.offer => 'offer',
-    ApplicationStatus.accepted => 'accepted',
-    ApplicationStatus.rejected => 'rejected',
-    ApplicationStatus.withdrawn => 'withdrawn',
-  };
+        ApplicationStatus.saved => 'saved',
+        ApplicationStatus.applied => 'applied',
+        ApplicationStatus.phoneScreen => 'phone_screen',
+        ApplicationStatus.interviewing => 'interviewing',
+        ApplicationStatus.offer => 'offer',
+        ApplicationStatus.accepted => 'accepted',
+        ApplicationStatus.rejected => 'rejected',
+        ApplicationStatus.withdrawn => 'withdrawn',
+      };
 
   /// Mirrors APPLICATION_STATUS_LABELS in webapp/src/types/application.ts.
   String get label => switch (this) {
-    ApplicationStatus.saved => 'Saved',
-    ApplicationStatus.applied => 'Applied',
-    ApplicationStatus.phoneScreen => 'Phone Screen',
-    ApplicationStatus.interviewing => 'Interviewing',
-    ApplicationStatus.offer => 'Offer',
-    ApplicationStatus.accepted => 'Accepted',
-    ApplicationStatus.rejected => 'Rejected',
-    ApplicationStatus.withdrawn => 'Withdrawn',
-  };
+        ApplicationStatus.saved => 'Saved',
+        ApplicationStatus.applied => 'Applied',
+        ApplicationStatus.phoneScreen => 'Phone Screen',
+        ApplicationStatus.interviewing => 'Interviewing',
+        ApplicationStatus.offer => 'Offer',
+        ApplicationStatus.accepted => 'Accepted',
+        ApplicationStatus.rejected => 'Rejected',
+        ApplicationStatus.withdrawn => 'Withdrawn',
+      };
 
   static ApplicationStatus fromApiValue(String value) {
     return ApplicationStatus.values.firstWhere(
       (status) => status.apiValue == value,
-      orElse: () =>
-          throw FormatException('Unknown application status: $value'),
+      orElse: () => throw FormatException('Unknown application status: $value'),
     );
   }
 }
@@ -74,6 +73,7 @@ class Application {
   final ApplicationStatus status;
   final int? salaryMin;
   final int? salaryMax;
+
   /// Backend sends a plain `date` (e.g. "2026-07-16"), not a `datetime` —
   /// parsed here but should only ever be used for its date components.
   final DateTime? appliedDate;
