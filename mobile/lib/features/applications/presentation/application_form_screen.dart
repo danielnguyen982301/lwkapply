@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../contacts/presentation/contacts_panel.dart';
 import '../data/applications_api.dart';
 import '../domain/application.dart';
 import '../domain/application_draft.dart';
@@ -12,9 +13,25 @@ import 'application_formatting.dart';
 
 enum _LoadStatus { idle, loading, error }
 
+/// Tab order for the editing view — index must match `_tabController`'s
+/// `length` and the `Tab`/`TabBarView` children lists below.
+const _detailsTabIndex = 0;
+
 /// One shared form for both Create and Edit, following the same
 /// "single component, two routes" shape as webapp's
 /// ApplicationFormView.vue. `applicationId == null` means create.
+///
+/// When editing an existing application, this now mirrors
+/// ApplicationFormView.vue's four-tab layout (Details / Contacts /
+/// Interviews / Documents) rather than just the Details form: a
+/// `TabController` drives an `AppBar`-bottom `TabBar` plus a
+/// `TabBarView`, with Contacts/Interviews/Documents only reachable once
+/// an application actually exists — same `!isNew && applicationId`
+/// gating ContactsPanel.vue/InterviewsPanel.vue/DocumentsPanel.vue use
+/// on web. A brand-new (not-yet-created) application only ever shows
+/// the plain Details form, no tabs — there's nowhere to nest a contact,
+/// interview, or document under an application that doesn't have an id
+/// yet.
 ///
 /// When editing, this screen fetches the application by id itself
 /// (GET /applications/{id}) rather than trusting data passed in from
@@ -44,8 +61,16 @@ class ApplicationFormScreen extends ConsumerStatefulWidget {
       _ApplicationFormScreenState();
 }
 
-class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
+class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormBuilderState>();
+
+  // Only built when editing — a brand-new application has no tabs (see
+  // the class doc comment above). Rebuilds the Scaffold's
+  // bottomNavigationBar on every tab change, since "Save Changes" only
+  // makes sense while on the Details tab; the other tabs manage their
+  // own actions (e.g. ContactsPanel's own "Add contact" FAB).
+  TabController? _tabController;
 
   _LoadStatus _loadStatus = _LoadStatus.idle;
   String? _loadError;
@@ -60,8 +85,24 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
   void initState() {
     super.initState();
     if (widget.isEditing) {
+      _tabController = TabController(length: 4, vsync: this)
+        ..addListener(() {
+          // Rebuilds so the bottomNavigationBar (Details-only) and the
+          // AppBar's delete action reflect the newly active tab.
+          // Fires during the swipe animation too, not just on a
+          // completed change, which is fine here — setState is cheap
+          // and every value it feeds into is read fresh from
+          // _tabController.index at build time.
+          if (mounted) setState(() {});
+        });
       _loadExisting();
     }
+  }
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
   }
 
   Future<void> _loadExisting() async {
@@ -204,6 +245,8 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
   @override
   Widget build(BuildContext context) {
     final canShowForm = !widget.isEditing || _loadStatus == _LoadStatus.idle;
+    final isOnDetailsTab =
+        !widget.isEditing || _tabController?.index == _detailsTabIndex;
 
     return Scaffold(
       appBar: AppBar(
@@ -222,9 +265,29 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
               onPressed: _isDeleting ? null : _confirmDelete,
             ),
         ],
+        // Tabs only appear once editing an application that's actually
+        // loaded — a brand-new application (widget.isEditing == false)
+        // never shows them, and a still-loading/failed fetch shows the
+        // loading/retry state across the whole screen instead (see
+        // _buildBody), same as before this tabs change.
+        bottom: (widget.isEditing && canShowForm)
+            ? TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Details'),
+                  Tab(text: 'Contacts'),
+                  Tab(text: 'Interviews'),
+                  Tab(text: 'Documents'),
+                ],
+              )
+            : null,
       ),
       body: _buildBody(),
-      bottomNavigationBar: canShowForm
+      // "Save Changes"/"Add Application" only applies to the Details
+      // tab — Contacts (and, later, Interviews/Documents) manage their
+      // own actions (ContactsPanel's own "Add contact" FAB), so showing
+      // a Details-specific save button over them would be misleading.
+      bottomNavigationBar: (canShowForm && isOnDetailsTab)
           ? SafeArea(
               minimum: const EdgeInsets.all(16),
               child: FilledButton(
@@ -274,6 +337,28 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
       );
     }
 
+    if (widget.isEditing) {
+      return TabBarView(
+        controller: _tabController,
+        children: [
+          _buildDetailsForm(),
+          ContactsPanel(applicationId: widget.applicationId!),
+          const _PlaceholderTab(
+            icon: Icons.event_outlined,
+            label: 'Interview scheduling is coming soon.',
+          ),
+          const _PlaceholderTab(
+            icon: Icons.description_outlined,
+            label: 'Document upload is coming soon.',
+          ),
+        ],
+      );
+    }
+
+    return _buildDetailsForm();
+  }
+
+  Widget _buildDetailsForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: FormBuilder(
@@ -450,5 +535,35 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
     if (parsed == null) return 'Enter a whole number';
     if (parsed < 0) return 'Enter 0 or greater';
     return null;
+  }
+}
+
+/// Placeholder tab content for Interviews/Documents until those get
+/// their own `features/interviews/`/`features/documents/` panels
+/// (mirroring `features/contacts/`'s data/domain/presentation split).
+/// Deliberately just the inner content, not a full `ComingSoonScreen`
+/// (that widget brings its own `Scaffold`/`AppBar`, which would nest
+/// incorrectly inside this screen's `TabBarView`).
+class _PlaceholderTab extends StatelessWidget {
+  const _PlaceholderTab({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Theme.of(context).colorScheme.outline),
+            const SizedBox(height: 12),
+            Text(label, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
   }
 }
