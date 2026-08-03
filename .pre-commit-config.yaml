@@ -33,3 +33,16 @@ repos:
         language: system
         files: ^webapp/.*\.(ts|vue)$
         pass_filenames: true
+
+      - id: flutter-format
+        name: flutter format (mobile)
+        entry: dart format
+        language: system
+        files: ^mobile/.*\.dart$
+        pass_filenames: true
+
+      - id: flutter-analyze
+        name: flutter analyze
+        entry: bash -c 'cd mobile && flutter analyze'
+        language: system
+        pass_filenames: false
