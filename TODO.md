@@ -171,7 +171,15 @@ BACKEND_SUMMARY.md for the reasoning.
       Dio interceptor — see MOBILE_SUMMARY.md
 - [ ] Password reset screen (backend endpoints already exist; no mobile
       UI/repository method calls them yet)
-- [ ] Application management
+- [x] Bottom navigation shell — Applications/Interviews/Contacts/
+      Documents tabs — see MOBILE_SUMMARY.md
+- Application management (`features/applications/` — see MOBILE_SUMMARY.md):
+  - [x] List — search, status filter, infinite scroll, pull-to-refresh
+  - [x] Create/edit — shared form, validated against the backend schema
+  - [x] Delete — confirmation dialog on the Edit screen
+  - [ ] Swipe-to-delete on the list row
+- [ ] Interviews / Contacts / Documents feature screens (tabs exist,
+      screens don't)
 - [ ] Notifications
 - [ ] Offline support
 
@@ -244,4 +252,6 @@ BACKEND_SUMMARY.md for the reasoning.
       isolation, authenticated `TestClient`, `make_user`/`auth_headers`
       factories) every one of these builds on directly — every backend
       CRUD endpoint now has integration coverage
+- [ ] Mobile widget/unit tests beyond the auth smoke test (Applications
+      has none yet) — see MOBILE_SUMMARY.md
 - [ ] End-to-end tests
