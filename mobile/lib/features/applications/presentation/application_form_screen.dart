@@ -5,6 +5,7 @@ import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../contacts/presentation/contacts_panel.dart';
+import '../../interviews/presentation/interviews_panel.dart';
 import '../data/applications_api.dart';
 import '../domain/application.dart';
 import '../domain/application_draft.dart';
@@ -343,10 +344,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
         children: [
           _buildDetailsForm(),
           ContactsPanel(applicationId: widget.applicationId!),
-          const _PlaceholderTab(
-            icon: Icons.event_outlined,
-            label: 'Interview scheduling is coming soon.',
-          ),
+          InterviewsPanel(applicationId: widget.applicationId!),
           const _PlaceholderTab(
             icon: Icons.description_outlined,
             label: 'Document upload is coming soon.',
