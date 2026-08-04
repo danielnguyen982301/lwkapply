@@ -8,6 +8,7 @@ import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
+import '../features/contacts/presentation/contact_directory_screen.dart';
 import '../shared/widgets/coming_soon_screen.dart';
 import 'app_shell.dart';
 
@@ -62,6 +63,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // the Interviews tab mid-edit). They still get the same
       // authenticated-only protection as everything else, since
       // `redirect` above only special-cases `/login`/`/register`.
+      //
+      // The Contacts directory below reuses this same route
+      // (`application-edit`) via `context.push` when a row is tapped —
+      // there's no contact-specific edit screen, only the owning
+      // application's.
       GoRoute(
         path: '/applications/new',
         name: 'application-new',
@@ -104,10 +110,11 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/contacts',
                 name: 'contacts',
-                builder: (context, state) => const ComingSoonScreen(
-                  title: 'Contacts',
-                  icon: Icons.people_outline,
-                ),
+                // Was ComingSoonScreen — now the real cross-application
+                // Contacts directory, mirroring ContactDirectoryView.vue.
+                // See contact_directory_screen.dart's doc comment for
+                // what deliberately differs from ApplicationsListScreen.
+                builder: (context, state) => const ContactDirectoryScreen(),
               ),
             ],
           ),
