@@ -9,6 +9,7 @@ import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/contacts/presentation/contact_directory_screen.dart';
+import '../features/interviews/presentation/interview_directory_screen.dart';
 import '../shared/widgets/coming_soon_screen.dart';
 import 'app_shell.dart';
 
@@ -98,10 +99,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/interviews',
                 name: 'interviews',
-                builder: (context, state) => const ComingSoonScreen(
-                  title: 'Interviews',
-                  icon: Icons.event_outlined,
-                ),
+                // Was ComingSoonScreen — now the real cross-application
+                // Interviews directory, mirroring
+                // InterviewDirectoryView.vue. See
+                // interview_directory_screen.dart's doc comment for what
+                // deliberately differs from ContactDirectoryScreen (a
+                // result filter instead of text search).
+                builder: (context, state) => const InterviewDirectoryScreen(),
               ),
             ],
           ),
