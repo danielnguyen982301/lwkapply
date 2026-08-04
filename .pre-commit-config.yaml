@@ -45,4 +45,4 @@ repos:
         name: flutter analyze
         entry: bash -c 'cd mobile && flutter analyze'
         language: system
-        pass_filenames: true
+        pass_filenames: false
