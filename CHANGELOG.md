@@ -1,5 +1,99 @@
 # Changelog
 
+## v0.7.0 (in progress)
+
+### Added
+
+- **Contacts, Interviews, and Documents on mobile** (`mobile/lib/features/{contacts,interviews,documents}/`),
+  closing most of the "Interviews / Contacts / Documents feature screens"
+  TODO item — each follows the existing `data`/`domain`/`presentation`
+  split from `features/applications/`/`features/auth/`:
+  - **`ApplicationFormScreen` restructured** (`features/applications/
+presentation/application_form_screen.dart`) into a 4-tab layout —
+    Details / Contacts / Interviews / Documents — mirroring
+    `ApplicationFormView.vue` + its three panels on web. Tabs (a
+    `TabController` driving an `AppBar`-bottom `TabBar` +
+    `TabBarView`) only appear when editing an existing application;
+    a brand-new one still shows just the plain Details form, same
+    `!isNew && applicationId` gating the web panels use — there's
+    nowhere to nest a contact/interview/document under an application
+    that doesn't have an id yet. "Save Changes" only shows on the
+    Details tab; the other three manage their own actions
+  - **Contacts** (`features/contacts/`): unpaginated, matching the
+    nested `GET /applications/{id}/contacts` backend route — plain
+    local widget state, no Riverpod controller, add/edit via a modal
+    bottom sheet (`ContactFormSheet`), delete via a confirm dialog.
+    Email/LinkedIn are tappable (`url_launcher`)
+  - **Interviews** (`features/interviews/`): paginated backend, so this
+    uses the same infinite-scroll `StateNotifier` shape as
+    `ApplicationsListController`, `.family`-scoped per `applicationId`
+    (`InterviewsListController`). Scheduling uses the same
+    `FormBuilderField<DateTime?>` + `showDatePicker` pattern
+    `appliedDate` already used, extended with `showTimePicker` for the
+    time component (`scheduled_at` is a full timezone-aware instant,
+    not date-only) — no new date-picker package pulled in for one
+    field. Create/update trigger a full `refresh()` rather than a
+    local splice, since editing `scheduled_at` can change the item's
+    sort position — same reasoning `stores/interviews.ts` documents on
+    web; delete removes locally (no reorder ambiguity there)
+  - **Documents** (`features/documents/`): also paginated
+    infinite-scroll, but unlike Interviews, mutations patch local state
+    directly (`prepend`/`replaceById`/`removeById`) rather than
+    refetching — the list orders by `created_at DESC` and only
+    `file_type` is ever editable post-upload, so neither a new upload
+    nor an edit can actually change an item's position, unlike
+    Interviews' `scheduled_at`. Upload is the one Create call in the
+    app that sends `multipart/form-data` (`dio`'s `FormData` +
+    `MultipartFile`) instead of a JSON body, matching the backend's
+    `file: UploadFile = File(...)` + `file_type: DocumentType =
+Form(...)` contract; file selection uses the new `file_picker`
+    dependency (PDF/Word filtered client-side, same as the web upload
+    dialog's `accept`, though the backend is still the real enforcement
+    point). Download fetches a fresh presigned R2 URL per tap and opens
+    it externally via `url_launcher` rather than downloading in-app —
+    no storage permissions or save-location UI needed for a first pass
+  - New dependencies: `file_picker` (document upload), `url_launcher`
+    (opening a downloaded document's presigned URL, and — retrofitted
+    once available — Contacts' email/LinkedIn tap targets)
+- Interviews/Documents/Contacts endpoints reuse enum-with-`apiValue`/
+  `label`/`fromApiValue` conventions already established by
+  `ApplicationStatus` (`features/applications/domain/application.dart`)
+  for `InterviewType`/`InterviewResult`/`DocumentType`. One naming
+  wrinkle worth remembering: the backend's `"final"` interview-type
+  value can't be a Dart enum member name (`final` is reserved), so it's
+  named `InterviewType.finalRound` — `apiValue`/`fromApiValue` still
+  map it to/from the real `"final"` string
+
+### Changed
+
+- **DateTime formatting switched from hand-rolled to `intl`**
+  (`features/applications/presentation/application_formatting.dart`'s
+  `formatDate`, `features/interviews/presentation/
+interview_formatting.dart`'s new `formatDateTime`): both now call
+  `DateFormat` (`'MMM d, y'` and `'MMM d, y · h:mm a'` respectively)
+  instead of a manually-maintained month-name table and manual 12-hour
+  conversion. New dependency: `intl` — added via `flutter pub add intl`
+  rather than a hand-picked version pin, so pub resolves one compatible
+  with whatever `flutter_localizations` version `flutter_form_builder`'s
+  localization delegates already pulled in (they're versioned together
+  upstream); hand-pinning risked a resolver conflict
+
+### Not included in this pass
+
+- Widget/unit tests for the three new features — Applications' own list/
+  form screens don't have them yet either (see Testing in TODO.md), so
+  this isn't a new gap, just an uncovered one growing by three features
+- Cross-application Interviews/Contacts/Documents directory screens on
+  mobile (the bottom-nav tabs of the same names) — still
+  `ComingSoonScreen`. What shipped this pass is the _nested_,
+  per-application CRUD only, mirroring `ContactsPanel.vue`/
+  `InterviewsPanel.vue`/`DocumentsPanel.vue`, not
+  `ContactDirectoryView.vue`/etc.
+- Interview reminder system — still backend-and-frontend unimplemented
+  everywhere, mobile included (see TODO.md)
+- In-app document download/offline storage — downloads open externally
+  only, per the "Changed" note above
+
 ## v0.6.0 (in progress)
 
 ### Added
