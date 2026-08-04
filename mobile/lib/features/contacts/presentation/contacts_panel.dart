@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/contacts_api.dart';
 import '../domain/contact.dart';
@@ -150,6 +151,17 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
     }
   }
 
+  Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Couldn't open that link.")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -231,24 +243,26 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (contact.title != null) Text(contact.title!),
-                // Plain (non-tappable) text for now — tapping to open a
-                // mailto:/https: link needs `url_launcher`, which isn't
-                // a confirmed dependency yet. Add it and wire these up
-                // to launchUrl() once it's in pubspec.yaml.
                 if (contact.email != null)
-                  Text(
-                    contact.email!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
+                  InkWell(
+                    onTap: () => _openLink('mailto:${contact.email}'),
+                    child: Text(
+                      contact.email!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ),
                 if (contact.linkedinUrl != null)
-                  Text(
-                    contact.linkedinUrl!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
+                  InkWell(
+                    onTap: () => _openLink(contact.linkedinUrl!),
+                    child: Text(
+                      contact.linkedinUrl!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
               ],
             ),
