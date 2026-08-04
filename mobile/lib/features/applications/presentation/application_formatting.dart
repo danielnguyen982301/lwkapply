@@ -1,11 +1,14 @@
+import 'package:intl/intl.dart';
+
 /// Mirrors ApplicationListView.vue's `formatSalary`/`formatDate` helpers.
 ///
-/// Deliberately dependency-free (no `intl`) since `intl` isn't currently
-/// declared as a direct dependency in mobile/pubspec.yaml — worth
-/// revisiting if a future screen needs real locale-aware formatting
-/// (add `intl` as an explicit dependency at that point rather than
-/// relying on it transitively through flutter_localizations).
-library;
+/// `formatDate` now uses `intl`'s `DateFormat` rather than a hand-rolled
+/// month-name table — see interview_formatting.dart's doc comment for
+/// the same switch and the reasoning (locale-aware output, one fewer
+/// hand-maintained table). `formatSalary` is untouched: it's a currency
+/// string, not a date, and out of scope for this change.
+
+final _dateFormat = DateFormat('MMM d, y');
 
 String formatSalary(int? min, int? max) {
   if (min == null && max == null) return '—';
@@ -26,22 +29,7 @@ String _withThousandsSeparator(int n) {
   return buffer.toString();
 }
 
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
 String formatDate(DateTime? date) {
   if (date == null) return '—';
-  return '${_months[date.month - 1]} ${date.day}, ${date.year}';
+  return _dateFormat.format(date);
 }
