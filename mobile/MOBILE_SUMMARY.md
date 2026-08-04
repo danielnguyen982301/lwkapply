@@ -2,9 +2,15 @@
 
 Flutter + Riverpod + go_router + Dio, implementing Phase 6 (Mobile
 Application): project scaffold, auth, a 4-tab bottom nav shell, and the
-first feature screens (Applications — list/create/edit/delete).
-Interviews, Contacts, Documents have nav tabs wired up but are still
-`ComingSoonScreen` placeholders.
+Applications feature (list/create/edit/delete). Contacts, Interviews,
+and Documents are now implemented too, but nested inside
+`ApplicationFormScreen`'s own 4-tab layout (Details / Contacts /
+Interviews / Documents) rather than as their own top-level screens —
+see "Contacts, Interviews, and Documents" below. The bottom-nav
+Interviews/Contacts/Documents tabs (the future cross-application
+directory screens, mirroring `ContactDirectoryView.vue`/etc. on web)
+are still `ComingSoonScreen` placeholders; that's separate, not-yet-
+started work.
 
 Package name: `lwkapply_mobile`.
 
@@ -124,10 +130,14 @@ Interviews, Contacts, Documents). Chosen over the webapp's side menu —
 comments in `app_shell.dart` cover the reasoning (discoverability,
 `IndexedStack` keeping each tab's scroll/nav state alive). Interviews/
 Contacts/Documents render `ComingSoonScreen`
-(`lib/shared/widgets/coming_soon_screen.dart`) for now. Old placeholder
-home screen (route `/`) is gone; `ApplicationsListScreen` at
-`/applications` is `initialLocation`, and its logout button lives on
-that screen's `AppBar` now.
+(`lib/shared/widgets/coming_soon_screen.dart`) for now — these three
+tabs are reserved for the future cross-application directory screens
+(mirroring `ContactDirectoryView.vue`/etc. on web), a different thing
+from the nested per-application Contacts/Interviews/Documents tabs now
+live inside `ApplicationFormScreen` — see "Contacts, Interviews, and
+Documents" below. Old placeholder home screen (route `/`) is gone;
+`ApplicationsListScreen` at `/applications` is `initialLocation`, and
+its logout button lives on that screen's `AppBar` now.
 
 ### Applications feature (`lib/features/applications/`)
 
@@ -154,6 +164,104 @@ have changed) — same trap the webapp's Interviews/Documents panels hit
 in v0.5.0. A delete removes the item locally instead, since that has no
 ordering ambiguity.
 
+### Contacts, Interviews, and Documents (`lib/features/{contacts,interviews,documents}/`)
+
+Nested, per-application CRUD for all three, added to
+`ApplicationFormScreen` as a 4-tab layout (Details / Contacts /
+Interviews / Documents) rather than as separate screens — see
+`ApplicationFormScreen`'s own class doc comment. Tabs only appear when
+editing an existing application (`!isNew && applicationId`, same
+gating `ContactsPanel.vue`/`InterviewsPanel.vue`/`DocumentsPanel.vue`
+use on web); a brand-new application still shows just the plain
+Details form. Each feature follows the same `data`/`domain`/
+`presentation` split as `auth/`/`applications/`, but the three differ
+from each other and from Applications in ways worth knowing before
+touching any of them:
+
+- **Contacts** — the nested backend list
+  (`GET /applications/{id}/contacts`) is deliberately unpaginated (see
+  BACKEND_SUMMARY.md), so `ContactsPanel` keeps plain local `State`
+  (a `List<Contact>` + a loading/error enum) rather than a Riverpod
+  controller — there's nothing else on screen that needs to observe
+  it, same reasoning `ApplicationFormScreen` gives for keeping its own
+  submit state local. Add/edit is a modal bottom sheet
+  (`ContactFormSheet`); delete goes through a confirm `AlertDialog`.
+  Email and LinkedIn URL are tappable via `url_launcher`
+  (`mailto:`/`https:`) once a value is present.
+- **Interviews** — the nested list IS paginated, so this reuses
+  `ApplicationsListController`'s infinite-scroll `StateNotifier` shape
+  instead, `.family`-scoped per `applicationId`
+  (`InterviewsListController`, `interviews_list_state.dart`). Create
+  and update both trigger a full `refresh()` (reload from page 1)
+  rather than patching the changed item into `items` in place —
+  `scheduled_at` determines sort order server-side, so a client-side
+  guess at where a new/edited interview belongs could land in the
+  wrong spot, the same trap `stores/interviews.ts` and the Applications
+  list already document. Delete removes locally with no refetch (no
+  reordering risk there). Scheduling a date & time reuses
+  `appliedDate`'s `FormBuilderField<DateTime?>` + `showDatePicker`
+  pattern (`application_form_screen.dart`), with a second
+  `showTimePicker` call chained on for the time component — no new
+  date-picker package pulled in for this one field.
+  `interview_formatting.dart` formats the result for display.
+- **Documents** — also paginated infinite-scroll, but _unlike_
+  Interviews, `DocumentsListController` patches state locally for every
+  mutation (`prepend` on upload, `replaceById` on a file-type edit,
+  `removeById` on delete) — the nested list orders by
+  `created_at DESC` and only `file_type` is ever editable after upload,
+  so neither action can actually change an item's sort position the
+  way editing an interview's `scheduled_at` can; a full refresh would
+  just be a slower way to reach the same state. Upload
+  (`DocumentUploadSheet`) is the one Create call anywhere in this app
+  that sends `multipart/form-data` instead of a JSON body — the
+  backend takes `file: UploadFile = File(...)` +
+  `file_type: DocumentType = Form(...)`, so `DocumentsApi.upload` builds
+  a `dio` `FormData` with a `MultipartFile` rather than calling
+  `draft.toJson()` the way every other resource's Create does. File
+  selection uses the new `file_picker` dependency, filtered to
+  PDF/Word client-side (same as the web upload dialog's `accept`
+  attribute — the backend's `Content-Type` check is still the real
+  enforcement point, not this filter). Download
+  (`DocumentsApi.download`) fetches a fresh short-lived presigned R2
+  URL per tap and hands it to `url_launcher` to open externally
+  (browser/PDF viewer) — no in-app download-to-storage yet, see "Not
+  yet implemented" below.
+
+**Enum conventions**: `InterviewType`, `InterviewResult`, and
+`DocumentType` all follow `ApplicationStatus`'s existing
+`apiValue`/`label`/`fromApiValue` pattern
+(`features/applications/domain/application.dart`) rather than
+introducing a new convention. One naming wrinkle: the backend's
+`"final"` interview type can't be a Dart enum member (`final` is a
+reserved keyword), so it's `InterviewType.finalRound` on the Dart side
+— `apiValue`/`fromApiValue` still map it to/from the real `"final"`
+string, so nothing about the wire format changes.
+
+**New dependencies this pass**: `file_picker` (document upload),
+`url_launcher` (opening a document's presigned URL, and — once
+available — Contacts' email/LinkedIn tap targets), `intl` (see next
+section).
+
+### DateTime formatting uses `intl`
+
+`application_formatting.dart`'s `formatDate` and
+`interview_formatting.dart`'s `formatDateTime` both call `intl`'s
+`DateFormat` (`'MMM d, y'` and `'MMM d, y · h:mm a'`) rather than a
+hand-rolled month-name table and manual 12-hour conversion — the
+latter was a reasonable zero-dependency starting point (see
+`application_formatting.dart`'s original doc comment) but not worth
+maintaining by hand once a second, time-aware format was needed for
+Interviews. Add `intl` via `flutter pub add intl`, not a hand-picked
+version pin — pub then resolves a version compatible with whatever
+`flutter_localizations` version `flutter_form_builder`'s localization
+delegates already pulled in (the two are versioned together upstream),
+which hand-pinning risks conflicting with.
+`interview_formatting.dart`'s `formatDateTime` still expects an
+already-`.toLocal()`-converted `DateTime` — `scheduled_at` is stored
+and sent as a UTC instant (see `InterviewDraft`'s doc comment), so
+callers convert once at the display boundary rather than this function
+guessing at intent.
+
 ### Two Dio instances, on purpose
 
 `auth_api.dart` uses its own bare `Dio()` (base URL only, no
@@ -169,17 +277,30 @@ auth-related network call.
 
 - Password reset screen (backend endpoints already exist per
   BACKEND_SUMMARY.md; no mobile UI/repository method calls them yet)
-- Interviews, Contacts, Documents feature screens (tabs exist,
-  screens are `ComingSoonScreen` — follow `features/applications/`'s
-  folder split)
+- Cross-application Interviews/Contacts/Documents directory screens
+  (the bottom-nav tabs of the same names) — still `ComingSoonScreen`.
+  What's implemented instead is the _nested_, per-application CRUD for
+  each — see "Contacts, Interviews, and Documents" below; this
+  directory-screen item mirrors `ContactDirectoryView.vue`/
+  `InterviewDirectoryView.vue`/`DocumentDirectoryView.vue` on web, a
+  different (not-yet-started) screen entirely
+- Interview reminder system — unimplemented everywhere (backend,
+  webapp, mobile); TODO.md tracks it at the backend level
+- In-app document download / offline document storage — downloads
+  currently open the presigned URL externally via `url_launcher` only,
+  no on-device copy kept
 - Swipe-to-delete on the Applications list row (delete only lives on
   the Edit screen for now)
 - Push notifications (FCM/APNs, device-token model) — Phase 6c
 - Offline support/sync — Phase 6d, deliberately deferred until there's
   real usage data from 6a/6b to design against
-- Widget/unit tests beyond the one auth smoke test — Applications has
-  none yet
+- Widget/unit tests beyond the one auth smoke test — Applications,
+  Contacts, Interviews, and Documents all have none yet
 - iOS build in CI (Android debug build only currently)
+- `file_picker`'s Android/iOS native setup (manifest `queries` entries
+  for content-type intents on Android API 30+, any iOS document-picker
+  entitlements) hasn't been verified on-device yet — if document upload
+  fails silently on a real device, check there first
 - A currently-unverified assumption worth checking before building the
   profile/account-edit screen: whether `UserUpdate`'s `avatar_url` field
   implies an upload flow that needs a mobile equivalent of the webapp's
@@ -201,6 +322,18 @@ auth-related network call.
   `flutter analyze`/build to point at unless a step explicitly creates
   them first (`mobile-ci.yml` does this via `cp .env.example
 .env.development` etc. — mirror this if the CI workflow is ever rewritten)
+- **`final` is a reserved Dart keyword**: the backend's Interview
+  `"final"` type value can't be a Dart enum member name, hence
+  `InterviewType.finalRound` in `features/interviews/domain/
+interview.dart` — easy to trip over again if a future enum ever needs
+  a member matching another Dart keyword (`class`, `void`, etc.)
+- **`ColorScheme.surfaceContainerHighest`**: used by the Interviews/
+  Documents result/type chips (`_ResultChip`/`_TypeChip`) — a newer
+  Material 3 token. If the project's Flutter SDK predates it, swap for
+  whatever `ApplicationStatus`'s own `backgroundColor(context)`/
+  `foregroundColor(context)` extension already uses instead of a raw
+  `ColorScheme` property, for consistency with the existing status-chip
+  styling anyway
 
 ## Development workflow
 
@@ -259,13 +392,39 @@ mobile/
         data/applications_api.dart
         domain/                      # application.dart, application_draft.dart
         presentation/                 # list state/controller/screen, form screen/result,
-                                       # status style, formatting
+                                       # status style, formatting (application_formatting.dart
+                                       # now uses intl's DateFormat — see above)
+      contacts/
+        data/contacts_api.dart
+        domain/                      # contact.dart, contact_draft.dart
+        presentation/                 # contacts_panel.dart (tab content),
+                                       # contact_form_sheet.dart (add/edit)
+      interviews/
+        data/interviews_api.dart
+        domain/                      # interview.dart (InterviewType/InterviewResult
+                                       # enums), interview_draft.dart
+        presentation/                 # interviews_list_state/controller.dart
+                                       # (infinite scroll, .family-scoped),
+                                       # interviews_panel.dart (tab content),
+                                       # interview_form_sheet.dart (add/edit),
+                                       # interview_formatting.dart (intl DateFormat)
+      documents/
+        data/documents_api.dart       # upload() sends multipart FormData, not JSON
+        domain/                      # document.dart (DocumentType enum,
+                                       # DocumentDownloadResponse), no *_draft.dart —
+                                       # upload/update take params directly
+        presentation/                 # documents_list_state/controller.dart
+                                       # (infinite scroll, local prepend/replaceById/
+                                       # removeById instead of refresh()),
+                                       # documents_panel.dart (tab content),
+                                       # document_upload_sheet.dart, document_edit_sheet.dart
   pubspec.yaml
   analysis_options.yaml
   .env.example                    # committed template; .env.development/.env.production gitignored
   .github/workflows/mobile-ci.yml
 ```
 
-Every future feature (Interviews, Contacts, Documents) should get the
-same `data`/`domain`/`presentation` split as `auth/` and
-`applications/`.
+Every future feature (the cross-application Interviews/Contacts/
+Documents directory screens, still `ComingSoonScreen`) should get the
+same `data`/`domain`/`presentation` split as `auth/`, `applications/`,
+`contacts/`, `interviews/`, and `documents/`.
