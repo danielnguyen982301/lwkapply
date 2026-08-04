@@ -5,6 +5,7 @@ import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../contacts/presentation/contacts_panel.dart';
+import '../../documents/presentation/documents_panel.dart';
 import '../../interviews/presentation/interviews_panel.dart';
 import '../data/applications_api.dart';
 import '../domain/application.dart';
@@ -345,10 +346,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
           _buildDetailsForm(),
           ContactsPanel(applicationId: widget.applicationId!),
           InterviewsPanel(applicationId: widget.applicationId!),
-          const _PlaceholderTab(
-            icon: Icons.description_outlined,
-            label: 'Document upload is coming soon.',
-          ),
+          DocumentsPanel(applicationId: widget.applicationId!),
         ],
       );
     }
@@ -533,35 +531,5 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
     if (parsed == null) return 'Enter a whole number';
     if (parsed < 0) return 'Enter 0 or greater';
     return null;
-  }
-}
-
-/// Placeholder tab content for Interviews/Documents until those get
-/// their own `features/interviews/`/`features/documents/` panels
-/// (mirroring `features/contacts/`'s data/domain/presentation split).
-/// Deliberately just the inner content, not a full `ComingSoonScreen`
-/// (that widget brings its own `Scaffold`/`AppBar`, which would nest
-/// incorrectly inside this screen's `TabBarView`).
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(label, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
   }
 }
