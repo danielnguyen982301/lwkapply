@@ -178,10 +178,24 @@ BACKEND_SUMMARY.md for the reasoning.
   - [x] Create/edit — shared form, validated against the backend schema
   - [x] Delete — confirmation dialog on the Edit screen
   - [ ] Swipe-to-delete on the list row
-- [ ] Interviews / Contacts / Documents feature screens (tabs exist,
-      screens don't)
+- [x] Interviews / Contacts / Documents feature screens — nested,
+      per-application CRUD, added to `ApplicationFormScreen` as a
+      4-tab layout (Details / Contacts / Interviews / Documents),
+      mirroring `ContactsPanel.vue`/`InterviewsPanel.vue`/
+      `DocumentsPanel.vue` on web. `features/contacts/`,
+      `features/interviews/`, `features/documents/` — see
+      MOBILE_SUMMARY.md
+  - [ ] Cross-application directory screens (the bottom-nav Interviews/
+        Contacts/Documents tabs) — still `ComingSoonScreen`; mirrors
+        `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
+        `DocumentDirectoryView.vue`, not yet started on mobile
+  - [ ] Widget/unit tests for Contacts/Interviews/Documents (same gap
+        Applications' own screens already have — see Testing below)
 - [ ] Notifications
 - [ ] Offline support
+- [ ] In-app document download / offline document storage (currently
+      opens the presigned URL externally via `url_launcher` only — see
+      CHANGELOG.md v0.7.0)
 
 ---
 
@@ -252,6 +266,7 @@ BACKEND_SUMMARY.md for the reasoning.
       isolation, authenticated `TestClient`, `make_user`/`auth_headers`
       factories) every one of these builds on directly — every backend
       CRUD endpoint now has integration coverage
-- [ ] Mobile widget/unit tests beyond the auth smoke test (Applications
-      has none yet) — see MOBILE_SUMMARY.md
+- [ ] Mobile widget/unit tests beyond the auth smoke test (Applications,
+      Contacts, Interviews, and Documents all have none yet — see
+      MOBILE_SUMMARY.md and CHANGELOG.md v0.7.0)
 - [ ] End-to-end tests
