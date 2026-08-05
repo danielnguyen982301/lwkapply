@@ -3,14 +3,15 @@
 Flutter + Riverpod + go_router + Dio, implementing Phase 6 (Mobile
 Application): project scaffold, auth, a 4-tab bottom nav shell, and the
 Applications feature (list/create/edit/delete). Contacts, Interviews,
-and Documents are now implemented too, but nested inside
+and Documents are implemented twice over, same as on web: nested inside
 `ApplicationFormScreen`'s own 4-tab layout (Details / Contacts /
-Interviews / Documents) rather than as their own top-level screens —
-see "Contacts, Interviews, and Documents" below. The bottom-nav
-Interviews/Contacts/Documents tabs (the future cross-application
-directory screens, mirroring `ContactDirectoryView.vue`/etc. on web)
-are still `ComingSoonScreen` placeholders; that's separate, not-yet-
-started work.
+Interviews / Documents) for per-application CRUD — see "Contacts,
+Interviews, and Documents" below — and as the bottom-nav
+Interviews/Contacts/Documents tabs, now the real read-only
+cross-application directory screens (mirroring
+`ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
+`DocumentDirectoryView.vue` on web) rather than `ComingSoonScreen`
+placeholders — see "Cross-application directory screens" below.
 
 Package name: `lwkapply_mobile`.
 
@@ -129,12 +130,15 @@ data/applications_api.dart` is the first non-auth consumer
 Interviews, Contacts, Documents). Chosen over the webapp's side menu —
 comments in `app_shell.dart` cover the reasoning (discoverability,
 `IndexedStack` keeping each tab's scroll/nav state alive). Interviews/
-Contacts/Documents render `ComingSoonScreen`
-(`lib/shared/widgets/coming_soon_screen.dart`) for now — these three
-tabs are reserved for the future cross-application directory screens
-(mirroring `ContactDirectoryView.vue`/etc. on web), a different thing
-from the nested per-application Contacts/Interviews/Documents tabs now
-live inside `ApplicationFormScreen` — see "Contacts, Interviews, and
+Contacts/Documents now render the real cross-application directory
+screens (`InterviewDirectoryScreen`/`ContactDirectoryScreen`/
+`DocumentDirectoryScreen`, mirroring `ContactDirectoryView.vue`/etc. on
+web — see "Cross-application directory screens" below), no longer
+`ComingSoonScreen` (`lib/shared/widgets/coming_soon_screen.dart`, now
+unreferenced by the router — left in place for any future placeholder
+need rather than deleted). These three tabs are a different thing from
+the nested per-application Contacts/Interviews/Documents tabs living
+inside `ApplicationFormScreen` — see "Contacts, Interviews, and
 Documents" below. Old placeholder home screen (route `/`) is gone;
 `ApplicationsListScreen` at `/applications` is `initialLocation`, and
 its logout button lives on that screen's `AppBar` now.
@@ -242,6 +246,71 @@ string, so nothing about the wire format changes.
 available — Contacts' email/LinkedIn tap targets), `intl` (see next
 section).
 
+### Cross-application directory screens (`lib/features/{contacts,interviews,documents}/`)
+
+The bottom-nav Interviews/Contacts/Documents tabs (previously
+`ComingSoonScreen`), mirroring
+`ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
+`DocumentDirectoryView.vue` — a different thing from the nested,
+per-application panels above, and read-only for the same reason those
+web views are: uploads/edits/deletes still only happen from within the
+owning application, reached via `context.push('/applications/{id}/edit')`
+on any row (the existing `application-edit` route).
+
+Each of the three follows one consistent shape, added alongside (not
+replacing) each feature's existing nested files:
+
+- **`domain/*_with_application.dart`** — composes the existing
+  per-application model (`Contact`/`Interview`/`Document`) with a new
+  `ApplicationSummary` (id/company/position/status), rather than
+  duplicating its fields. Each feature declares its own
+  `ApplicationSummary`, not a shared one — mirrors the backend's own
+  precedent of each directory schema owning its copy (see
+  BACKEND_SUMMARY.md); a future screen needing two directories' types
+  at once would need a prefixed import.
+- **`data/*_directory_api.dart`** — calls the flat `GET
+/contacts`/`/interviews`/`/documents` endpoint and reuses the nested
+  feature's existing exception type (`ContactsException`/
+  `InterviewsException`/`DocumentsException`) rather than declaring a
+  new one.
+- **`presentation/*_directory_state.dart` + `*_directory_controller.dart`**
+  — the same fetch/append infinite-scroll split
+  `InterviewsListController` established, but as a plain (non-`.family`)
+  `StateNotifierProvider`, since each is one global, cross-application
+  list rather than something scoped per application. Read-only: no
+  mutation methods, unlike `DocumentsListController`'s
+  `prepend`/`replaceById`/`removeById`.
+- **`presentation/*_directory_screen.dart`** — built from
+  `ApplicationsListScreen`'s scroll/empty-state/footer conventions, with
+  a filter UI that differs per resource since the backend's own filter
+  support differs:
+  - **Contacts** — debounced text search only (name or company).
+    Tappable email/LinkedIn per row via `url_launcher`, same as
+    `ContactsPanel`.
+  - **Interviews** — a `result` filter via a bottom sheet (lifted from
+    `ApplicationsListScreen`'s status-filter sheet shape); no text
+    search, since `Interview` has no name-like field. Cards reuse
+    `interview_formatting.dart`'s `formatDateTime` and duplicate
+    `InterviewsPanel`'s private `_ResultChip` color logic.
+  - **Documents** — the one directory with two filters at once: the
+    Contacts-style debounced search (file name or company) _and_ the
+    Interviews-style `file_type` filter sheet, clearing independently,
+    plus a combined "Clear filters" action mirroring
+    `DocumentDirectoryView.vue`'s `clearFilters()`. No download
+    shortcut on the row — deliberately matches the web view's
+    read-only contract as-is. Cards reuse
+    `application_formatting.dart`'s `formatDate` and duplicate
+    `DocumentsPanel`'s private `_TypeChip` color logic.
+
+  Every screen also renders an `_StatusChip` for the embedded
+  application status, styled via `ApplicationStatus`'s own
+  `backgroundColor(context)`/`foregroundColor(context)` extension —
+  duplicated per file (each is private), same reasoning as the
+  result/type chips above.
+
+`app/router.dart`'s three bottom-nav branches now build these screens
+directly instead of `ComingSoonScreen`.
+
 ### DateTime formatting uses `intl`
 
 `application_formatting.dart`'s `formatDate` and
@@ -277,13 +346,6 @@ auth-related network call.
 
 - Password reset screen (backend endpoints already exist per
   BACKEND_SUMMARY.md; no mobile UI/repository method calls them yet)
-- Cross-application Interviews/Contacts/Documents directory screens
-  (the bottom-nav tabs of the same names) — still `ComingSoonScreen`.
-  What's implemented instead is the _nested_, per-application CRUD for
-  each — see "Contacts, Interviews, and Documents" below; this
-  directory-screen item mirrors `ContactDirectoryView.vue`/
-  `InterviewDirectoryView.vue`/`DocumentDirectoryView.vue` on web, a
-  different (not-yet-started) screen entirely
 - Interview reminder system — unimplemented everywhere (backend,
   webapp, mobile); TODO.md tracks it at the backend level
 - In-app document download / offline document storage — downloads
@@ -294,8 +356,9 @@ auth-related network call.
 - Push notifications (FCM/APNs, device-token model) — Phase 6c
 - Offline support/sync — Phase 6d, deliberately deferred until there's
   real usage data from 6a/6b to design against
-- Widget/unit tests beyond the one auth smoke test — Applications,
-  Contacts, Interviews, and Documents all have none yet
+- Widget/unit tests beyond the one auth smoke test — Applications, the
+  nested Contacts/Interviews/Documents panels, and the three
+  cross-application directory screens (v0.8.0) all have none yet
 - iOS build in CI (Android debug build only currently)
 - `file_picker`'s Android/iOS native setup (manifest `queries` entries
   for content-type intents on Android API 30+, any iOS document-picker
@@ -382,7 +445,10 @@ mobile/
       network/api_client.dart      # shared Dio instance (token interceptors)
       theme/app_theme.dart
     shared/
-      widgets/coming_soon_screen.dart  # placeholder for not-yet-built tabs
+      widgets/coming_soon_screen.dart  # no longer referenced by router.dart
+                                        # (all 4 bottom-nav tabs are real
+                                        # screens now) — left in place for
+                                        # any future placeholder need
     features/
       auth/
         data/                       # token_storage.dart, auth_api.dart, auth_repository.dart
@@ -395,36 +461,51 @@ mobile/
                                        # status style, formatting (application_formatting.dart
                                        # now uses intl's DateFormat — see above)
       contacts/
-        data/contacts_api.dart
-        domain/                      # contact.dart, contact_draft.dart
-        presentation/                 # contacts_panel.dart (tab content),
-                                       # contact_form_sheet.dart (add/edit)
+        data/                        # contacts_api.dart,
+                                       # contact_directory_api.dart (GET /contacts)
+        domain/                      # contact.dart, contact_draft.dart,
+                                       # contact_with_application.dart (+ ApplicationSummary)
+        presentation/                 # contacts_panel.dart (nested tab content),
+                                       # contact_form_sheet.dart (add/edit),
+                                       # contact_directory_state/controller.dart,
+                                       # contact_directory_screen.dart (bottom-nav tab)
       interviews/
-        data/interviews_api.dart
+        data/                        # interviews_api.dart,
+                                       # interview_directory_api.dart (GET /interviews)
         domain/                      # interview.dart (InterviewType/InterviewResult
-                                       # enums), interview_draft.dart
+                                       # enums), interview_draft.dart,
+                                       # interview_with_application.dart (+ ApplicationSummary)
         presentation/                 # interviews_list_state/controller.dart
                                        # (infinite scroll, .family-scoped),
-                                       # interviews_panel.dart (tab content),
+                                       # interviews_panel.dart (nested tab content),
                                        # interview_form_sheet.dart (add/edit),
-                                       # interview_formatting.dart (intl DateFormat)
+                                       # interview_formatting.dart (intl DateFormat),
+                                       # interview_directory_state/controller.dart,
+                                       # interview_directory_screen.dart (bottom-nav tab)
       documents/
-        data/documents_api.dart       # upload() sends multipart FormData, not JSON
+        data/                        # documents_api.dart (upload() sends multipart
+                                       # FormData, not JSON), document_directory_api.dart
+                                       # (GET /documents, search + file_type)
         domain/                      # document.dart (DocumentType enum,
                                        # DocumentDownloadResponse), no *_draft.dart —
-                                       # upload/update take params directly
+                                       # upload/update take params directly;
+                                       # document_with_application.dart (+ ApplicationSummary)
         presentation/                 # documents_list_state/controller.dart
                                        # (infinite scroll, local prepend/replaceById/
                                        # removeById instead of refresh()),
-                                       # documents_panel.dart (tab content),
-                                       # document_upload_sheet.dart, document_edit_sheet.dart
+                                       # documents_panel.dart (nested tab content),
+                                       # document_upload_sheet.dart, document_edit_sheet.dart,
+                                       # document_directory_state/controller.dart,
+                                       # document_directory_screen.dart (bottom-nav tab)
   pubspec.yaml
   analysis_options.yaml
   .env.example                    # committed template; .env.development/.env.production gitignored
   .github/workflows/mobile-ci.yml
 ```
 
-Every future feature (the cross-application Interviews/Contacts/
-Documents directory screens, still `ComingSoonScreen`) should get the
-same `data`/`domain`/`presentation` split as `auth/`, `applications/`,
-`contacts/`, `interviews/`, and `documents/`.
+Every future feature should get the same `data`/`domain`/`presentation`
+split as `auth/`, `applications/`, `contacts/`, `interviews/`, and
+`documents/` — and, if it needs both nested per-application CRUD and a
+cross-application directory, the same `*_api.dart`/`*_directory_api.dart`
+and `*_panel.dart`/`*_directory_screen.dart` pairing Contacts/Interviews/
+Documents now demonstrate.
