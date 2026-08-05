@@ -185,12 +185,17 @@ BACKEND_SUMMARY.md for the reasoning.
       `DocumentsPanel.vue` on web. `features/contacts/`,
       `features/interviews/`, `features/documents/` — see
       MOBILE_SUMMARY.md
-  - [ ] Cross-application directory screens (the bottom-nav Interviews/
-        Contacts/Documents tabs) — still `ComingSoonScreen`; mirrors
-        `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
-        `DocumentDirectoryView.vue`, not yet started on mobile
-  - [ ] Widget/unit tests for Contacts/Interviews/Documents (same gap
-        Applications' own screens already have — see Testing below)
+  - [x] Cross-application directory screens (the bottom-nav Interviews/
+        Contacts/Documents tabs) — `ContactDirectoryScreen` (search),
+        `InterviewDirectoryScreen` (`result` filter), and
+        `DocumentDirectoryScreen` (`search` + `file_type`, combined),
+        mirroring `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
+        `DocumentDirectoryView.vue`. `ComingSoonScreen` no longer used by
+        the router — see MOBILE_SUMMARY.md and CHANGELOG.md v0.8.0
+  - [ ] Widget/unit tests for Contacts/Interviews/Documents — both the
+        nested per-application panels and the three new directory
+        screens above (same gap Applications' own screens already have —
+        see Testing below)
 - [ ] Notifications
 - [ ] Offline support
 - [ ] In-app document download / offline document storage (currently
@@ -267,6 +272,7 @@ BACKEND_SUMMARY.md for the reasoning.
       factories) every one of these builds on directly — every backend
       CRUD endpoint now has integration coverage
 - [ ] Mobile widget/unit tests beyond the auth smoke test (Applications,
-      Contacts, Interviews, and Documents all have none yet — see
-      MOBILE_SUMMARY.md and CHANGELOG.md v0.7.0)
+      the nested Contacts/Interviews/Documents panels, and the three
+      cross-application directory screens all have none yet — see
+      MOBILE_SUMMARY.md and CHANGELOG.md v0.7.0/v0.8.0)
 - [ ] End-to-end tests
