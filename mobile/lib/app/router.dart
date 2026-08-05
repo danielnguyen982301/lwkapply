@@ -9,8 +9,8 @@ import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/contacts/presentation/contact_directory_screen.dart';
+import '../features/documents/presentation/document_directory_screen.dart';
 import '../features/interviews/presentation/interview_directory_screen.dart';
-import '../shared/widgets/coming_soon_screen.dart';
 import 'app_shell.dart';
 
 /// Auth-aware router, mirroring webapp's `authGuard`
@@ -127,10 +127,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/documents',
                 name: 'documents',
-                builder: (context, state) => const ComingSoonScreen(
-                  title: 'Documents',
-                  icon: Icons.description_outlined,
-                ),
+                // Was ComingSoonScreen — now the real cross-application
+                // Documents directory, mirroring
+                // DocumentDirectoryView.vue. See
+                // document_directory_screen.dart's doc comment for how
+                // it combines ContactDirectoryScreen's search box with
+                // InterviewDirectoryScreen's filter sheet (search +
+                // file_type together, unlike either prior directory
+                // alone).
+                builder: (context, state) => const DocumentDirectoryScreen(),
               ),
             ],
           ),
