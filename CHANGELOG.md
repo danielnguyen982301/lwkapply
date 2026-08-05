@@ -1,6 +1,70 @@
 # Changelog
 
-## v0.7.0 (in progress)
+## v0.8.0 (in progress)
+
+### Added
+
+- **Cross-application directory screens on mobile**
+  (`mobile/lib/features/{contacts,interviews,documents}/`), closing the
+  "Cross-application directory screens" TODO item and replacing all
+  three `ComingSoonScreen` bottom-nav tabs. Mirrors
+  `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
+  `DocumentDirectoryView.vue` — read-only, paginated, aggregate across
+  every application the user owns, and point back to the owning
+  application (via the existing `application-edit` route) for anything
+  beyond viewing:
+  - **`ContactDirectoryScreen`**: debounced text search (name or
+    company), infinite scroll. Tappable email/LinkedIn per row via
+    `url_launcher`, same as the nested `ContactsPanel`.
+  - **`InterviewDirectoryScreen`**: `result` filter via a bottom sheet
+    (no text search — `Interview` has no name-like field, matching the
+    backend). Cards reuse `interview_formatting.dart`'s `formatDateTime`
+    and duplicate `InterviewsPanel`'s `_ResultChip` color logic
+    pixel-for-pixel.
+  - **`DocumentDirectoryScreen`**: the one directory combining two
+    filters at once — debounced search (file name or company) _and_ a
+    `file_type` filter sheet, each clearing independently, plus a
+    combined "Clear filters" affordance mirroring
+    `DocumentDirectoryView.vue`'s `clearFilters()`. No download
+    shortcut from the row, deliberately matching the web view's
+    read-only contract. Cards reuse `application_formatting.dart`'s
+    `formatDate` and duplicate `DocumentsPanel`'s `_TypeChip` color
+    logic.
+  - Each feature follows the same new-file shape: a `domain/
+*_with_application.dart` composing the existing per-application model
+    (`Contact`/`Interview`/`Document`) with its own `ApplicationSummary`
+    (deliberately duplicated per feature rather than shared — mirrors
+    the backend's own precedent of each directory schema owning its
+    copy); a `data/*_directory_api.dart` calling the flat `GET
+/contacts`/`/interviews`/`/documents` endpoint and reusing the nested
+    feature's existing exception type (`ContactsException`/
+    `InterviewsException`/`DocumentsException`); a `presentation/
+*_directory_state.dart` + `*_directory_controller.dart` pair following
+    `InterviewsListController`'s fetch/append infinite-scroll split, but
+    as plain (non-`.family`) providers, since each is one global,
+    cross-application list rather than something scoped per
+    application; and a `*_directory_screen.dart` built from
+    `ApplicationsListScreen`'s search/filter/scroll/empty-state
+    conventions.
+  - `app/router.dart`: all three bottom-nav branches
+    (`/contacts`/`/interviews`/`/documents`) now build the real screen
+    instead of `ComingSoonScreen`.
+
+### Not included in this pass
+
+- Widget/unit tests for the three new directory screens — same
+  project-wide gap the nested Contacts/Interviews/Documents panels and
+  Applications' own screens already have (see Testing in TODO.md)
+- A download shortcut on `DocumentDirectoryScreen`'s rows — matches
+  `DocumentDirectoryView.vue`'s read-only contract as-is; would need a
+  per-row loading-state affordance like `DocumentsPanel`'s
+  `_downloadingId` if added later
+- `shared/widgets/coming_soon_screen.dart` is now unreferenced by
+  `router.dart` (all three tabs that used it are real screens) — left
+  in place rather than deleted, in case a future feature wants the same
+  placeholder
+
+## v0.7.0
 
 ### Added
 
@@ -94,7 +158,7 @@ interview_formatting.dart`'s new `formatDateTime`): both now call
 - In-app document download/offline storage — downloads open externally
   only, per the "Changed" note above
 
-## v0.6.0 (in progress)
+## v0.6.0
 
 ### Added
 
@@ -235,7 +299,7 @@ version described above:
   declarations to point at. Added an explicit step generating them from
   `.env.example` before analyze/build, mirroring the local setup step
 
-## v0.5.0 (in progress)
+## v0.5.0
 
 ### Added
 
