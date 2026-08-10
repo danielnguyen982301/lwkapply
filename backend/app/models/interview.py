@@ -11,6 +11,7 @@ from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.application import Application
+    from app.models.interview_reminder import InterviewReminder
 
 
 class InterviewType(str, enum.Enum):
@@ -56,3 +57,6 @@ class Interview(Base, UUIDMixin, TimestampMixin):
     )
 
     application: Mapped["Application"] = relationship(back_populates="interviews")
+    reminders: Mapped[list["InterviewReminder"]] = relationship(
+        back_populates="interview", cascade="all, delete-orphan"
+    )
