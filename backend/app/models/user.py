@@ -38,6 +38,13 @@ class User(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # IANA tz name (e.g. "America/New_York"), reported by the client's own
+    # Intl.DateTimeFormat()/flutter_timezone at register/login/refresh -
+    # see TODO.md's reminder-system plan for why (client-reported beats
+    # IP-geolocation inference, and needs no dedicated UI). Nullable; code
+    # that reads this always falls back to UTC rather than assuming it's
+    # set (e.g. accounts created before this column existed).
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     applications: Mapped[list["Application"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
