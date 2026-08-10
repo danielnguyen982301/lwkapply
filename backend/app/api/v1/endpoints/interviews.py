@@ -36,6 +36,7 @@ from app.schemas.interview import (
     InterviewWithApplicationListResponse,
     InterviewWithApplicationRead,
 )
+from app.services.reminders import sync_interview_reminders
 
 router = APIRouter()
 directory_router = APIRouter()
@@ -113,6 +114,12 @@ def create_interview(
     db.add(interview)
     db.commit()
     db.refresh(interview)
+
+    # Needs interview.id, hence the separate commit above rather than
+    # folding into the same one - see app/services/reminders.py.
+    sync_interview_reminders(db, interview)
+    db.commit()
+    db.refresh(interview)
     return interview
 
 
@@ -140,6 +147,14 @@ def update_interview(
         setattr(interview, field, value)
 
     db.add(interview)
+    db.commit()
+    db.refresh(interview)
+
+    # Re-sync whenever scheduled_at or result may have changed - cheap to
+    # call unconditionally rather than diffing `updates` for the two
+    # fields that matter, and correctness doesn't depend on which fields
+    # were actually in the PATCH body.
+    sync_interview_reminders(db, interview)
     db.commit()
     db.refresh(interview)
     return interview
