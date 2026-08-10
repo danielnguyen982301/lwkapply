@@ -25,3 +25,4 @@ __pycache__
 .DS_Store
 filelist.txt
 *.zip
+celerybeat-schedule
