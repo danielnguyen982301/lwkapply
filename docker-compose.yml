@@ -22,6 +22,17 @@ services:
     ports:
       - "6379:6379"
 
+  # Fake SMTP server for local dev - catches everything sent to it
+  # instead of delivering anywhere real. EMAIL_PROVIDER=smtp (the
+  # backend's local-dev default, see app/core/config.py) points at this
+  # on port 1025; view captured mail at http://localhost:8025.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+
   api:
     build: ./backend
     restart: unless-stopped
@@ -40,6 +51,45 @@ services:
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.local
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/lwkapply
+      REDIS_URL: redis://redis:6379/0
+      # Local dev's EMAIL_PROVIDER=smtp default (see config.py) needs to
+      # resolve "mailhog" as a hostname, which only works inside the
+      # compose network - .env.local's SMTP_HOST=localhost is meant for
+      # running celery bare-metal instead, so override it here.
+      SMTP_HOST: mailhog
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app worker --loglevel=info
+
+  celery-beat:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.local
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/lwkapply
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app beat --loglevel=info
 
 volumes:
   db_data:
