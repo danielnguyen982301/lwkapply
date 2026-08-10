@@ -65,6 +65,33 @@ class Settings(BaseSettings):
     # --- Rate limiting / misc ---
     MAX_UPLOAD_SIZE_MB: int = 10
 
+    # --- Email (interview reminders, Phase A - see TODO.md) ---
+    # "smtp" is for local dev against MailHog (docker-compose's `mailhog`
+    # service, SMTP on 1025 / web UI on 8025 - nothing sent there ever
+    # leaves the machine). "resend" is the real provider, used in
+    # staging/production. Same "isolate the network client behind one
+    # module, switch on config" shape as app/services/r2.py.
+    EMAIL_PROVIDER: Literal["smtp", "resend"] = "smtp"
+    EMAIL_FROM_ADDRESS: str = "notifications@lwkapply.local"
+    EMAIL_FROM_NAME: str = "LwkApply"
+
+    RESEND_API_KEY: str = ""
+
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 1025
+    SMTP_USE_TLS: bool = False
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+
+    # Used to build the "view application" link inside a reminder email.
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # Hardcoded single lead time for Phase A's first pass (see TODO.md -
+    # multi-lead-time UI is explicitly out of scope for now). The
+    # `interview_reminders` table itself doesn't assume a single lead
+    # time - this setting just controls how many rows get created today.
+    REMINDER_LEAD_HOURS: int = 24
+
 
 @lru_cache
 def get_settings() -> Settings:
