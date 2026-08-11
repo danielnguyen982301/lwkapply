@@ -44,6 +44,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserCreate, UserRead
+from app.utils.timezone import is_valid_timezone
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -63,6 +64,29 @@ def _issue_tokens(user_id, refresh_token: Optional[str] = None) -> TokenResponse
     )
 
 
+def _maybe_update_timezone(db: Session, user: User, timezone: Optional[str]) -> None:
+    """Silently re-report User.timezone on register/login/refresh (see
+    TODO.md's reminder-system plan). Deliberately quiet on failure -
+    a missing or malformed tz string should never fail the surrounding
+    auth request, it just leaves the column as it was. Also skips the
+    write entirely when the value hasn't actually changed, since this
+    runs on *every* login and refresh - not worth a DB round-trip for a
+    no-op UPDATE on every single request.
+    """
+    if not timezone or timezone == user.timezone:
+        return
+    if not is_valid_timezone(timezone):
+        logger.warning(
+            "Ignoring invalid client-reported timezone for user_id=%s: %r",
+            user.id,
+            timezone,
+        )
+        return
+    user.timezone = timezone
+    db.add(user)
+    db.commit()
+
+
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
@@ -72,11 +96,23 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
             status_code=400, detail="Unable to register with these details"
         )
 
+    timezone = (
+        payload.timezone
+        if payload.timezone and is_valid_timezone(payload.timezone)
+        else None
+    )
+    if payload.timezone and timezone is None:
+        logger.warning(
+            "Ignoring invalid client-reported timezone at registration: %r",
+            payload.timezone,
+        )
+
     user = User(
         email=payload.email,
         password_hash=hash_password(payload.password),
         first_name=payload.first_name,
         last_name=payload.last_name,
+        timezone=timezone,
     )
     db.add(user)
     db.commit()
@@ -96,6 +132,8 @@ def login(
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
+
+    _maybe_update_timezone(db, user, payload.timezone)
 
     refresh_token = create_refresh_token(str(user.id))
     csrf_token = generate_csrf_token()
@@ -144,6 +182,8 @@ def refresh(
     user = db.query(User).filter(User.id == token_payload["sub"]).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    _maybe_update_timezone(db, user, payload.timezone if payload else None)
 
     # Rotate both the refresh token and the CSRF token on every refresh —
     # if a refresh token is ever replayed after rotation, this makes the
