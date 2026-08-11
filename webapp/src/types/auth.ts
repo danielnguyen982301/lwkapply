@@ -17,6 +17,7 @@ export interface AccessTokenResponse {
 export interface LoginPayload {
   email: string
   password: string
+  timezone?: string
 }
 
 export interface RegisterPayload {
@@ -24,6 +25,7 @@ export interface RegisterPayload {
   password: string
   first_name: string
   last_name: string
+  timezone?: string
 }
 
 export interface ApiError {

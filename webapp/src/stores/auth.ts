@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, extractErrorMessage } from '@/lib/api'
+import { getBrowserTimezone } from '@/lib/timezone'
 import type { AccessTokenResponse, LoginPayload, RegisterPayload, User } from '@/types/auth'
 
 interface AuthState {
@@ -39,7 +40,10 @@ export const useAuthStore = defineStore('auth', {
       this.status = 'loading'
       this.error = null
       try {
-        const { data } = await api.post<AccessTokenResponse>('/auth/login', payload)
+        const { data } = await api.post<AccessTokenResponse>('/auth/login', {
+          ...payload,
+          timezone: getBrowserTimezone(),
+        })
         this.accessToken = data.access_token
         await this.fetchCurrentUser()
         this.status = 'idle'
@@ -54,7 +58,7 @@ export const useAuthStore = defineStore('auth', {
       this.status = 'loading'
       this.error = null
       try {
-        await api.post('/auth/register', payload)
+        await api.post('/auth/register', { ...payload, timezone: getBrowserTimezone() })
         await this.login({ email: payload.email, password: payload.password })
       } catch (err) {
         this.status = 'error'
@@ -86,7 +90,9 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async refreshAccessToken(): Promise<string> {
-      const { data } = await api.post<AccessTokenResponse>('/auth/refresh')
+      const { data } = await api.post<AccessTokenResponse>('/auth/refresh', {
+        timezone: getBrowserTimezone(),
+      })
       this.accessToken = data.access_token
       return data.access_token
     },
