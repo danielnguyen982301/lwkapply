@@ -25,6 +25,17 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
+    # Client-reported IANA tz name (web: Intl.DateTimeFormat().resolvedOptions()
+    # .timeZone; mobile: flutter_timezone) - optional and unvalidated at the
+    # schema level on purpose. Validation (is it actually a real IANA name)
+    # happens once, in app/utils/timezone.py, shared with the same
+    # re-report-on-login/refresh path in api/v1/endpoints/auth.py, rather
+    # than duplicating a zoneinfo check across every schema that carries
+    # this field. An invalid/missing value here should never fail
+    # registration - it just leaves User.timezone NULL, same as any
+    # pre-this-feature account, and the UTC fallback everywhere else
+    # already handles that.
+    timezone: str | None = None
 
     _validate_password_bytes = field_validator("password")(
         validate_password_byte_length
