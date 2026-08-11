@@ -8,6 +8,11 @@ from app.schemas.user import validate_password_byte_length
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    # Re-reported on every login, same reasoning as UserCreate.timezone
+    # (see schemas/user.py) - covers travel/relocation without the user
+    # doing anything. Validated (and silently ignored if invalid/absent)
+    # in the endpoint via app/utils/timezone.py, not here.
+    timezone: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -23,12 +28,18 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    """Body for POST /auth/refresh. Only used by the mobile client, which
-    has no cookie to read the refresh token from and must send it
-    explicitly. Web's refresh flow doesn't send a body at all - it relies
-    entirely on the httpOnly cookie - so every field here is optional."""
+    """Body for POST /auth/refresh. `refresh_token` is only ever used by
+    the mobile client, which has no cookie to read the refresh token
+    from and must send it explicitly - web's refresh flow doesn't
+    strictly need a body for that. `timezone` is different: both clients
+    may now send a body just to carry this, re-reporting it on every
+    refresh the same way login does (see LoginRequest.timezone) - so
+    web's refresh request goes from "no body" to "an optional body with
+    just timezone" as of this change. Every field here stays optional so
+    a client that sends nothing at all still works exactly as before."""
 
     refresh_token: Optional[str] = None
+    timezone: Optional[str] = None
 
 
 class PasswordResetRequest(BaseModel):
