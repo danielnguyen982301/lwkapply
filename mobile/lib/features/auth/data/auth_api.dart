@@ -51,11 +51,16 @@ class AuthApi {
   Future<AuthTokenResponse> login({
     required String email,
     required String password,
+    String? timezone,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/auth/login',
-        data: {'email': email, 'password': password},
+        data: {
+          'email': email,
+          'password': password,
+          if (timezone != null) 'timezone': timezone,
+        },
         options: Options(headers: _mobileHeader),
       );
       return AuthTokenResponse.fromJson(response.data!);
@@ -69,13 +74,17 @@ class AuthApi {
     required String password,
     required String firstName,
     required String lastName,
+    String? timezone,
   }) async {
     try {
       // Backend's POST /auth/register only creates the account and
       // returns UserRead — it does not log the user in or issue tokens
       // (see backend/app/api/v1/endpoints/auth.py::register). Chain an
       // explicit login call afterward rather than assuming register
-      // returns a token response.
+      // returns a token response. `timezone` is sent to both calls
+      // (register and the login it chains into) - harmless duplication,
+      // and means the account has a timezone even in the unlikely case
+      // the chained login fails right after a successful register.
       await _dio.post<Map<String, dynamic>>(
         '/auth/register',
         data: {
@@ -83,19 +92,26 @@ class AuthApi {
           'password': password,
           'first_name': firstName,
           'last_name': lastName,
+          if (timezone != null) 'timezone': timezone,
         },
       );
-      return login(email: email, password: password);
+      return login(email: email, password: password, timezone: timezone);
     } on DioException catch (e) {
       throw AuthException(_messageFor(e));
     }
   }
 
-  Future<AuthTokenResponse> refresh({required String refreshToken}) async {
+  Future<AuthTokenResponse> refresh({
+    required String refreshToken,
+    String? timezone,
+  }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/auth/refresh',
-        data: {'refresh_token': refreshToken},
+        data: {
+          'refresh_token': refreshToken,
+          if (timezone != null) 'timezone': timezone,
+        },
         options: Options(headers: _mobileHeader),
       );
       return AuthTokenResponse.fromJson(response.data!);

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/timezone.dart';
 import '../domain/user.dart';
 import 'auth_api.dart';
 import 'token_storage.dart';
@@ -25,7 +26,11 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    final tokens = await _api.login(email: email, password: password);
+    final tokens = await _api.login(
+      email: email,
+      password: password,
+      timezone: await getDeviceTimezone(),
+    );
     await _tokenStorage.saveRefreshToken(tokens.refreshToken);
     final user = await _api.fetchMe(accessToken: tokens.accessToken);
     return AuthResult(user: user, accessToken: tokens.accessToken);
@@ -42,6 +47,7 @@ class AuthRepository {
       password: password,
       firstName: firstName,
       lastName: lastName,
+      timezone: await getDeviceTimezone(),
     );
     await _tokenStorage.saveRefreshToken(tokens.refreshToken);
     final user = await _api.fetchMe(accessToken: tokens.accessToken);
@@ -79,7 +85,10 @@ class AuthRepository {
   }
 
   Future<AuthResult> _refreshWith(String refreshToken) async {
-    final tokens = await _api.refresh(refreshToken: refreshToken);
+    final tokens = await _api.refresh(
+      refreshToken: refreshToken,
+      timezone: await getDeviceTimezone(),
+    );
     // Refresh token rotates on every use (see BACKEND_SUMMARY.md) — always
     // persist the new one, never reuse the old value again.
     await _tokenStorage.saveRefreshToken(tokens.refreshToken);
