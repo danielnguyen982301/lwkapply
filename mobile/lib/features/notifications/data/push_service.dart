@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -75,7 +76,20 @@ class PushService {
     );
 
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null) _handleTapData(initialMessage.data);
+    if (initialMessage != null) {
+      // Deliberately deferred, unlike onMessageOpenedApp/the local-
+      // notification tap below: this method runs from main() BEFORE
+      // runApp() has rendered a first frame, so the router's delegate
+      // isn't attached to a live Navigator yet. Pushing this early
+      // fails with a spurious "no routes for location" - it's a
+      // lifecycle-timing problem, not an actual route-matching one.
+      // addPostFrameCallback queues this to run right after the first
+      // frame renders, by which point the router is fully mounted -
+      // safe to register even before runApp() has been called at all.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleTapData(initialMessage.data);
+      });
+    }
   }
 
   /// Call after a successful login/register, and after the app restores
