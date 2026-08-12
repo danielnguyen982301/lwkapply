@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "232995915474",
+    "project_id": "lwkapply-push-notif",
+    "storage_bucket": "lwkapply-push-notif.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:232995915474:android:e4899159000d4962cd8f0b",
+        "android_client_info": {
+          "package_name": "io.github.danielnguyen982301.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABEBHNixU_OQX77_Pqr4zf6BzCIj43Zhc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
