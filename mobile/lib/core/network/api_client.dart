@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/env_config.dart';
 import '../../features/auth/data/auth_api.dart';
 import '../../features/auth/data/auth_repository.dart';
-import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/session_providers.dart';
 
 /// Shared Dio instance for all authenticated feature requests
 /// (applications, interviews, contacts, documents).
@@ -17,6 +17,16 @@ import '../../features/auth/presentation/auth_controller.dart';
 ///   requests that all 401 at once don't trigger five refresh calls
 /// - never intercepts /auth/* routes (see webapp's CHANGELOG v0.4.0 fix
 ///   for the infinite-refresh-loop bug this avoids)
+///
+/// Reads/writes `accessTokenProvider`/`currentUserProvider` directly,
+/// never `authControllerProvider` - see session_providers.dart's doc
+/// comment for why: `authControllerProvider` transitively depends on
+/// this very provider (via `pushServiceProvider`, for
+/// `DeviceTokensApi`'s Dio), so reading it from here - even lazily,
+/// inside a callback that only runs well after everything has finished
+/// building - creates a real cycle in Riverpod's dependency graph and
+/// throws `CircularDependencyError` at request time. Don't reintroduce
+/// a read/watch of `authControllerProvider` anywhere in this file.
 final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
@@ -32,7 +42,7 @@ final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
-        final token = ref.read(authControllerProvider).accessToken;
+        final token = ref.read(accessTokenProvider);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
@@ -56,12 +66,18 @@ final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
           refreshInFlight = null;
         } on AuthException {
           refreshInFlight = null;
-          ref.read(authControllerProvider.notifier).forceLogout();
+          // Clear the shared session state directly rather than calling
+          // into AuthController - see this provider's doc comment above
+          // for why. AuthController's own accessTokenProvider listener
+          // (auth_controller.dart's constructor) reacts to this and
+          // updates its `state` for UI/routing.
+          ref.read(accessTokenProvider.notifier).state = null;
+          ref.read(currentUserProvider.notifier).state = null;
           handler.next(error);
           return;
         }
 
-        final newToken = ref.read(authControllerProvider).accessToken;
+        final newToken = ref.read(accessTokenProvider);
         final retryOptions = error.requestOptions
           ..headers['Authorization'] = 'Bearer $newToken'
           ..extra['retried'] = true;
@@ -88,8 +104,9 @@ final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
 Future<void> _performRefresh(Ref ref) async {
   final repository = ref.read(authRepositoryProvider);
   final result = await repository.refreshAccessToken();
-  ref.read(authControllerProvider.notifier).updateAfterSilentRefresh(
-        accessToken: result.accessToken,
-        user: result.user,
-      );
+  // Write directly to the leaf providers, not through AuthController -
+  // same reasoning as the rest of this file. AuthController's listener
+  // picks this up and syncs its own `state` from it.
+  ref.read(accessTokenProvider.notifier).state = result.accessToken;
+  ref.read(currentUserProvider.notifier).state = result.user;
 }
