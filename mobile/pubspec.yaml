@@ -46,6 +46,12 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_timezone: ^5.1.0
 
+  # Push notifications (Phase B, Android only for now - see TODO.md's
+  # reminder-system plan for why iOS is deferred: it needs a paid Apple
+  # Developer Program membership for the APNs key FCM relays through).
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
