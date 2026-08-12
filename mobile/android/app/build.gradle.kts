@@ -18,6 +18,9 @@ dependencies {
 
   // Add the dependencies for any other desired Firebase products
   // https://firebase.google.com/docs/android/setup#available-libraries
+
+  // flutter_local_notifications v.10+ requires this
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 android {
@@ -28,6 +31,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
+        // flutter_local_notifications v.10+ requires this
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
