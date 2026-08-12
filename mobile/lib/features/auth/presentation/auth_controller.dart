@@ -7,15 +7,54 @@ import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_state.dart';
 import '../domain/user.dart';
+import 'session_providers.dart';
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository, this._pushService)
+  AuthController(this._repository, this._pushService, this._ref)
       : super(const AuthState.unknown()) {
     _bootstrap();
+
+    // One-way sync: apiClientProvider writes accessTokenProvider
+    // directly (silent refresh, forced logout on a dead refresh token -
+    // see api_client.dart) rather than calling back into this class, to
+    // avoid recreating the exact dependency cycle accessTokenProvider
+    // was introduced to fix (see session_providers.dart's doc comment).
+    // This listener is what keeps our own `state` - the thing UI/routing
+    // actually watches - in sync with changes made that way, without
+    // AuthController ever needing to depend on apiClientProvider.
+    _ref.listen<String?>(accessTokenProvider, (previous, next) {
+      if (next == null) {
+        // Only react if we still think we're logged in - logout()
+        // below already clears accessTokenProvider itself as part of
+        // its own flow, immediately followed by its own state update,
+        // so this guards against redundantly re-triggering forceLogout.
+        if (state.accessToken != null) {
+          forceLogout();
+        }
+      } else if (next != state.accessToken) {
+        final user = _ref.read(currentUserProvider);
+        if (user != null) {
+          updateAfterSilentRefresh(accessToken: next, user: user);
+        }
+      }
+    });
   }
 
   final AuthRepository _repository;
   final PushService _pushService;
+  final Ref _ref;
+
+  void _setAuthenticated({required User user, required String accessToken}) {
+    state = AuthState.authenticated(user: user, accessToken: accessToken);
+    _ref.read(accessTokenProvider.notifier).state = accessToken;
+    _ref.read(currentUserProvider.notifier).state = user;
+  }
+
+  void _setUnauthenticated({String? errorMessage}) {
+    state = AuthState.unauthenticated(errorMessage: errorMessage);
+    _ref.read(accessTokenProvider.notifier).state = null;
+    _ref.read(currentUserProvider.notifier).state = null;
+  }
 
   /// Runs once on app start: try to silently restore a session from the
   /// stored refresh token. Never surfaces an error to the user here — a
@@ -23,12 +62,9 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _bootstrap() async {
     final result = await _repository.tryRestoreSession();
     if (result == null) {
-      state = const AuthState.unauthenticated();
+      _setUnauthenticated();
     } else {
-      state = AuthState.authenticated(
-        user: result.user,
-        accessToken: result.accessToken,
-      );
+      _setAuthenticated(user: result.user, accessToken: result.accessToken);
       // Re-register the device token on every silent restore, not just
       // a fresh login - covers the case where the FCM token rotated
       // while the app was closed (see PushService.registerCurrentDevice's
@@ -43,13 +79,10 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState.authenticating();
     try {
       final result = await _repository.login(email: email, password: password);
-      state = AuthState.authenticated(
-        user: result.user,
-        accessToken: result.accessToken,
-      );
+      _setAuthenticated(user: result.user, accessToken: result.accessToken);
       unawaited(_pushService.registerCurrentDevice());
     } on AuthException catch (e) {
-      state = AuthState.unauthenticated(errorMessage: e.message);
+      _setUnauthenticated(errorMessage: e.message);
     }
   }
 
@@ -67,13 +100,10 @@ class AuthController extends StateNotifier<AuthState> {
         firstName: firstName,
         lastName: lastName,
       );
-      state = AuthState.authenticated(
-        user: result.user,
-        accessToken: result.accessToken,
-      );
+      _setAuthenticated(user: result.user, accessToken: result.accessToken);
       unawaited(_pushService.registerCurrentDevice());
     } on AuthException catch (e) {
-      state = AuthState.unauthenticated(errorMessage: e.message);
+      _setUnauthenticated(errorMessage: e.message);
     }
   }
 
@@ -83,28 +113,33 @@ class AuthController extends StateNotifier<AuthState> {
     // _repository.logout() clears it, not after.
     await _pushService.deregisterCurrentDevice();
     await _repository.logout();
-    state = const AuthState.unauthenticated();
+    _setUnauthenticated();
   }
 
-  /// Called by the API client's 401 interceptor after a successful
-  /// silent refresh, so UI relying on `authControllerProvider` (e.g. a
-  /// profile screen showing the user's email) stays in sync without
-  /// each screen re-fetching `/users/me` itself.
+  /// Called from this class's own accessTokenProvider listener (see
+  /// constructor) after apiClientProvider's silent-refresh flow updates
+  /// the token directly - keeps `state` (what UI/routing watch) in sync
+  /// without AuthController ever reading apiClientProvider itself.
   void updateAfterSilentRefresh({
     required String accessToken,
     required User user,
   }) {
     if (!mounted) return;
     state = AuthState.authenticated(user: user, accessToken: accessToken);
+    // accessTokenProvider is already correct (that's what triggered this
+    // listener) - only currentUserProvider might still need syncing.
+    _ref.read(currentUserProvider.notifier).state = user;
   }
 
-  /// Called by the API client's 401 interceptor when a silent refresh
-  /// itself fails — the refresh token is dead, force back to login.
+  /// Called from this class's own accessTokenProvider listener after
+  /// apiClientProvider clears the token following a failed silent
+  /// refresh - the refresh token is dead, force back to login.
   void forceLogout() {
     if (!mounted) return;
     state = const AuthState.unauthenticated(
       errorMessage: 'Your session expired. Please log in again.',
     );
+    _ref.read(currentUserProvider.notifier).state = null;
   }
 }
 
@@ -113,5 +148,6 @@ final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
   return AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(pushServiceProvider),
+    ref,
   );
 });
