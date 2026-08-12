@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_client.dart';
 import 'device_tokens_api.dart';
+import 'local_notifications.dart';
 
 /// Must be a top-level (or static) function, not a method - the
 /// firebase_messaging plugin runs this in a separate background isolate
@@ -21,27 +23,60 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // itself from the payload while backgrounded/terminated - this
   // handler is only a hook for background *data* processing, which
   // interview reminders don't currently need. Tap-to-open is handled by
-  // onMessageOpenedApp/getInitialMessage below instead, once the app
-  // isolate is running.
+  // onMessageOpenedApp/getInitialMessage in PushService.initialize
+  // instead, once the app isolate is running.
   developer.log('Background push received: ${message.messageId}', name: 'push');
 }
 
-/// Registration + tap-to-deep-link for interview-reminder push
-/// notifications (Phase B - see TODO.md and MOBILE_SUMMARY.md).
+/// Registration, foreground display, and tap-to-deep-link for
+/// interview-reminder push notifications (Phase B - see TODO.md and
+/// MOBILE_SUMMARY.md).
 ///
 /// Android only for now, matching the backend/TODO's explicit scope
 /// decision (iOS needs a paid Apple Developer Program membership for
 /// the APNs key FCM relays through - not implemented here at all, not
-/// just untested). `registerCurrentDevice()`/`deregisterCurrentDevice()`
-/// are both no-ops on any other platform.
+/// just untested). Every public method is a no-op on any other platform.
 class PushService {
-  PushService(this._deviceTokensApi);
+  PushService(this._deviceTokensApi) {
+    _localNotifications = LocalNotifications(_handleTapPayloadJson);
+  }
 
   final DeviceTokensApi _deviceTokensApi;
+  late final LocalNotifications _localNotifications;
   String? _lastRegisteredToken;
+
+  // Set once, in initialize() - every tap handler below (FCM-driven and
+  // the local-notification one) funnels through this single field
+  // rather than each capturing its own copy, so there's exactly one
+  // router reference in play.
+  GoRouter? _router;
 
   bool get _isSupportedPlatform =>
       defaultTargetPlatform == TargetPlatform.android;
+
+  /// Call once, after building the router - see main.dart. Sets up:
+  /// - local-notification display for foreground-received messages
+  ///   (FCM/the OS only auto-display while backgrounded/terminated - see
+  ///   firebaseMessagingBackgroundHandler's doc comment above)
+  /// - tap-to-deep-link for all three "how was this message received"
+  ///   cases: tapped from the tray while foregrounded (routed through
+  ///   LocalNotifications), backgrounded (onMessageOpenedApp), and
+  ///   terminated (getInitialMessage) - all three converge on the same
+  ///   `_handleTapData`.
+  Future<void> initialize(GoRouter router) async {
+    if (!_isSupportedPlatform) return;
+    _router = router;
+
+    await _localNotifications.initialize();
+
+    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    FirebaseMessaging.onMessageOpenedApp.listen(
+      (message) => _handleTapData(message.data),
+    );
+
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) _handleTapData(initialMessage.data);
+  }
 
   /// Call after a successful login/register, and after the app restores
   /// a session silently on startup (see AuthController). Best-effort:
@@ -52,6 +87,10 @@ class PushService {
     if (!_isSupportedPlatform) return;
 
     try {
+      // Also covers Android 13+'s runtime POST_NOTIFICATIONS permission -
+      // firebase_messaging's requestPermission() requests it natively on
+      // Android as of the version pinned in pubspec.yaml, not just
+      // iOS's authorization prompt.
       final settings = await FirebaseMessaging.instance.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
         return;
@@ -106,32 +145,38 @@ class PushService {
     }
   }
 
-  /// Wires up tap-to-open for the two "app wasn't in the foreground"
-  /// cases - background (onMessageOpenedApp) and terminated
-  /// (getInitialMessage). A message received while the app IS in the
-  /// foreground never produces a system-tray notification to tap in the
-  /// first place (see firebaseMessagingBackgroundHandler's doc comment),
-  /// so there's deliberately no foreground-tap case to handle here.
-  ///
-  /// Call once, after building the router - see main.dart. Takes the
-  /// GoRouter instance directly rather than a Ref, since this runs
-  /// outside any widget's BuildContext (main.dart, before runApp).
-  void setupNotificationTapHandling(GoRouter router) {
-    if (!_isSupportedPlatform) return;
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    if (notification == null) return; // data-only message, nothing to show
 
-    void handleTap(RemoteMessage message) {
-      final applicationId = message.data['application_id'];
-      if (message.data['type'] == 'interview_reminder' &&
-          applicationId != null) {
-        router.push('/applications/$applicationId/edit');
-      }
+    await _localNotifications.show(
+      title: notification.title ?? 'New notification',
+      body: notification.body ?? '',
+      // FCM's data payload is always Map<String, String> on the wire;
+      // firebase_messaging types it as Map<String, dynamic> defensively
+      // on the Dart side, so normalize it back before handing it to
+      // LocalNotifications (which round-trips it through JSON as the
+      // tap payload - see local_notifications.dart).
+      data: message.data.map((key, value) => MapEntry(key, value.toString())),
+    );
+  }
+
+  /// The local-notification tap callback only gets a raw JSON string
+  /// back (a plugin/platform-channel constraint, not a design choice) -
+  /// this decodes it and forwards to the same `_handleTapData` the
+  /// FCM-driven paths use, so all three tap sources end up in one place.
+  void _handleTapPayloadJson(String payload) {
+    _handleTapData(
+      (jsonDecode(payload) as Map<String, dynamic>)
+          .map((key, value) => MapEntry(key, value.toString())),
+    );
+  }
+
+  void _handleTapData(Map<String, dynamic> data) {
+    final applicationId = data['application_id'];
+    if (data['type'] == 'interview_reminder' && applicationId != null) {
+      _router?.push('/applications/$applicationId/edit');
     }
-
-    FirebaseMessaging.onMessageOpenedApp.listen(handleTap);
-
-    FirebaseMessaging.instance.getInitialMessage().then((message) {
-      if (message != null) handleTap(message);
-    });
   }
 }
 

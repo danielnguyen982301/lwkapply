@@ -29,10 +29,12 @@ Future<void> main() async {
   // Built explicitly (rather than letting ProviderScope create one
   // implicitly) so tap-to-deep-link can read the same routerProvider
   // instance from outside the widget tree - see
-  // PushService.setupNotificationTapHandling's doc comment for why it
-  // needs the GoRouter directly instead of a Ref/BuildContext.
+  // PushService.initialize's doc comment for why it needs the GoRouter
+  // directly instead of a Ref/BuildContext. Awaited before runApp so the
+  // local-notifications plugin (which PushService.initialize sets up)
+  // is ready before any foreground message could plausibly arrive.
   final container = ProviderContainer();
-  container.read(pushServiceProvider).setupNotificationTapHandling(
+  await container.read(pushServiceProvider).initialize(
         container.read(routerProvider),
       );
 
