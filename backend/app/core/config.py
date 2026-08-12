@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     # time - this setting just controls how many rows get created today.
     REMINDER_LEAD_HOURS: int = 24
 
+    # --- Push notifications (Phase B - see TODO.md) ---
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
+    FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
