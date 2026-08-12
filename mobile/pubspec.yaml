@@ -51,6 +51,11 @@ dependencies:
   # Developer Program membership for the APNs key FCM relays through).
   firebase_core: ^3.6.0
   firebase_messaging: ^15.1.3
+  # Shows a heads-up notification while the app is foregrounded - FCM/the
+  # OS already do this automatically while backgrounded/terminated, but
+  # NOT while the app is open (see push_service.dart's foreground
+  # listener for why this package fills that one gap).
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:
