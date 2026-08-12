@@ -20,6 +20,9 @@ __pycache__
 .env.development
 .env.production
 
+# secrets
+secrets
+
 # Misc
 *.tsbuildinfo
 .DS_Store
