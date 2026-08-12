@@ -1,16 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../notifications/data/push_service.dart';
 import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_state.dart';
 import '../domain/user.dart';
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository) : super(const AuthState.unknown()) {
+  AuthController(this._repository, this._pushService)
+      : super(const AuthState.unknown()) {
     _bootstrap();
   }
 
   final AuthRepository _repository;
+  final PushService _pushService;
 
   /// Runs once on app start: try to silently restore a session from the
   /// stored refresh token. Never surfaces an error to the user here — a
@@ -24,6 +29,13 @@ class AuthController extends StateNotifier<AuthState> {
         user: result.user,
         accessToken: result.accessToken,
       );
+      // Re-register the device token on every silent restore, not just
+      // a fresh login - covers the case where the FCM token rotated
+      // while the app was closed (see PushService.registerCurrentDevice's
+      // doc comment on why this is also re-run from onTokenRefresh).
+      // Fire-and-forget: PushService already swallows its own errors,
+      // and startup shouldn't wait on this before showing the app.
+      unawaited(_pushService.registerCurrentDevice());
     }
   }
 
@@ -35,6 +47,7 @@ class AuthController extends StateNotifier<AuthState> {
         user: result.user,
         accessToken: result.accessToken,
       );
+      unawaited(_pushService.registerCurrentDevice());
     } on AuthException catch (e) {
       state = AuthState.unauthenticated(errorMessage: e.message);
     }
@@ -58,12 +71,17 @@ class AuthController extends StateNotifier<AuthState> {
         user: result.user,
         accessToken: result.accessToken,
       );
+      unawaited(_pushService.registerCurrentDevice());
     } on AuthException catch (e) {
       state = AuthState.unauthenticated(errorMessage: e.message);
     }
   }
 
   Future<void> logout() async {
+    // Deregister while the session (and therefore a valid Bearer token
+    // for the DELETE call) is still live - must happen before
+    // _repository.logout() clears it, not after.
+    await _pushService.deregisterCurrentDevice();
     await _repository.logout();
     state = const AuthState.unauthenticated();
   }
@@ -90,7 +108,10 @@ class AuthController extends StateNotifier<AuthState> {
   }
 }
 
-final authControllerProvider =
+final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
-  return AuthController(ref.watch(authRepositoryProvider));
+  return AuthController(
+    ref.watch(authRepositoryProvider),
+    ref.watch(pushServiceProvider),
+  );
 });
