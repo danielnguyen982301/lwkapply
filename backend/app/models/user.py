@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     # Import only for type-checkers (Pylance/mypy). Doing this at runtime
     # would create a circular import, since Application imports User back.
     from app.models.application import Application
+    from app.models.device_token import DeviceToken
 
 
 class UserRole(str, enum.Enum):
@@ -47,5 +48,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     applications: Mapped[list["Application"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    device_tokens: Mapped[list["DeviceToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
