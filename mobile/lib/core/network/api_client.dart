@@ -17,7 +17,7 @@ import '../../features/auth/presentation/auth_controller.dart';
 ///   requests that all 401 at once don't trigger five refresh calls
 /// - never intercepts /auth/* routes (see webapp's CHANGELOG v0.4.0 fix
 ///   for the infinite-refresh-loop bug this avoids)
-final apiClientProvider = Provider<Dio>((ref) {
+final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: EnvConfig.apiBaseUrl,
