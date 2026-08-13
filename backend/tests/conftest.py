@@ -44,6 +44,7 @@ from app.core.config import settings
 # has to happen here even though this test file never touches Interview
 # or Document directly.
 import app.models.application  # noqa: F401
+import app.models.application_status_history  # noqa: F401
 import app.models.contact  # noqa: F401
 import app.models.document  # noqa: F401
 import app.models.interview  # noqa: F401
