@@ -1,8 +1,8 @@
 """application_status_history
 
-Revision ID: 4efdb876d7df
+Revision ID: eca96043348e
 Revises: 873b7c6fdc36
-Create Date: 2026-08-13 17:42:57.787180
+Create Date: 2026-08-13 21:40:04.345166
 
 """
 
@@ -10,16 +10,17 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision: str = "4efdb876d7df"
+revision: str = "eca96043348e"
 down_revision: Union[str, None] = "873b7c6fdc36"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_application_status_enum = sa.Enum(
+_application_status_enum = postgresql.ENUM(
     "saved",
     "applied",
     "phone_screen",
