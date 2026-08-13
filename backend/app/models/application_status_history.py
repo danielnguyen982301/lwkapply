@@ -37,8 +37,8 @@ InterviewReminder for the same treatment).
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ForeignKey
+from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
@@ -48,15 +48,24 @@ if TYPE_CHECKING:
     from app.models.application import Application
 
 # Reuses the "application_status" Postgres enum type Application.status
-# already declares - same name, same values_callable. SQLAlchemy dedupes
-# DDL for a given enum name within one MetaData automatically at the ORM
-# layer; the migration (see alembic/versions/) needs an explicit
-# create_type=False nudge instead, since it isn't working off live model
-# metadata - see that file's own comment.
-_application_status_enum = Enum(
+# already declares - same name, same values_callable, and critically
+# create_type=False, since this type already exists in the database.
+#
+# Must be sqlalchemy.dialects.postgresql.ENUM here, not the generic
+# sqlalchemy.Enum - create_type is only formally defined on the
+# Postgres-specific class. The generic Enum accepts create_type as a
+# stray kwarg and stores it, but doesn't reliably carry it through when
+# adapting itself into the Postgres-native DDL implementation that
+# actually emits (or skips) CREATE TYPE - confirmed the hard way: using
+# generic Enum here reproduced the exact "type already exists" failure
+# this comment is warning about, even with create_type=False set.
+# postgresql.ENUM IS the class that implements the create_type gate, so
+# there's no adaptation step to lose it across.
+_application_status_enum = ENUM(
     ApplicationStatus,
     name="application_status",
     values_callable=lambda enum_cls: [e.value for e in enum_cls],
+    create_type=False,
 )
 
 
