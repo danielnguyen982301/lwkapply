@@ -1,6 +1,139 @@
 # Changelog
 
-## v0.8.0 (in progress)
+## v0.9.0 (in progress)
+
+### Added
+
+- **Interview reminder system, Phase A (email) and Phase B (push)** —
+  the full plan from TODO.md's "Reminder system" entry, both phases
+  shipped together rather than staged. Full detail in
+  BACKEND_SUMMARY.md's "Interview reminder system" and
+  MOBILE_SUMMARY.md's "Push notifications"/"Timezone reporting"; summary
+  here:
+  - **Data model**: `InterviewReminder` (`interview_id`, `remind_at`,
+    `sent_at` nullable — the idempotency guard, `channel`) and
+    `DeviceToken` (`user_id`, `platform`, `token` — unique, not
+    unique-per-user, so re-logging into the same device under a
+    different account reassigns rather than orphans, `last_seen_at`).
+    `User` gains `timezone` (nullable IANA string, UTC fallback)
+  - **`app/services/reminders.py`**: `sync_interview_reminders()`,
+    called from the interview create/update endpoints, keeps one
+    pending row per `(interview, channel)` in sync with
+    `scheduled_at`/`result` — cancelled or already-past-lead-time
+    interviews get no pending row; a `PUSH` row is created
+    unconditionally, even before the user has any registered device, so
+    this function stays fully decoupled from device-token state
+  - **`app/tasks/reminders.py`** (`send_due_reminders`, Celery beat,
+    every 10 min): dispatches each due row by `channel`. Email via the
+    new `app/services/email.py` (Resend in prod via direct HTTP call,
+    not the SDK; MailHog locally via stdlib `smtplib` — new
+    `docker-compose.yml` service, SMTP on 1025 / UI on 8025). Push via
+    the new `app/services/push.py` (Firebase Admin SDK, lazily
+    initialized so import doesn't crash startup before Firebase is
+    configured) — fans out to every device a user has, prunes tokens
+    FCM reports invalid, and treats zero devices as "nothing to send,
+    nothing to retry." Each reminder commits independently so one bad
+    send can't leave others in the same run un-stamped
+  - **Timezone reporting**: `app/utils/timezone.py`'s
+    `is_valid_timezone()` backs `UserCreate.timezone`,
+    `LoginRequest.timezone`, `RefreshRequest.timezone` — silently
+    ignored if missing/invalid, skipped if unchanged. Web
+    (`Intl.DateTimeFormat`) and mobile (`flutter_timezone`) both report
+    on register/login/refresh; web's `/auth/refresh` call now sends an
+    optional body for this (previously sent none at all) — `refresh_token`
+    itself remains mobile-only
+  - **Device-token endpoints**: `POST`/`DELETE /users/me/device-tokens`
+    (`app/api/v1/endpoints/users.py`) — register upserts by `token`,
+    delete is a no-op-not-a-404 so logout can't visibly fail over it
+  - **Mobile push** (`mobile/lib/features/notifications/`): permission
+    request (covers Android 13+'s runtime `POST_NOTIFICATIONS`, not just
+    iOS), token registration + `onTokenRefresh` re-registration, called
+    from `AuthController` after **every** login/register/silent-restore
+    (not just fresh login, so existing users get registered on their
+    next app open with no backfill needed) and deregistered before
+    logout clears the session. Tap-to-deep-link into
+    `/applications/{id}/edit` unified across all three ways a tap can
+    reach the app (foreground, backgrounded, terminated). New
+    `flutter_local_notifications` dependency for foreground display —
+    FCM/the OS only auto-show a notification while backgrounded/
+    terminated, not foregrounded; this wasn't in the original plan and
+    was added once the gap became apparent
+  - **Android-first, iOS deferred** on the Apple Developer Program cost
+    — exactly per the original plan, unchanged
+  - **Not included in this pass**: multi-lead-time UI, per-user quiet
+    hours, Celery-beat-on-multiple-nodes duplicate-send protection (all
+    explicitly out of scope per the original plan), and test coverage
+    for any of the new backend reminder/device-token code or the new
+    mobile push/session-provider code (see TODO.md's Testing section)
+
+### Fixed
+
+Bugs caught and fixed during this pass, before landing on the working
+version described above:
+
+- `InterviewReminder.channel` was initially written with a Python-side
+  `default=`, not `server_default=` — corrected to match
+  `Interview.result`'s existing precedent in the same file family, since
+  this column needs to be correct for any row ever inserted outside
+  `sync_interview_reminders`' one ordinary path, not just rows the ORM
+  happens to build through it
+- The reminders migration's hand-written `downgrade()` initially
+  included an explicit `DROP TYPE` for the `reminder_channel` enum —
+  removed to match every prior migration's own precedent (none of them
+  do this either, going back to `37f704e60528_first_migration.py`),
+  even though it looks like the "more correct" cleanup in isolation.
+  Flagged, not fixed: this means a full downgrade-then-upgrade cycle on
+  _any_ enum-backed migration in this repo's history would hit "type
+  already exists" on Postgres — a pre-existing, repo-wide gap, not
+  something to special-case fix in one migration
+- `users.py`'s device-token upsert assigned a raw `Literal['android',
+'ios']` string directly to the `DevicePlatform`-typed model column —
+  passed static type-checking failures even though it would have worked
+  fine at runtime (the enum inherits from `str`). Fixed with an explicit
+  `DevicePlatform(payload.platform)` conversion
+- `flutter_timezone`'s `getLocalTimezone()` returns a `TimezoneInfo`
+  object as of the version pinned here, not a bare `String` as some
+  older package versions did — `core/utils/timezone.dart` now pulls the
+  IANA name off `.identifier`
+- **Dart top-level type-inference cycle** between `apiClientProvider`,
+  `pushServiceProvider`, and `authControllerProvider`: even with
+  explicit generic type arguments on each provider's _constructor_,
+  Dart's analyzer still walked a textual reference cycle across their
+  callback closures (regardless of whether a reference is inside a
+  deferred callback) and refused to infer a type for any of them. Fixed
+  by giving each _variable declaration_ an explicit left-hand-side type
+  (`final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
+... })`), not just the constructor call — a compile-time-only issue,
+  distinct from the genuine runtime cycle below
+- **Genuine runtime `CircularDependencyError`** between
+  `apiClientProvider` and `authControllerProvider`: `authControllerProvider`
+  transitively depends on `apiClientProvider` (via `pushServiceProvider`,
+  needed for push-token registration), so `apiClientProvider`'s Dio
+  interceptors reading `authControllerProvider` back for the bearer
+  token / to force a logout — even lazily, inside callbacks that only
+  ever ran well after every provider had finished building — closed a
+  real cycle in Riverpod's dependency graph, thrown the first time a
+  request actually exercised it (right after login, fetching the
+  Applications list). Fixed by introducing two dependency-free leaf
+  providers (`features/auth/presentation/session_providers.dart`:
+  `accessTokenProvider`, `currentUserProvider`) that `apiClientProvider`
+  reads/writes directly and `AuthController` writes on every state
+  transition, plus a one-way `ref.listen` in `AuthController`'s
+  constructor so externally-driven changes (a silent refresh, a forced
+  logout) still reach `AuthController.state` for anything watching it
+  for UI/routing
+- **Push notification tap-to-deep-link from a terminated app** failed
+  with `GoException: no routes for location` even though the target
+  route (`/applications/:id/edit`) was correct — `PushService.initialize()`
+  runs from `main()` before `runApp()` renders a first frame, so pushing
+  a route immediately for the `getInitialMessage()` (terminated-app) tap
+  case tried to navigate before the router's delegate was attached to a
+  live `Navigator`. Fixed by deferring that one case via
+  `WidgetsBinding.instance.addPostFrameCallback` — the other two tap
+  paths (backgrounded, foreground) don't need this, since by the time
+  either can fire the app is already fully running
+
+## v0.8.0
 
 ### Added
 
@@ -810,9 +943,13 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
 ## Upcoming
 
 - Analytics endpoints and dashboard charts
-- Celery tasks (resume parsing, email sending, AI processing)
+- Celery tasks (resume parsing, AI processing) — email sending is now
+  live (interview reminders, v0.9.0); the rest remain unwritten
 - RBAC beyond a `role` column
-- Interview reminder system
+- Test coverage for the reminder system (backend and mobile) — see
+  TODO.md's Testing section
+- Combined account/settings screen (password reset, timezone override,
+  notification preferences) — see MOBILE_SUMMARY.md
 - Application edit form: adopt PrimeVue Forms + a validation library,
   including dirty-state tracking for the "Save changes" button (see
   v0.4.0's Known Issues)
