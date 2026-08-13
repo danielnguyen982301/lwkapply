@@ -11,7 +11,11 @@ Interviews/Contacts/Documents tabs, now the real read-only
 cross-application directory screens (mirroring
 `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
 `DocumentDirectoryView.vue` on web) rather than `ComingSoonScreen`
-placeholders — see "Cross-application directory screens" below.
+placeholders — see "Cross-application directory screens" below. As of
+this pass, the app also registers for and displays push notifications
+for interview reminders (Android only — see "Push notifications" below)
+and reports the device's timezone to the backend (see "Timezone
+reporting" below).
 
 Package name: `lwkapply_mobile`.
 
@@ -342,23 +346,175 @@ that same client, a failed login/refresh could recursively trigger the
 interceptor's own refresh logic. Keep this split when adding any new
 auth-related network call.
 
+### `accessTokenProvider`/`currentUserProvider` — why the session lives outside `AuthController`
+
+`apiClientProvider`'s interceptors read/write two small, dependency-free
+`StateProvider`s (`features/auth/presentation/session_providers.dart`)
+directly, not `authControllerProvider`. This isn't a style preference —
+`authControllerProvider`'s build watches `pushServiceProvider` (for
+`registerCurrentDevice()`/`deregisterCurrentDevice()`), which itself
+watches `apiClientProvider` (for `DeviceTokensApi`'s Dio instance). That
+makes `authControllerProvider` transitively depend on `apiClientProvider`
+in Riverpod's dependency graph. The original code had
+`apiClientProvider`'s interceptors read `authControllerProvider` back
+for the bearer token and call its `forceLogout()`/
+`updateAfterSilentRefresh()` on 401 — even though those reads only ever
+fire lazily, at actual request time, well after every provider involved
+had finished building, the _graph_ still had a structural cycle
+(`apiClientProvider -> authControllerProvider -> pushServiceProvider ->
+apiClientProvider`), and Riverpod correctly threw `CircularDependencyError`
+the first time a real request triggered it (post-login, fetching the
+Applications list).
+
+The fix: `accessTokenProvider`/`currentUserProvider` are pure leaves —
+they depend on nothing, so nothing that reads them can ever close a
+loop. `AuthController` is still the source of truth for login/register/
+logout and writes both leaves on every transition
+(`_setAuthenticated`/`_setUnauthenticated`); `apiClientProvider` reads
+and writes them directly for token-injection, silent-refresh, and
+forced-logout, never touching `AuthController`. To keep
+`AuthController.state` (what routing/UI actually watch) in sync with
+changes made the _other_ direction — a silent refresh or forced logout
+triggered from inside the interceptor — `AuthController`'s constructor
+`ref.listen`s `accessTokenProvider` and reflects external changes into
+its own `state`. **Don't reintroduce a read of `authControllerProvider`
+anywhere in `api_client.dart`** — see that file's own doc comment for
+the same warning.
+
+### Push notifications (Phase B, Android only)
+
+Implements the "Phase B (push)" half of TODO.md's reminder-system plan.
+iOS is not implemented at all here, not just untested — it's gated on
+the paid Apple Developer Program membership the plan calls for, same as
+that plan states.
+
+- **`lib/features/notifications/data/`**:
+  - `device_tokens_api.dart` — thin wrapper over
+    `POST`/`DELETE /users/me/device-tokens`, using the shared
+    authenticated `apiClientProvider` Dio (unlike `auth_api.dart`, both
+    calls require an already-authenticated user, so there's no reason
+    for a separate bare Dio instance here)
+  - `push_service.dart` — `PushService`, the orchestration layer: - `firebaseMessagingBackgroundHandler` — a required top-level
+    (`@pragma('vm:entry-point')`) function; the plugin runs it in a
+    separate background isolate for messages received while
+    terminated/backgrounded, so it can't close over any app state.
+    Deliberately minimal (just logs) — FCM/the OS already display the
+    notification automatically in that case; this is only a hook for
+    background _data_ processing, which reminders don't need - `registerCurrentDevice()` — requests notification permission
+    (covers Android 13+'s runtime `POST_NOTIFICATIONS` permission,
+    not just iOS's prompt), fetches the FCM token, registers it, and
+    subscribes to `onTokenRefresh` so a token rotation (reinstall, OS
+    cache clear) re-registers automatically. Called from
+    `AuthController` after **every** successful login, register, _and_
+    silent session restore on cold start — not just a fresh login, so
+    an existing user with a persisted session gets registered the
+    first time they open the app after this feature ships, with no
+    backfill or forced re-login needed. Best-effort throughout: every
+    failure is caught and logged, never rethrown, since none of this
+    should be able to fail a login - `deregisterCurrentDevice()` — called from `AuthController.logout()`
+    **before** `_repository.logout()` clears the session, since the
+    DELETE call needs a still-valid Bearer token - `initialize(GoRouter router)` — called once from `main.dart`,
+    after Firebase init and before `runApp()`. Sets up the local
+    notification channel/plugin, the foreground message listener, and
+    tap-to-deep-link for all three ways a tap can reach the app:
+    foreground (via `LocalNotifications`' tap callback), backgrounded
+    (`onMessageOpenedApp`), and terminated (`getInitialMessage`) — all
+    three converge on one `_handleTapData`, which reads
+    `data['type'] == 'interview_reminder'` and
+    `data['application_id']` (keys set by the backend's `_build_push`,
+    see BACKEND_SUMMARY.md) and pushes `/applications/{id}/edit` - The `getInitialMessage()` (terminated-app) tap path is
+    deliberately deferred via `WidgetsBinding.instance
+.addPostFrameCallback` rather than pushed immediately: `initialize()`
+    runs from `main()` _before_ `runApp()` has rendered a first frame,
+    so the router's delegate isn't attached to a live `Navigator` yet.
+    Pushing that early failed with a spurious `GoException: no routes
+      for location` — a lifecycle-timing problem, not an actual
+    route-matching one. The other two tap paths don't need this: by
+    the time either can fire, the app is already fully running
+  - `local_notifications.dart` — `LocalNotifications`, wrapping
+    `flutter_local_notifications`. Its only job: FCM/the OS
+    automatically show a notification while backgrounded/terminated,
+    but **not** while the app is foregrounded — this fills that one
+    gap. Deliberately knows nothing about FCM/`RemoteMessage`;
+    `PushService` converts a message into `(title, body, data)` before
+    calling `show()`, keeping this a pure display concern. Creates the
+    `interview_reminders` Android notification channel on init; a
+    tapped notification's payload is JSON-encoded `data`, decoded back
+    by `PushService`
+- **`lib/features/auth/presentation/auth_controller.dart`**: calls
+  `registerCurrentDevice()`/`deregisterCurrentDevice()` at the points
+  described above
+- **`lib/main.dart`**: `Firebase.initializeApp()` and
+  `FirebaseMessaging.onBackgroundMessage(...)` registration happen
+  unconditionally before `runApp()`; an explicit `ProviderContainer` is
+  built (rather than letting `ProviderScope` create one implicitly) so
+  `PushService.initialize()` can reach the _same_ `routerProvider`
+  instance the widget tree will later use, via
+  `UncontrolledProviderScope(container: container, ...)` — Riverpod
+  caches providers per container, so reading `routerProvider` early and
+  watching it later in the widget tree resolve to the identical
+  `GoRouter`
+- **New dependencies**: `firebase_core`, `firebase_messaging`,
+  `flutter_local_notifications`
+- **Android native setup**: `google-services.json` (from the Firebase
+  console) placed at `android/app/`, plus the Google Services Gradle
+  plugin applied in both `android/build.gradle.kts` (`apply false` +
+  version) and `android/app/build.gradle.kts` — already done for this
+  project's Firebase project (`lwkapply-push-notif`). `minSdk` must be
+  ≥23 for `firebase-messaging`; this project inherits
+  `flutter.minSdkVersion` rather than hardcoding it, so verify that
+  resolves to ≥23 on whatever Flutter SDK version is in use
+- **Firebase Admin credentials** (backend side, not this app) come from
+  a _separate_ service-account JSON generated in the Firebase console
+  (Project settings → Service accounts) — a different file from
+  `google-services.json`, which only configures this Android client. See
+  BACKEND_SUMMARY.md's push section for how the backend consumes it
+
+### Timezone reporting
+
+`lib/core/utils/timezone.dart`'s `getDeviceTimezone()` wraps
+`flutter_timezone`'s `FlutterTimezone.getLocalTimezone()` (which returns
+a `TimezoneInfo` object, not a bare `String`, as of the version pinned
+in `pubspec.yaml` — pull the IANA name off `.identifier`; older package
+versions returned a `String` directly, worth checking if this ever
+fails to compile against a different pinned version). Returns `null` on
+any failure rather than throwing — an unreported timezone should never
+block login/register, mirroring the web equivalent
+(`webapp/src/lib/timezone.ts`'s `getBrowserTimezone()`).
+
+Wired into `AuthRepository.login()`/`register()`/`_refreshWith()` (the
+last one covers both `tryRestoreSession()` on cold start and the
+401-interceptor's silent refresh with one change), which pass it through
+to `AuthApi`'s matching methods as an optional `timezone` parameter,
+sent in the request body when present. Server-side validation
+(`app/utils/timezone.py`) is the actual source of truth for "is this a
+real IANA name" — this client-side helper just best-effort reports
+whatever the device gives back.
+
 ## Not yet implemented
 
 - Password reset screen (backend endpoints already exist per
   BACKEND_SUMMARY.md; no mobile UI/repository method calls them yet)
-- Interview reminder system — unimplemented everywhere (backend,
-  webapp, mobile); TODO.md tracks it at the backend level
+- A combined account/settings screen (password reset + timezone
+  override + notification preferences, e.g. a manual "re-enable push"
+  action for someone who denied the permission prompt) — noted as a
+  natural future grouping since all three already have backend/client
+  support waiting on a UI; not started
 - In-app document download / offline document storage — downloads
   currently open the presigned URL externally via `url_launcher` only,
   no on-device copy kept
 - Swipe-to-delete on the Applications list row (delete only lives on
   the Edit screen for now)
-- Push notifications (FCM/APNs, device-token model) — Phase 6c
+- iOS push notifications — deferred specifically on the paid Apple
+  Developer Program membership requirement (the APNs key FCM relays
+  through), not on usage data or any other reason; Android push is
+  implemented (see "Push notifications" above)
 - Offline support/sync — Phase 6d, deliberately deferred until there's
   real usage data from 6a/6b to design against
 - Widget/unit tests beyond the one auth smoke test — Applications, the
-  nested Contacts/Interviews/Documents panels, and the three
-  cross-application directory screens (v0.8.0) all have none yet
+  nested Contacts/Interviews/Documents panels, the three
+  cross-application directory screens (v0.8.0), and the new
+  push-notification/session-provider code all have none yet
 - iOS build in CI (Android debug build only currently)
 - `file_picker`'s Android/iOS native setup (manifest `queries` entries
   for content-type intents on Android API 30+, any iOS document-picker
@@ -397,6 +553,39 @@ interview.dart` — easy to trip over again if a future enum ever needs
   `foregroundColor(context)` extension already uses instead of a raw
   `ColorScheme` property, for consistency with the existing status-chip
   styling anyway
+- **`flutter_timezone`'s `getLocalTimezone()` returns a `TimezoneInfo`
+  object, not a bare `String`**, as of the version pinned in
+  `pubspec.yaml` — pull the IANA name off `.identifier`
+  (`core/utils/timezone.dart`). Older versions of this package returned
+  a `String` directly; if this stops compiling after a version bump,
+  check the package's actual return type first rather than assuming the
+  field name is still right
+- **Dart top-level type-inference cycles between Riverpod providers**:
+  even when every provider in a chain has an explicit generic type
+  argument on its _constructor_ (`Provider<Dio>(...)`, etc.), Dart's
+  static analyzer can still report a circular-inference error if the
+  _variable declarations themselves_ lack an explicit left-hand-side
+  type and reference each other (even through a callback that only
+  executes later, well after every provider has finished building -
+  Dart's inference walk is purely textual/lexical, it doesn't know a
+  reference is deferred). Fix: give the variable itself an explicit
+  type (`final Provider<Dio> apiClientProvider = Provider<Dio>((ref) {
+... })`), not just the constructor call. This is a _compile-time_
+  analyzer issue, distinct from the genuine _runtime_
+  `CircularDependencyError` case below - both can look similar at a
+  glance but need different fixes
+- **Genuine runtime `CircularDependencyError` between `apiClientProvider`
+  and `authControllerProvider`**: see "`accessTokenProvider`/
+  `currentUserProvider` — why the session lives outside `AuthController`"
+  above for the full story. Short version: `authControllerProvider`
+  transitively depends on `apiClientProvider` (via `pushServiceProvider`,
+  for push-notification registration), so `apiClientProvider`'s
+  interceptors must never read `authControllerProvider` back, even
+  lazily inside a callback - Riverpod's dependency graph doesn't care
+  when a read happens, only that it happened at all. The two leaf
+  providers in `session_providers.dart` exist specifically to give
+  `apiClientProvider` something to read/write that has zero
+  dependencies of its own
 
 ## Development workflow
 
@@ -435,15 +624,20 @@ mobile/
   test/
     app_smoke_test.dart
   lib/
-    main.dart                     # entry point: loads env, wraps app in ProviderScope
+    main.dart                     # entry point: loads env, initializes Firebase +
+                                   # background message handler, builds an explicit
+                                   # ProviderContainer, wraps app in UncontrolledProviderScope
     app/
       app.dart                    # MaterialApp.router root widget, localization delegates
       router.dart                 # go_router config: redirects, shell + form routes
       app_shell.dart               # bottom NavigationBar around the shell tabs
     core/
       config/env_config.dart
-      network/api_client.dart      # shared Dio instance (token interceptors)
+      network/api_client.dart      # shared Dio instance (token interceptors -
+                                    # reads/writes session_providers.dart's leaf
+                                    # providers directly, never authControllerProvider)
       theme/app_theme.dart
+      utils/timezone.dart          # getDeviceTimezone() via flutter_timezone
     shared/
       widgets/coming_soon_screen.dart  # no longer referenced by router.dart
                                         # (all 4 bottom-nav tabs are real
@@ -453,7 +647,16 @@ mobile/
       auth/
         data/                       # token_storage.dart, auth_api.dart, auth_repository.dart
         domain/                      # user.dart, auth_state.dart
-        presentation/                # auth_controller.dart, login/register_screen.dart
+        presentation/                # auth_controller.dart (also registers/deregisters
+                                      # push tokens - see Push notifications above),
+                                      # session_providers.dart (accessTokenProvider/
+                                      # currentUserProvider - see that section above),
+                                      # login/register_screen.dart
+      notifications/
+        data/                        # device_tokens_api.dart (POST/DELETE
+                                      # /users/me/device-tokens), push_service.dart
+                                      # (PushService - registration, tap-to-deep-link),
+                                      # local_notifications.dart (foreground display)
       applications/
         data/applications_api.dart
         domain/                      # application.dart, application_draft.dart
