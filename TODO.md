@@ -44,66 +44,55 @@
 
 - [x] Interview model
 - [x] CRUD endpoints
-- [ ] Reminder system — plan below; not started. Recommendation: email
-      first (Phase A), push right after (Phase B) — not deferred, see
-      reasoning in each phase - **Phase A (email, MVP)**: leverages infra already anticipated in
-      this repo rather than adding a new category — Celery/Redis are
-      already wired up (`docker-compose.yml`) and "email sending" is
-      already listed as a planned-but-unwritten Celery task (see
-      BACKEND_SUMMARY.md's "Not yet implemented"). Shape: - New `interview_reminders` table (`interview_id`, `remind_at`,
-      `sent_at` nullable, `channel`) rather than a single
-      `reminder_sent_at` column on `Interview` — supports more than
-      one reminder per interview (e.g. 24h and 1h before) and the
-      `channel` column carries straight into Phase B without a
-      schema change - Celery beat task, every 5–15 min: find rows where
-      `remind_at <= now()` and `sent_at IS NULL`, send, stamp
-      `sent_at` (idempotency — a re-run must not double-send) - New `EmailService` (own module, same "isolate the network
-      client" pattern as `app/services/r2.py`) wrapping one
-      transactional-email provider (SES/Postmark/Resend/SMTP — pick
-      one, config via env vars only, never commit secrets, same as
-      R2 credentials) - **Timezone — resolved**: add a plain `User.timezone` (IANA
-      string, e.g. `America/New_York`) column, nullable, UTC
-      fallback. Populated from the _client's_ own reported
-      timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`
-      on web, `flutter_timezone` on mobile) at registration, and
-      silently re-sent on every login/token-refresh so travel/
-      relocation stays correct without user action. No dedicated
-      registration-screen picker — the field is just there for a
-      future account-settings override, not a required input.
-      Rejected IP-geolocation inference (less accurate than the
-      client just reporting its own tz, adds a third-party
-      dependency for no gain) and a mandatory register-screen field
-      (pure friction for a value the client already knows) - User-facing reminder-preference (which lead times, opt-out) —
-      can hardcode one lead time (e.g. 24h) for a first pass and add
-      a preferences model later, same "ship the narrow version
-      first" approach the rest of this repo already follows - **Phase B (push)**: built right after Phase A, not gated on
-      real usage data — Firebase Cloud Messaging for both platforms
-      (one integration instead of separately managing raw APNs
-      certs). Shape: - New `device_tokens` table (`user_id`, `platform`, `token`,
-      `last_seen_at`); `POST /users/me/device-tokens`
-      (register/upsert on login) + a delete on logout so a
-      signed-out device stops receiving pushes - Mobile: `firebase_messaging` package — permission prompt,
-      token registration + `onTokenRefresh` handling, tap-to-deep-
-      link into the interview's application - Backend: `firebase-admin` SDK sending via FCM; the Firebase
-      service-account JSON is a secret — env var/secret file only,
-      same convention as R2 credentials, never committed - Reuses Phase A's `interview_reminders.channel` column and the
-      same Celery beat task — dispatches to whichever channels are
-      enabled per row, no parallel scheduling system - **Scope decided: Android first, iOS deferred.** Android is
-      fully testable locally (emulator w/ Play Services, or any
-      real device, free) — build and test push there first. iOS
-      remote push needs a real device _and_ a paid Apple Developer
-      Program membership ($99/yr) for the APNs key FCM relays
-      through (the iOS Simulator's simulated-push tool only tests
-      local display, not the real backend → FCM → APNs path), so
-      iOS is deferred on that cost, not on usage data or any other
-      reason — revisit once that membership exists. Note this is a
-      different kind of "deferred" than offline support
-      (MOBILE_SUMMARY.md's Phase 6d, which waits on real usage data
-      from 6a/6b) — this one is purely gated on the Apple Developer
-      Program cost, nothing else - Not in scope for either phase yet: multi-lead-time UI, per-user
-      quiet hours, Celery-beat-on-multiple-nodes duplicate-send
-      protection (needs a single scheduler or a Redis lock if ever
-      scaled horizontally)
+- [x] Reminder system (Phase A: email, Phase B: push) — see
+      BACKEND_SUMMARY.md's "Interview reminder system" and
+      MOBILE_SUMMARY.md's "Push notifications"/"Timezone reporting" for
+      full detail; summary of what shipped vs. the original plan below
+  - [x] `interview_reminders` table (`interview_id`, `remind_at`,
+        `sent_at` nullable, `channel`) — as planned, one row per
+        `(interview, channel)`; `channel` uses a DB-level
+        `server_default`, not a Python-side `default` (see
+        BACKEND_SUMMARY.md — matters for rows ever inserted outside
+        `sync_interview_reminders`' one ordinary path)
+  - [x] Celery beat task, every 10 min (inside the planned 5–15 min
+        window), idempotent via the `sent_at IS NULL` guard
+  - [x] `EmailService` (`app/services/email.py`) — `resend` (prod, via
+        direct HTTP call, not the SDK) / `smtp` (local dev, via
+        MailHog — `docker-compose.yml`'s `mailhog` service, SMTP on
+        1025 / web UI on 8025)
+  - [x] `User.timezone` — as planned: client-reported
+        (`Intl.DateTimeFormat` web / `flutter_timezone` mobile),
+        re-sent silently on register/login/refresh, UTC fallback, no
+        registration-screen picker
+  - [x] Hardcoded single lead time (`REMINDER_LEAD_HOURS`) for this
+        pass, as planned — multi-lead-time UI still not in scope
+  - [x] `device_tokens` table (`user_id`, `platform`, `token`,
+        `last_seen_at`) — as planned, but keyed unique on `token` alone
+        rather than `(user_id, token)`, so re-logging into the same
+        device under a different account reassigns the row instead of
+        leaving a stale one
+  - [x] `POST`/`DELETE /users/me/device-tokens` — register (upsert) on
+        every login/register/silent-restore (not just fresh login),
+        delete on logout, both as planned
+  - [x] Mobile: `firebase_messaging` — permission prompt, token
+        registration + `onTokenRefresh`, tap-to-deep-link into the
+        interview's application, as planned. **Also added beyond the
+        original plan**: `flutter_local_notifications`, since FCM only
+        auto-displays a notification while backgrounded/terminated —
+        showing one while the app is foregrounded needed a second
+        package the original plan didn't call out
+  - [x] Backend: `firebase-admin` SDK via FCM, reusing
+        `interview_reminders.channel` and the same beat task, as
+        planned. Push reminder rows are created **unconditionally**
+        (even with zero registered devices) rather than only once a
+        device exists — a scope decision made during implementation,
+        not in the original plan; keeps the interview-CRUD-triggered
+        sync logic fully decoupled from device-token state
+  - [x] Android-first, iOS deferred on the Apple Developer Program
+        cost — exactly as planned, unchanged
+  - [ ] Still not in scope, as originally planned: multi-lead-time UI,
+        per-user quiet hours, Celery-beat-on-multiple-nodes duplicate-
+        send protection
 - [x] Cross-application interviews directory endpoint (`GET /interviews`,
       read-only, paginated, filter by `result` — mirrors the Contacts
       directory endpoint below; see BACKEND_SUMMARY.md and CHANGELOG.md
@@ -230,6 +219,11 @@ BACKEND_SUMMARY.md for the reasoning.
       Dio interceptor — see MOBILE_SUMMARY.md
 - [ ] Password reset screen (backend endpoints already exist; no mobile
       UI/repository method calls them yet)
+- [ ] Combined account/settings screen (password reset + timezone
+      override + notification preferences, e.g. re-enabling push after
+      an initial permission denial) — deferred idea, not started; noted
+      since all three pieces already have backend/client support waiting
+      on a UI, see MOBILE_SUMMARY.md
 - [x] Bottom navigation shell — Applications/Interviews/Contacts/
       Documents tabs — see MOBILE_SUMMARY.md
 - Application management (`features/applications/` — see MOBILE_SUMMARY.md):
@@ -255,12 +249,15 @@ BACKEND_SUMMARY.md for the reasoning.
         nested per-application panels and the three new directory
         screens above (same gap Applications' own screens already have —
         see Testing below)
-- [ ] Notifications — device-token registration + FCM wiring on the
+- [x] Notifications — device-token registration + FCM wiring on the
       mobile side, delivered as part of the backend Interview reminder
-      system's Phase B (see Backend > Interviews above), not waited on
-      separately. Android first (fully testable locally); iOS deferred
-      specifically on the paid Apple Developer Program requirement, not
-      on usage data — see that plan's note
+      system's Phase B (see Backend > Interviews above). Android
+      implemented (permission prompt, token registration +
+      `onTokenRefresh`, foreground/background/terminated tap-to-deep-
+      link, foreground display via `flutter_local_notifications`); iOS
+      deferred specifically on the paid Apple Developer Program
+      requirement, not on usage data — see MOBILE_SUMMARY.md's "Push
+      notifications"
 - [ ] Offline support
 - [ ] In-app document download / offline document storage (currently
       opens the presigned URL externally via `url_launcher` only — see
@@ -335,8 +332,15 @@ BACKEND_SUMMARY.md for the reasoning.
       isolation, authenticated `TestClient`, `make_user`/`auth_headers`
       factories) every one of these builds on directly — every backend
       CRUD endpoint now has integration coverage
+- [ ] Backend tests for the reminder system — `sync_interview_reminders`,
+      `send_due_reminders` (both channels, including the invalid-token
+      pruning and zero-devices-marks-sent paths), and the two new
+      device-token endpoints have no test coverage yet (unit or
+      integration) — same "not included in this pass" gap as the rest of
+      this Testing section, worth closing before this ships to real users
 - [ ] Mobile widget/unit tests beyond the auth smoke test (Applications,
-      the nested Contacts/Interviews/Documents panels, and the three
-      cross-application directory screens all have none yet — see
-      MOBILE_SUMMARY.md and CHANGELOG.md v0.7.0/v0.8.0)
+      the nested Contacts/Interviews/Documents panels, the three
+      cross-application directory screens, and the new push-notification/
+      session-provider code all have none yet — see MOBILE_SUMMARY.md and
+      CHANGELOG.md v0.7.0/v0.8.0/v0.9.0)
 - [ ] End-to-end tests
