@@ -12,7 +12,8 @@
 │   │   └── versions
 │   │       ├── 37f704e60528_first_migration.py
 │   │       ├── 873b7c6fdc36_device_tokens.py
-│   │       └── d65db92902b9_interview_reminders_and_user_timezone.py
+│   │       ├── d65db92902b9_interview_reminders_and_user_timezone.py
+│   │       └── eca96043348e_application_status_history.py
 │   ├── alembic.ini
 │   ├── app
 │   │   ├── __init__.py
@@ -23,6 +24,7 @@
 │   │   │       ├── __init__.py
 │   │   │       ├── endpoints
 │   │   │       │   ├── __init__.py
+│   │   │       │   ├── analytics.py
 │   │   │       │   ├── applications.py
 │   │   │       │   ├── auth.py
 │   │   │       │   ├── contacts.py
@@ -44,6 +46,7 @@
 │   │   ├── models
 │   │   │   ├── __init__.py
 │   │   │   ├── application.py
+│   │   │   ├── application_status_history.py
 │   │   │   ├── contact.py
 │   │   │   ├── device_token.py
 │   │   │   ├── document.py
@@ -52,6 +55,7 @@
 │   │   │   └── user.py
 │   │   ├── schemas
 │   │   │   ├── __init__.py
+│   │   │   ├── analytics.py
 │   │   │   ├── application.py
 │   │   │   ├── auth.py
 │   │   │   ├── contact.py
@@ -61,6 +65,7 @@
 │   │   │   └── user.py
 │   │   ├── services
 │   │   │   ├── __init__.py
+│   │   │   ├── application_history.py
 │   │   │   ├── email.py
 │   │   │   ├── push.py
 │   │   │   ├── r2.py
@@ -80,7 +85,9 @@
 │   └── tests
 │       ├── __init__.py
 │       ├── conftest.py
+│       ├── test_analytics_endpoints.py
 │       ├── test_application_schema.py
+│       ├── test_application_status_history.py
 │       ├── test_applications_endpoints.py
 │       ├── test_contact_schema.py
 │       ├── test_contacts_directory.py
@@ -213,6 +220,15 @@
 │   │   │   └── utils
 │   │   │       └── timezone.dart
 │   │   ├── features
+│   │   │   ├── analytics
+│   │   │   │   ├── data
+│   │   │   │   │   └── analytics_api.dart
+│   │   │   │   ├── domain
+│   │   │   │   │   └── analytics.dart
+│   │   │   │   └── presentation
+│   │   │   │       ├── analytics_controller.dart
+│   │   │   │       ├── analytics_screen.dart
+│   │   │   │       └── analytics_state.dart
 │   │   │   ├── applications
 │   │   │   │   ├── data
 │   │   │   │   │   └── applications_api.dart
@@ -270,6 +286,9 @@
 │   │   │   │       ├── documents_list_controller.dart
 │   │   │   │       ├── documents_list_state.dart
 │   │   │   │       └── documents_panel.dart
+│   │   │   ├── home
+│   │   │   │   └── presentation
+│   │   │   │       └── home_screen.dart
 │   │   │   ├── interviews
 │   │   │   │   ├── data
 │   │   │   │   │   ├── interview_directory_api.dart
@@ -287,11 +306,15 @@
 │   │   │   │       ├── interviews_list_controller.dart
 │   │   │   │       ├── interviews_list_state.dart
 │   │   │   │       └── interviews_panel.dart
-│   │   │   └── notifications
-│   │   │       └── data
-│   │   │           ├── device_tokens_api.dart
-│   │   │           ├── local_notifications.dart
-│   │   │           └── push_service.dart
+│   │   │   ├── notifications
+│   │   │   │   └── data
+│   │   │   │       ├── device_tokens_api.dart
+│   │   │   │       ├── local_notifications.dart
+│   │   │   │       └── push_service.dart
+│   │   │   └── settings
+│   │   │       └── presentation
+│   │   │           ├── settings_icon_button.dart
+│   │   │           └── settings_screen.dart
 │   │   ├── main.dart
 │   │   └── shared
 │   │       └── widgets
@@ -311,6 +334,9 @@
     ├── src
     │   ├── App.vue
     │   ├── components
+    │   │   ├── analytics
+    │   │   │   ├── AnalyticsSection.vue
+    │   │   │   └── StatCard.vue
     │   │   ├── applications
     │   │   │   ├── ApplicationStatusTag.vue
     │   │   │   ├── ContactsPanel.vue
@@ -330,6 +356,7 @@
     │   ├── lib
     │   │   ├── __tests__
     │   │   │   └── api.spec.ts
+    │   │   ├── analytics-ui.ts
     │   │   ├── api.ts
     │   │   ├── application-ui.ts
     │   │   ├── date-utils.ts
@@ -342,6 +369,7 @@
     │   │   │   └── authGuard.spec.ts
     │   │   └── index.ts
     │   ├── stores
+    │   │   ├── analytics.ts
     │   │   ├── applications.ts
     │   │   ├── auth.ts
     │   │   ├── contactDirectory.ts
@@ -354,6 +382,7 @@
     │   ├── test
     │   │   └── primevue.ts
     │   ├── types
+    │   │   ├── analytics.ts
     │   │   ├── application.ts
     │   │   ├── auth.ts
     │   │   ├── contact.ts
@@ -362,6 +391,8 @@
     │   ├── views
     │   │   ├── DashboardView.vue
     │   │   ├── NotFoundView.vue
+    │   │   ├── analytics
+    │   │   │   └── AnalyticsDashboardView.vue
     │   │   ├── applications
     │   │   │   ├── ApplicationBoardView.vue
     │   │   │   ├── ApplicationFormView.vue
@@ -384,4 +415,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-109 directories, 276 files
+119 directories, 297 files
