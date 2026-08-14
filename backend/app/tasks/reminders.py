@@ -3,13 +3,6 @@ Celery beat task: find interview_reminders rows that are due and unsent,
 dispatch each on its `channel` (email or push), stamp sent_at on
 success.
 
-NOTE: imports `SessionLocal` from app.db.session, following the standard
-`sessionmaker(...)` naming every other FastAPI+SQLAlchemy project in this
-shape uses - app/db/session.py wasn't in the files I was given for this
-pass, so if it exports a differently-named sessionmaker, update this one
-import accordingly. Everything downstream of that import is independent
-of the exact name.
-
 Runs outside a request, so it can't use the `get_db` FastAPI dependency
 (that's a request-scoped generator) - opens/closes its own session
 per run instead, same as any other out-of-band Celery job would.
@@ -19,7 +12,7 @@ import logging
 from datetime import datetime, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.celery_app import celery_app
@@ -123,7 +116,11 @@ def _send_push_reminder(db: Session, reminder: InterviewReminder) -> bool:
     forever against a token that will never work again.
     """
     user = reminder.interview.application.user
-    tokens = db.query(DeviceToken).filter(DeviceToken.user_id == user.id).all()
+    tokens = (
+        db.execute(select(DeviceToken).where(DeviceToken.user_id == user.id))
+        .scalars()
+        .all()
+    )
 
     if not tokens:
         return True
@@ -166,18 +163,19 @@ def send_due_reminders() -> int:
     try:
         now = datetime.now(dt_timezone.utc)
         due = (
-            db.query(InterviewReminder)
-            .options(
-                joinedload(InterviewReminder.interview)
-                .joinedload(Interview.application)
-                .joinedload(Application.user)
-            )
-            .filter(
-                and_(
+            db.execute(
+                select(InterviewReminder)
+                .options(
+                    joinedload(InterviewReminder.interview)
+                    .joinedload(Interview.application)
+                    .joinedload(Application.user)
+                )
+                .where(
                     InterviewReminder.remind_at <= now,
                     InterviewReminder.sent_at.is_(None),
                 )
             )
+            .scalars()
             .all()
         )
 
