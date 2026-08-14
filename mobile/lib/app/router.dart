@@ -10,7 +10,9 @@ import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/contacts/presentation/contact_directory_screen.dart';
 import '../features/documents/presentation/document_directory_screen.dart';
+import '../features/home/presentation/home_screen.dart';
 import '../features/interviews/presentation/interview_directory_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import 'app_shell.dart';
 
 /// Auth-aware router, mirroring webapp's `authGuard`
@@ -20,11 +22,13 @@ import 'app_shell.dart';
 /// the startup session-restore check (`AuthStatus.unknown`) is in
 /// flight.
 ///
-/// The authenticated section (`/applications`, `/interviews`,
-/// `/contacts`, `/documents`) is wrapped in a StatefulShellRoute so
-/// AppShell can render a persistent bottom nav bar around whichever tab
-/// is active — see app_shell.dart for why a bottom bar was chosen over
-/// a webapp-style side menu.
+/// The authenticated section is wrapped in a StatefulShellRoute with
+/// just two branches now — `/applications` and `/home` — so AppShell
+/// can render a persistent bottom nav bar around whichever tab is
+/// active. See app_shell.dart's doc comment for why this shrank from
+/// four branches to two (Interviews/Contacts/Documents moved to Home's
+/// card grid instead of each holding a tab slot), and why Applications
+/// specifically kept its own tab rather than joining them there.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/applications',
@@ -61,7 +65,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // the Applications branch below: pushing here covers the whole
       // screen, including AppShell's bottom nav bar, which is the
       // expected UX for a form flow (no reason to let someone flip to
-      // the Interviews tab mid-edit). They still get the same
+      // the Home tab mid-edit). They still get the same
       // authenticated-only protection as everything else, since
       // `redirect` above only special-cases `/login`/`/register`.
       //
@@ -81,6 +85,40 @@ final routerProvider = Provider<GoRouter>((ref) {
           applicationId: state.pathParameters['id'],
         ),
       ),
+      // Interviews/Contacts/Documents used to each be their own
+      // bottom-nav branch; they're reached from cards on the Home tab
+      // now instead (see home_screen.dart), so — same reasoning as the
+      // Applications form routes right above — they're plain top-level
+      // pushed routes, not shell branches. Pushing covers the bottom
+      // nav (back navigates to Home, same as any other pushed screen),
+      // and go_router's default `automaticallyImplyLeading` gives each
+      // one a back button for free purely from no longer being a shell
+      // root — no code change needed in the screens themselves for
+      // that part.
+      GoRoute(
+        path: '/interviews',
+        name: 'interviews',
+        builder: (context, state) => const InterviewDirectoryScreen(),
+      ),
+      GoRoute(
+        path: '/contacts',
+        name: 'contacts',
+        builder: (context, state) => const ContactDirectoryScreen(),
+      ),
+      GoRoute(
+        path: '/documents',
+        name: 'documents',
+        builder: (context, state) => const DocumentDirectoryScreen(),
+      ),
+      // Also a plain top-level push, same reasoning. Reached via the
+      // settings icon on Applications'/Home's (and ideally every
+      // screen's) AppBar — see settings_screen.dart — not part of the
+      // bottom nav itself.
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
@@ -97,45 +135,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/interviews',
-                name: 'interviews',
-                // Was ComingSoonScreen — now the real cross-application
-                // Interviews directory, mirroring
-                // InterviewDirectoryView.vue. See
-                // interview_directory_screen.dart's doc comment for what
-                // deliberately differs from ContactDirectoryScreen (a
-                // result filter instead of text search).
-                builder: (context, state) => const InterviewDirectoryScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/contacts',
-                name: 'contacts',
-                // Was ComingSoonScreen — now the real cross-application
-                // Contacts directory, mirroring ContactDirectoryView.vue.
-                // See contact_directory_screen.dart's doc comment for
-                // what deliberately differs from ApplicationsListScreen.
-                builder: (context, state) => const ContactDirectoryScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/documents',
-                name: 'documents',
-                // Was ComingSoonScreen — now the real cross-application
-                // Documents directory, mirroring
-                // DocumentDirectoryView.vue. See
-                // document_directory_screen.dart's doc comment for how
-                // it combines ContactDirectoryScreen's search box with
-                // InterviewDirectoryScreen's filter sheet (search +
-                // file_type together, unlike either prior directory
-                // alone).
-                builder: (context, state) => const DocumentDirectoryScreen(),
+                path: '/home',
+                name: 'home',
+                builder: (context, state) => const HomeScreen(),
               ),
             ],
           ),
