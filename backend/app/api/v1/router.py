@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    analytics,
     applications,
     auth,
     contacts,
@@ -15,6 +16,13 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(
     applications.router, prefix="/applications", tags=["applications"]
 )
+
+# Analytics is read-only and flat like the three directory routers below,
+# but unlike them it was never a nested-only resource to begin with -
+# there's no per-application analytics view, so there's no nested router
+# half to pair it with. Every query inside aggregates over the current
+# user's own applications/interviews (see analytics.py's own docstring).
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
 # Interviews/Documents/Contacts are nested under a specific application -
 # they never exist independently of one, so their CRUD routes and ownership

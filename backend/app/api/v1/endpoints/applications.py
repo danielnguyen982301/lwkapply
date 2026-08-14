@@ -22,6 +22,7 @@ from app.schemas.application import (
     ApplicationRead,
     ApplicationUpdate,
 )
+from app.services.application_history import record_status_change
 
 router = APIRouter()
 
@@ -85,6 +86,13 @@ def create_application(
 ):
     application = Application(**payload.model_dump(), user_id=current_user.id)
     db.add(application)
+    # Flush (not commit) to populate application.id via UUIDMixin's
+    # client-side default, without ending the transaction early - the
+    # history row below needs a real FK value to insert against.
+    db.flush()
+    record_status_change(
+        db, application, from_status=None, to_status=application.status
+    )
     db.commit()
     db.refresh(application)
     return application
@@ -128,8 +136,20 @@ def update_application(
             detail="salary_min cannot be greater than salary_max",
         )
 
+    # Captured before setattr() below overwrites it - this is the only
+    # place the "from" side of a transition is available.
+    previous_status = application.status
+
     for field, value in updates.items():
         setattr(application, field, value)
+
+    if "status" in updates and application.status != previous_status:
+        record_status_change(
+            db,
+            application,
+            from_status=previous_status,
+            to_status=application.status,
+        )
 
     db.add(application)
     db.commit()

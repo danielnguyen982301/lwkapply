@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.application_status_history import ApplicationStatusHistory
     from app.models.contact import Contact
     from app.models.document import Document
     from app.models.interview import Interview
@@ -64,4 +65,16 @@ class Application(Base, UUIDMixin, TimestampMixin):
     )
     contacts: Mapped[list["Contact"]] = relationship(
         back_populates="application", cascade="all, delete-orphan"
+    )
+    # Append-only audit log of status transitions - see
+    # app/models/application_status_history.py's module docstring.
+    # Ordered oldest-first so a timeline render doesn't need to reverse
+    # it; nothing currently reads this relationship (the endpoints write
+    # history rows directly via app/services/application_history.py,
+    # not through this collection), but it's here for parity with the
+    # other three and for any future timeline endpoint.
+    status_history: Mapped[list["ApplicationStatusHistory"]] = relationship(
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="ApplicationStatusHistory.created_at",
     )
