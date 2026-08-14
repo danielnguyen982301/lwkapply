@@ -21,6 +21,7 @@ top-level /interviews prefix.
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, contains_eager
 
 from app.api.deps import get_current_user
@@ -46,8 +47,12 @@ def _get_owned_application(
     db: Session, application_id: uuid.UUID, user: User
 ) -> Application:
     application = (
-        db.query(Application)
-        .filter(Application.id == application_id, Application.user_id == user.id)
+        db.execute(
+            select(Application).where(
+                Application.id == application_id, Application.user_id == user.id
+            )
+        )
+        .scalars()
         .first()
     )
     if not application:
@@ -61,13 +66,16 @@ def _get_owned_interview(
     db: Session, application_id: uuid.UUID, interview_id: uuid.UUID, user: User
 ) -> Interview:
     interview = (
-        db.query(Interview)
-        .join(Application, Interview.application_id == Application.id)
-        .filter(
-            Interview.id == interview_id,
-            Interview.application_id == application_id,
-            Application.user_id == user.id,
+        db.execute(
+            select(Interview)
+            .join(Application, Interview.application_id == Application.id)
+            .where(
+                Interview.id == interview_id,
+                Interview.application_id == application_id,
+                Application.user_id == user.id,
+            )
         )
+        .scalars()
         .first()
     )
     if not interview:
@@ -86,13 +94,21 @@ def list_interviews(
     page_size: int = Query(default=20, ge=1, le=100),
 ):
     _get_owned_application(db, application_id, current_user)
-    query = (
-        db.query(Interview)
-        .filter(Interview.application_id == application_id)
-        .order_by(Interview.scheduled_at.asc())
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch.
+    stmt = select(Interview).where(Interview.application_id == application_id)
+
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    items = (
+        db.execute(
+            stmt.order_by(Interview.scheduled_at.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
     )
-    total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return InterviewListResponse(
         items=[InterviewRead.model_validate(item) for item in items],
@@ -187,21 +203,28 @@ def list_all_interviews(
     # to populate `Interview.application` instead of firing a second
     # query per row; it relies on the join/filter below being the exact
     # source of that relationship's rows, so don't reorder without care.
-    query = (
-        db.query(Interview)
+    #
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch.
+    stmt = (
+        select(Interview)
         .join(Application, Interview.application_id == Application.id)
         .options(contains_eager(Interview.application))
-        .filter(Application.user_id == current_user.id)
+        .where(Application.user_id == current_user.id)
     )
 
     if result:
-        query = query.filter(Interview.result == result)
+        stmt = stmt.where(Interview.result == result)
 
-    total = query.count()
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
-        query.order_by(Interview.scheduled_at.asc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        db.execute(
+            stmt.order_by(Interview.scheduled_at.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
         .all()
     )
     return InterviewWithApplicationListResponse(
