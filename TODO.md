@@ -125,8 +125,18 @@ BACKEND_SUMMARY.md for the reasoning.
 
 ### Analytics
 
-- [ ] Dashboard metrics
-- [ ] Reporting endpoints
+- [x] Dashboard metrics — `GET /analytics/summary`, `/funnel`,
+      `/activity`, `/interviews`, all real-time (no precomputation/cache
+      — see BACKEND_SUMMARY.md's "A note on the analytics endpoints" for
+      why that's the right call at current data scale)
+- [ ] Reporting endpoints (CSV/PDF export)
+
+Note: `application_status_history` (an append-only audit log of every
+status transition) was added alongside the analytics endpoints, but is
+**not** read by `GET /analytics/funnel` — that endpoint reads
+`Application.status` directly as a current-state snapshot. See
+BACKEND_SUMMARY.md's note on `application_status_history` for why a
+true history-based conversion funnel wasn't built yet.
 
 ---
 
@@ -203,9 +213,19 @@ BACKEND_SUMMARY.md for the reasoning.
 
 ### Analytics
 
-- [ ] Dashboard
-- [ ] Charts
-- [ ] Reports
+- [x] Dashboard — `AnalyticsDashboardView.vue` (route `/analytics`), five
+      summary `StatCard`s, one Pinia store covering all four
+      `GET /analytics/*` endpoints — see WEBAPP_SUMMARY.md
+- [x] Charts — first `chart.js` usage in this codebase, via PrimeVue's
+      `Chart` wrapper: horizontal bar (pipeline), donut (interview
+      outcomes), bar with a 3/6/12-month toggle (activity) — see
+      WEBAPP_SUMMARY.md
+- [ ] Reports (CSV/PDF export)
+
+Known gap, not part of this pass: `DashboardView.vue` (route `/`, the
+"Dashboard" nav item — distinct from `/analytics`) is still an empty
+placeholder card, unbuilt since the original scaffold. See
+WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ---
 
@@ -217,15 +237,21 @@ BACKEND_SUMMARY.md for the reasoning.
       (`flutter_form_builder`), silent session restore on app start,
       refresh token in `flutter_secure_storage`, bearer + refresh-on-401
       Dio interceptor — see MOBILE_SUMMARY.md
-- [ ] Password reset screen (backend endpoints already exist; no mobile
-      UI/repository method calls them yet)
-- [ ] Combined account/settings screen (password reset + timezone
-      override + notification preferences, e.g. re-enabling push after
-      an initial permission denial) — deferred idea, not started; noted
-      since all three pieces already have backend/client support waiting
-      on a UI, see MOBILE_SUMMARY.md
-- [x] Bottom navigation shell — Applications/Interviews/Contacts/
-      Documents tabs — see MOBILE_SUMMARY.md
+- [ ] Password reset UI on the Settings screen (backend endpoints already
+      exist; Settings screen exists now — see below — but doesn't call
+      them yet)
+- [x] Settings screen — currently minimal, just hosts the logout action
+      (moved off Applications' AppBar this pass) — see MOBILE_SUMMARY.md's
+      "Settings screen"
+  - [ ] Timezone override + notification preferences (e.g. re-enabling
+        push after an initial permission denial) — still not started,
+        the natural next additions to the same screen
+- [x] Bottom navigation shell — restructured this pass from 4 tabs
+      (Applications/Interviews/Contacts/Documents) to 2
+      (Applications + a card-grid "Home" hub holding Interviews/
+      Contacts/Documents/Analytics cards) — see MOBILE_SUMMARY.md's
+      "Navigation shell" for the full reasoning (bottom-nav crowding
+      once Analytics + a future AI-tools section needed a home)
 - Application management (`features/applications/` — see MOBILE_SUMMARY.md):
   - [x] List — search, status filter, infinite scroll, pull-to-refresh
   - [x] Create/edit — shared form, validated against the backend schema
@@ -258,6 +284,11 @@ BACKEND_SUMMARY.md for the reasoning.
       deferred specifically on the paid Apple Developer Program
       requirement, not on usage data — see MOBILE_SUMMARY.md's "Push
       notifications"
+- [x] Analytics screen (`features/analytics/`) — mirrors
+      `AnalyticsDashboardView.vue`, reached from the Home tab's Analytics
+      card, new `fl_chart` dependency. Same four independently-fetched
+      sections as web (Overview/Pipeline/Interview Outcomes/Activity) —
+      see MOBILE_SUMMARY.md's "Analytics feature"
 - [ ] Offline support
 - [ ] In-app document download / offline document storage (currently
       opens the presigned URL externally via `url_launcher` only — see
