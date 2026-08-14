@@ -18,6 +18,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.cookies import (
@@ -89,7 +90,9 @@ def _maybe_update_timezone(db: Session, user: User, timezone: Optional[str]) -> 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == payload.email).first()
+    existing = (
+        db.execute(select(User).where(User.email == payload.email)).scalars().first()
+    )
     if existing:
         # Deliberately vague message: don't confirm which field collided
         raise HTTPException(
@@ -127,7 +130,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = db.execute(select(User).where(User.email == payload.email)).scalars().first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
@@ -179,7 +182,11 @@ def refresh(
     if token_payload is None or token_payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    user = db.query(User).filter(User.id == token_payload["sub"]).first()
+    user = (
+        db.execute(select(User).where(User.id == token_payload["sub"]))
+        .scalars()
+        .first()
+    )
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
@@ -206,7 +213,7 @@ def refresh(
 def request_password_reset(
     payload: PasswordResetRequest, db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = db.execute(select(User).where(User.email == payload.email)).scalars().first()
     if user:
         # reset_token = create_password_reset_token(str(user.id))
         # TODO: enqueue a Celery task to email `reset_token` to the user.
@@ -223,7 +230,11 @@ def confirm_password_reset(
     if token_payload is None or token_payload.get("type") != "password_reset":
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    user = db.query(User).filter(User.id == token_payload["sub"]).first()
+    user = (
+        db.execute(select(User).where(User.id == token_payload["sub"]))
+        .scalars()
+        .first()
+    )
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
