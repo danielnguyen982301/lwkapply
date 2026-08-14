@@ -8,9 +8,9 @@ filter, details, Kanban board) are implemented. Phase 4's Contact
 management, Interview scheduling, and Phase 3's Document upload/download
 are now all implemented on the frontend too — see Contacts, Interviews,
 and Documents below. All three now also have a cross-application
-directory view (Contacts, Interviews, and — as of this pass — Documents),
-each mirroring the same `DataTable`/`Paginator` skeleton — see each
-section below.
+directory view (Contacts, Interviews, and Documents), each mirroring the
+same `DataTable`/`Paginator` skeleton — see each section below. Phase 5's
+Analytics dashboard is implemented as of this pass — see Analytics below.
 
 ## What's here
 
@@ -222,14 +222,77 @@ update/delete), one a read-only cross-application listing:
   `interviewResultFilterOptions()`'s "All types" / `null`-option
   convention).
 
+### Analytics
+
+`AnalyticsDashboardView.vue` (route `/analytics`, "Analytics" nav item in
+`AppLayout.vue`, appended last per the order features were added), backed
+by one Pinia store (`src/stores/analytics.ts`) covering all four
+`GET /analytics/*` endpoints — deliberately one store, not four, unlike
+Contacts/Interviews/Documents' CRUD-vs-directory split: these four
+endpoints are only ever consumed together by this one screen, so a
+single store keeps that relationship visible. Each of the four sections
+(`fetchSummary`/`fetchFunnel`/`fetchActivity`/`fetchInterviews`) tracks
+its own `status`/`error` independently and `fetchAll()` fires them via
+`Promise.allSettled` — one slow or failing endpoint doesn't block the
+other three from rendering.
+
+- **First chart usage in this codebase** — new `chart.js` dependency,
+  rendered via PrimeVue's `Chart` wrapper component (bundled with
+  `primevue`, but `chart.js` itself isn't, so it needed adding
+  separately).
+- **Overview**: five `StatCard`s (Total Applications, Active, Offers
+  Received, Interviews Scheduled, Response Rate). "Response Rate" carries
+  a one-line hint (`Applications that moved past "applied"`) since the
+  number alone would read as a real employer-response metric — it's a
+  documented proxy, not a tracked one (see BACKEND_SUMMARY.md).
+- **Pipeline**: horizontal bar chart, one deliberate design choice worth
+  knowing about — the funnel stages (`saved` → `accepted`) read
+  top-to-bottom as one continuous gradient of teal intensity
+  (`src/lib/analytics-ui.ts`'s `funnelStageColor()`), so the color itself
+  encodes progression through the pipeline rather than being decorative.
+  This diverges from every other status-color mapping in the app
+  (`application-ui.ts`'s severity-based Tag colors), which is
+  intentional: those exist to distinguish statuses at a glance in a list;
+  this chart's job is to show _progression_, which a shared-hue gradient
+  communicates and a set of unrelated severity colors wouldn't. The
+  caption below the chart states explicitly that this is a current-status
+  snapshot, not a lifetime conversion funnel — see BACKEND_SUMMARY.md's
+  note on `application_status_history` for why. `off_ramps`
+  (rejected/withdrawn) render as plain text below the chart, not
+  additional bars.
+- **Interview Outcomes**: donut chart (pending/passed/failed/cancelled)
+  plus a pass-rate line that spells out its own denominator inline
+  (`passed ÷ passed+failed, excludes pending/cancelled`).
+- **Activity**: bar chart of monthly application counts, zero-filled, with
+  a `SelectButton` toggle (3/6/12 months) that refetches just that one
+  section via `fetchActivity(months)`.
+- `AnalyticsSection.vue` extracts the loading/error/retry pattern
+  `ContactDirectoryView.vue` established, so it's not copy-pasted four
+  times across one screen.
+- `src/types/analytics.ts` mirrors the backend's `app/schemas/analytics.py`
+  response shapes exactly, including the same nullability on
+  `response_rate`/`pass_rate` (null when there's no data to compute them
+  from yet).
+
 ## What's deliberately not here yet
 
-- Analytics dashboard and charts — Phase 5
 - RBAC-aware UI — explicitly skipped per current backend scope
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts, Interviews, and Documents (including
-  their directory views/stores) are in the
+  views not yet covered) — Contacts, Interviews, Documents, and Analytics
+  (including their directory/dashboard views/stores) are in the
   same boat: no tests yet
+- Analytics reporting (CSV/PDF export) — the dashboard itself (charts,
+  summary cards) is done; exporting it isn't
+
+## Known gap: the home page (`/`) is still an empty placeholder
+
+`DashboardView.vue` (route `/`, the "Dashboard" nav item — not the same
+route as `/analytics`) renders a single static "No applications yet"
+card and nothing else; it's never been built out past the original
+scaffold. Flagged here rather than fixed as part of the Analytics work,
+since it's a distinct piece of scope (a real landing-page design, not
+just wiring up data) — noted in TODO.md for whenever there's a pass
+dedicated to it.
 
 ## Auth cookie flow
 
