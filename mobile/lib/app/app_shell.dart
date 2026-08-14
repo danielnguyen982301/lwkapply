@@ -2,21 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Outer Scaffold for the authenticated section of the app: a persistent
-/// bottom nav bar across Applications / Interviews / Contacts /
-/// Documents.
+/// bottom nav bar across just two tabs, Applications and Home.
 ///
 /// Built on go_router's StatefulShellRoute.indexedStack (see
 /// router.dart), which keeps each tab's own navigation stack and scroll
-/// position alive when switching tabs — switching to Interviews and
-/// back to Applications doesn't reset Applications' scroll position or
-/// refetch its list.
+/// position alive when switching tabs.
 ///
-/// A bottom tab bar (rather than a webapp-style side menu) was a
-/// deliberate choice for mobile: every section stays one tap away,
-/// which matters for a tool meant to be checked daily, and today's 4
-/// destinations comfortably fit a single bar with no "More" overflow
-/// needed yet. Revisit this shell if a 5th+ top-level section
-/// (Analytics, AI Features) gets added later.
+/// This shrank from the original four tabs (Applications / Interviews /
+/// Contacts / Documents) down to two, per the mobile-nav planning
+/// discussion (not written down elsewhere but summarized here):
+/// Interviews/Contacts/Documents moved to a card grid on the Home tab
+/// (see home_screen.dart) instead of each holding a dedicated tab slot,
+/// since a bottom nav realistically caps out around 4-5 destinations
+/// and Analytics plus a future AI-tools section both needed somewhere
+/// to live too. Applications specifically kept its own tab rather than
+/// also becoming a Home card — it's the single highest-frequency screen
+/// in the app (the primary daily workflow, not a "check occasionally"
+/// screen like the other three), so it stays one tap away rather than
+/// two. Settings now lives behind an icon on individual screens'
+/// AppBars (see settings_screen.dart) rather than a tab at all — logout
+/// moved there from ApplicationsListScreen's AppBar in this same pass.
+///
+/// A bottom tab bar (rather than a webapp-style side menu) remains the
+/// right call for mobile: every top-level destination stays reachable
+/// in at most two taps, which matters for a tool meant to be checked
+/// daily.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
 
@@ -42,19 +52,9 @@ class AppShell extends StatelessWidget {
             label: 'Applications',
           ),
           NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Interviews',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Contacts',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.description_outlined),
-            selectedIcon: Icon(Icons.description),
-            label: 'Documents',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
           ),
         ],
       ),
