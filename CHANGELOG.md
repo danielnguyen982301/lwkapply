@@ -1,6 +1,91 @@
 # Changelog
 
-## v0.9.0 (in progress)
+## v0.10.0 (in progress)
+
+### Added
+
+- **Analytics (Phase 5), shipped across all three surfaces** — backend
+  endpoints, web dashboard, and mobile screen, in that order. Full detail
+  in BACKEND_SUMMARY.md's "A note on the analytics endpoints",
+  WEBAPP_SUMMARY.md's "Analytics" section, and MOBILE_SUMMARY.md's
+  "Analytics feature"; summary here:
+  - **Backend**: four real-time, read-only endpoints —
+    `GET /analytics/summary`, `/funnel`, `/activity`, `/interviews` — no
+    precomputation or caching, deliberately, given current per-user data
+    volumes. `response_rate` and `pass_rate` are documented proxies, not
+    tracked metrics, stated directly in their schema field descriptions
+    so they surface in `/docs`
+  - **`application_status_history`**: new append-only audit table,
+    written alongside every Application create/update, but **not** read
+    by `GET /analytics/funnel` — that endpoint reads current
+    `Application.status` as a snapshot instead. Deliberate: a true
+    conversion funnel needs to distinguish a real status change from an
+    accidental same-session toggle (e.g. a mis-dragged Kanban card), and
+    that filtering logic doesn't exist yet — the table faithfully
+    records every transition, accidental or not, and intentionally
+    doesn't deduplicate at write time (see
+    `test_flip_and_revert_records_both_transitions_undeduplicated`)
+  - **Web**: `AnalyticsDashboardView.vue` (route `/analytics`) — summary
+    cards, then three `chart.js` charts (first chart usage on web):
+    pipeline (horizontal bar, a deliberate teal-intensity gradient
+    encoding progression through the funnel), interview outcomes
+    (donut), activity (bar, 3/6/12-month toggle). One Pinia store
+    (`stores/analytics.ts`) covers all four endpoints, each section
+    fetching/erroring independently via `Promise.allSettled`
+  - **Mobile**: `features/analytics/` — same four-section structure,
+    `fl_chart` (new dependency, first chart usage on mobile). Chart
+    colors deliberately reuse existing app color conventions
+    (`ApplicationStatusStyle`, `InterviewDirectoryScreen`'s result-chip
+    colors) rather than a new chart-specific palette — the opposite
+    choice from web, and intentionally so; see MOBILE_SUMMARY.md for why
+    each platform's choice was the right one for that platform
+- **Mobile navigation restructure** — bottom nav shrank from 4 tabs to 2
+  (Applications + a new card-grid "Home" hub), to make room for Analytics
+  and a future AI-tools section without further crowding the tab bar.
+  Full reasoning in MOBILE_SUMMARY.md's "Navigation shell":
+  - **Applications** kept its own dedicated tab (highest-frequency
+    screen in the app); **Home** (`features/home/`, new) is a plain
+    card-grid launcher to Interviews/Contacts/Documents/Analytics, each
+    card pushing the existing route
+  - Interviews/Contacts/Documents moved from bottom-nav shell branches to
+    plain top-level pushed routes in `router.dart` — same pattern the
+    Applications create/edit forms already used
+  - **Settings screen** (`features/settings/`, new, `/settings` route) —
+    currently just hosts the logout action, moved off Applications'
+    AppBar. Every top-level screen reaches it via a new shared
+    `SettingsIconButton` widget rather than a duplicated inline
+    `IconButton`
+- **Backend migrated to SQLAlchemy 2.0 query style** across all ten files
+  that used the legacy `db.query()` API (`deps.py`, every endpoint file,
+  `services/reminders.py`, `tasks/reminders.py`) — `select()` +
+  `db.execute()` throughout, done as one deliberate consistency pass
+  rather than left half-migrated. See BACKEND*SUMMARY.md's "A note on the
+  SQLAlchemy 2.0 query-style migration" for the handful of
+  non-mechanical translations (paginated counts, the one bulk-delete
+  call, dropped `and*()` usage)
+
+### Fixed
+
+- Reusing an existing Postgres enum type for a new table's column
+  (`application_status_history.from_status`/`to_status`, reusing
+  `application_status`) failed with `DuplicateObject: type
+"application_status" already exists` even with `create_type=False`
+  set — root cause was using generic `sqlalchemy.Enum` instead of
+  `sqlalchemy.dialects.postgresql.ENUM`; only the latter reliably honors
+  `create_type`. Fixed in both the model and the migration
+- `db.scalar(select(func.count())...)` is typed `int | None` even though
+  `COUNT(*)` never actually returns `NULL` — every pagination `total`
+  and the analytics summary counts now append `or 0` to satisfy both the
+  type checker and defend against a scenario that shouldn't occur at
+  runtime
+- `dict(rows)` on a list of SQLAlchemy `Row` objects works at runtime but
+  trips a Pyright/Pylance overload-resolution false positive — switched
+  to dict comprehensions in the analytics endpoints
+- `fl_chart`'s `BarTouchData(enabled: false)` isn't `const`-constructible
+  in the resolved package version, even though `FlGridData`/`AxisTitles`
+  are — `const` removed from that one call site only, not the whole file
+
+## v0.9.0
 
 ### Added
 
@@ -942,7 +1027,14 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
 
 ## Upcoming
 
-- Analytics endpoints and dashboard charts
+- Analytics reporting endpoints (CSV/PDF export) — dashboard
+  metrics/charts shipped in v0.10.0, export did not
+- Test coverage for the analytics endpoints and the
+  `application_status_history` write path (backend), and for the new
+  Analytics/Home/Settings screens (web and mobile) — none of this pass's
+  new code has tests yet
+- The webapp's home page (`/`, `DashboardView.vue`) is still an empty
+  placeholder — see WEBAPP_SUMMARY.md's "Known gap"
 - Celery tasks (resume parsing, AI processing) — email sending is now
   live (interview reminders, v0.9.0); the rest remain unwritten
 - RBAC beyond a `role` column
