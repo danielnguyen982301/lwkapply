@@ -41,6 +41,11 @@ dependencies:
   # DateTime
   intl: ^0.20.2
 
+  # Charts (Analytics screen) — MIT-licensed, no commercial-tier
+  # ceiling, unlike syncfusion_flutter_charts. See the mobile-nav/
+  # analytics planning discussion for why this over the alternative.
+  fl_chart: ^0.69.0
+
   # Misc
   file_picker: 10.3.10
   url_launcher: ^6.3.2
