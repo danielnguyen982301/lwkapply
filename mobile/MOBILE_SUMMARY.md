@@ -1,21 +1,26 @@
 # LwkApply - Job Tracker — Mobile Client
 
 Flutter + Riverpod + go_router + Dio, implementing Phase 6 (Mobile
-Application): project scaffold, auth, a 4-tab bottom nav shell, and the
-Applications feature (list/create/edit/delete). Contacts, Interviews,
-and Documents are implemented twice over, same as on web: nested inside
+Application): project scaffold, auth, and the Applications feature
+(list/create/edit/delete). Contacts, Interviews, and Documents are
+implemented twice over, same as on web: nested inside
 `ApplicationFormScreen`'s own 4-tab layout (Details / Contacts /
 Interviews / Documents) for per-application CRUD — see "Contacts,
-Interviews, and Documents" below — and as the bottom-nav
-Interviews/Contacts/Documents tabs, now the real read-only
-cross-application directory screens (mirroring
-`ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
-`DocumentDirectoryView.vue` on web) rather than `ComingSoonScreen`
-placeholders — see "Cross-application directory screens" below. As of
-this pass, the app also registers for and displays push notifications
-for interview reminders (Android only — see "Push notifications" below)
-and reports the device's timezone to the backend (see "Timezone
-reporting" below).
+Interviews, and Documents" below — and as read-only cross-application
+directory screens (mirroring `ContactDirectoryView.vue`/
+`InterviewDirectoryView.vue`/`DocumentDirectoryView.vue` on web) — see
+"Cross-application directory screens" below. The app also registers for
+and displays push notifications for interview reminders (Android only —
+see "Push notifications" below) and reports the device's timezone to the
+backend (see "Timezone reporting" below).
+
+**As of this pass**: the bottom nav shrank from 4 tabs to 2
+(Applications + a card-grid "Home" hub) to make room for Analytics and a
+future AI-tools section without crowding the tab bar further — see
+"Navigation shell" below for the full reasoning. Settings now exists as
+its own screen (currently just hosting the logout action, moved off
+Applications' AppBar) — see "Settings screen" below. Analytics is
+implemented — see "Analytics feature" below.
 
 Package name: `lwkapply_mobile`.
 
@@ -130,22 +135,130 @@ data/applications_api.dart` is the first non-auth consumer
 ### Navigation shell
 
 `lib/app/app_shell.dart` + `router.dart`'s `StatefulShellRoute
-.indexedStack`: bottom `NavigationBar`, 4 tabs (Applications default,
-Interviews, Contacts, Documents). Chosen over the webapp's side menu —
-comments in `app_shell.dart` cover the reasoning (discoverability,
-`IndexedStack` keeping each tab's scroll/nav state alive). Interviews/
-Contacts/Documents now render the real cross-application directory
-screens (`InterviewDirectoryScreen`/`ContactDirectoryScreen`/
-`DocumentDirectoryScreen`, mirroring `ContactDirectoryView.vue`/etc. on
-web — see "Cross-application directory screens" below), no longer
-`ComingSoonScreen` (`lib/shared/widgets/coming_soon_screen.dart`, now
-unreferenced by the router — left in place for any future placeholder
-need rather than deleted). These three tabs are a different thing from
-the nested per-application Contacts/Interviews/Documents tabs living
-inside `ApplicationFormScreen` — see "Contacts, Interviews, and
-Documents" below. Old placeholder home screen (route `/`) is gone;
-`ApplicationsListScreen` at `/applications` is `initialLocation`, and
-its logout button lives on that screen's `AppBar` now.
+.indexedStack`: bottom `NavigationBar`, now just **2 tabs** — Applications
+(default) and Home.
+
+**This shrank from the original 4 tabs, per a dedicated planning
+discussion** (not written down elsewhere but summarized in
+`app_shell.dart`'s own doc comment): a bottom nav realistically caps out
+around 4–5 destinations before it gets crowded and hard to tap
+accurately, and Analytics plus a future AI-tools section both needed
+somewhere to live. Two options were considered — nesting a second-level
+tab bar inside a "Home" tab (rejected: recreates the same crowding
+problem one level deeper, and adds a tap to reach Applications
+specifically) versus a flat card-grid launcher (chosen: normal push
+navigation, no nested navigation system, and scales to more future
+destinations without ever needing a 3rd/4th/5th tab again).
+
+- **Applications kept its own dedicated tab.** It's the single
+  highest-frequency screen in the app — the primary daily workflow, not
+  a "check occasionally" screen like the other three — so it stays one
+  tap away rather than being folded into Home like everything else.
+- **Home** (`lib/features/home/presentation/home_screen.dart`, new) is a
+  plain `StatelessWidget` card-grid launcher with no fetched state of its
+  own: Interviews, Contacts, Documents, and (as of this pass) Analytics,
+  each pushing its existing route (`context.push('/interviews')` etc.)
+  and covering the bottom nav, same as tapping into an application's
+  edit form already did. An AI-tools card is a planned future addition,
+  explicitly marked with a comment showing exactly where it slots in,
+  not part of this pass.
+- **Interviews/Contacts/Documents moved from shell branches to plain
+  top-level pushed routes** in `router.dart` (same pattern the
+  Applications create/edit forms already used) — they're no longer part
+  of the `StatefulShellRoute`'s `IndexedStack` at all, since they're
+  reached from Home's cards now, not tapped directly as tabs. Each still
+  gets a back button for free from go_router's default
+  `automaticallyImplyLeading`, purely from no longer being a shell root —
+  no code change was needed in the screens themselves for that part.
+- **Settings** (see "Settings screen" below) also lives behind an icon on
+  individual screens' AppBars now, not a tab — logout moved there from
+  Applications' AppBar in this same pass.
+
+A bottom tab bar (rather than a webapp-style side menu) remains the right
+call for mobile: every top-level destination stays reachable in at most
+two taps, which matters for a tool meant to be checked daily.
+`ComingSoonScreen` (`lib/shared/widgets/coming_soon_screen.dart`) remains
+unreferenced by the router, left in place for any future placeholder
+need.
+
+### Settings screen
+
+`lib/features/settings/presentation/settings_screen.dart` (new,
+`/settings` route) — currently minimal on purpose: just the logout
+action, moved here from Applications' AppBar because Settings didn't
+have anywhere to live until this pass gave it a real entry point. Every
+top-level screen that needs a way into Settings uses the same shared
+`SettingsIconButton` widget
+(`lib/features/settings/presentation/settings_icon_button.dart`) in its
+`AppBar.actions`, rather than each screen duplicating an inline
+`IconButton`.
+
+**Why not hoist this into `AppShell` instead of repeating it per
+screen**: `AppShell` only wraps `navigationShell` — i.e. whatever the
+active _tab branch_ (Applications or Home) is currently rendering.
+Interviews/Contacts/Documents/Settings are all plain pushed routes
+sitting entirely _outside_ the shell's widget tree (that's the point of
+a pushed screen — it covers the shell, bottom nav included), so
+`AppShell` has no way to reach them even in principle. Hoisting the icon
+into `AppShell` would only deduplicate it for 2 of the 5 screens that
+need it. `SettingsIconButton` is the practical middle ground: still one
+line per screen, but the icon/tooltip/target route lives in exactly one
+place instead of five.
+
+**Not part of this pass** (still true per BACKEND_SUMMARY.md's parallel
+note): password reset, timezone override, and notification preferences —
+already noted elsewhere as a planned combined account/settings screen.
+This screen exists so logout has a proper home now; it grows into that
+fuller screen later rather than needing a second relocation.
+
+### Analytics feature (`lib/features/analytics/`)
+
+Mobile counterpart to `webapp/src/views/analytics/
+AnalyticsDashboardView.vue`, reached from the Analytics card on the Home
+tab. Same `data`/`domain`/`presentation` split as every other feature,
+and the same four independently-loading sections as the web dashboard
+(Overview, Pipeline, Interview Outcomes, Activity) — see
+`AnalyticsController`'s doc comment for why each of the four
+`GET /analytics/*` calls fetches (and errors) on its own rather than as
+one combined request.
+
+- **New dependency: `fl_chart`** (not `syncfusion_flutter_charts`) — MIT
+  licensed with no commercial-tier ceiling, chosen back when Analytics
+  was first being planned. First chart usage on mobile, same milestone
+  `chart.js` was on web.
+- **Chart colors deliberately reuse existing app conventions, not a new
+  chart-specific palette** — a genuine divergence from web's approach,
+  and worth understanding why: web built a custom teal-gradient for its
+  funnel because it had named design tokens (`tailwind.config.js`) but no
+  existing per-status color mapping to begin with. Mobile is the
+  opposite — `ApplicationStatusStyle`'s `foregroundColor(context)`
+  extension already colors a given status identically everywhere it
+  appears (Applications list, every directory screen's status chip), so
+  introducing a second, chart-only palette here would make this screen
+  the one place in the app where a status's color doesn't match its
+  color everywhere else. The funnel chart's bars use
+  `ApplicationStatusStyle` directly; interview-outcome colors duplicate
+  `InterviewDirectoryScreen`'s private `_ResultChip` scheme-color logic
+  (same reasoning as every other private-widget-color duplication in
+  this codebase — nothing public to import from a private class).
+- **`fl_chart` version caution**: written against the stable, long-lived
+  parts of the API (`BarChartData`, `PieChartSectionData`, etc.),
+  avoiding version-fragile widgets like `SideTitleWidget` (its
+  constructor signature changed across releases). Hit one real
+  const-constructor version mismatch during this pass —
+  `BarTouchData(enabled: false)` isn't `const`-constructible in the
+  resolved package version even though `FlGridData`/`AxisTitles` are; if
+  `flutter analyze` flags a similar error on a different `fl_chart` class
+  later, check that specific class's constructor before assuming the
+  whole package needs its `const` usages stripped — most of them were
+  fine as-is.
+- Same three UI caveats from web carried over verbatim, not just in code
+  comments but in the screen's actual copy: the funnel is a snapshot, not
+  a lifetime funnel (see BACKEND_SUMMARY.md's
+  `application_status_history` note); response rate is a documented
+  proxy; pass rate excludes pending/cancelled.
+- `AnalyticsScreen`'s doc comment explains all of the above in place,
+  rather than requiring a reader to cross-reference this file.
 
 ### Applications feature (`lib/features/applications/`)
 
@@ -422,10 +535,10 @@ that plan states.
     three converge on one `_handleTapData`, which reads
     `data['type'] == 'interview_reminder'` and
     `data['application_id']` (keys set by the backend's `_build_push`,
-    see BACKEND_SUMMARY.md) and pushes `/applications/{id}/edit` - The `getInitialMessage()` (terminated-app) tap path is
+    see BACKEND*SUMMARY.md) and pushes `/applications/{id}/edit` - The `getInitialMessage()` (terminated-app) tap path is
     deliberately deferred via `WidgetsBinding.instance
 .addPostFrameCallback` rather than pushed immediately: `initialize()`
-    runs from `main()` _before_ `runApp()` has rendered a first frame,
+    runs from `main()` \_before* `runApp()` has rendered a first frame,
     so the router's delegate isn't attached to a live `Navigator` yet.
     Pushing that early failed with a spurious `GoException: no routes
       for location` — a lifecycle-timing problem, not an actual
@@ -493,13 +606,13 @@ whatever the device gives back.
 
 ## Not yet implemented
 
-- Password reset screen (backend endpoints already exist per
-  BACKEND_SUMMARY.md; no mobile UI/repository method calls them yet)
-- A combined account/settings screen (password reset + timezone
-  override + notification preferences, e.g. a manual "re-enable push"
-  action for someone who denied the permission prompt) — noted as a
-  natural future grouping since all three already have backend/client
-  support waiting on a UI; not started
+- Password reset UI, timezone override, and notification preferences on
+  the new Settings screen (backend endpoints already exist per
+  BACKEND_SUMMARY.md; Settings currently only hosts logout — see
+  "Settings screen" above)
+  screen has it, these two don't yet (see "Settings screen" above)
+- An AI-tools card on the Home tab — explicitly deferred until that
+  feature is actually designed (see "Navigation shell" above)
 - In-app document download / offline document storage — downloads
   currently open the presigned URL externally via `url_launcher` only,
   no on-device copy kept
@@ -629,8 +742,13 @@ mobile/
                                    # ProviderContainer, wraps app in UncontrolledProviderScope
     app/
       app.dart                    # MaterialApp.router root widget, localization delegates
-      router.dart                 # go_router config: redirects, shell + form routes
-      app_shell.dart               # bottom NavigationBar around the shell tabs
+      router.dart                 # go_router config: redirects, 2-tab shell
+                                   # (Applications + Home) + top-level pushed
+                                   # routes (forms, Interviews/Contacts/
+                                   # Documents/Analytics/Settings directories)
+      app_shell.dart               # bottom NavigationBar - 2 tabs now, see
+                                    # its own doc comment for the full
+                                    # 4-tabs-to-2 reasoning
     core/
       config/env_config.dart
       network/api_client.dart      # shared Dio instance (token interceptors -
@@ -657,6 +775,25 @@ mobile/
                                       # /users/me/device-tokens), push_service.dart
                                       # (PushService - registration, tap-to-deep-link),
                                       # local_notifications.dart (foreground display)
+      home/
+        presentation/                 # home_screen.dart - card-grid launcher,
+                                       # the "Home" tab (Interviews/Contacts/
+                                       # Documents/Analytics cards; AI-tools
+                                       # card planned, not yet added)
+      settings/
+        presentation/                 # settings_screen.dart (currently just
+                                       # logout), settings_icon_button.dart
+                                       # (shared AppBar action every top-level
+                                       # screen should use)
+      analytics/
+        data/                        # analytics_api.dart (GET /analytics/
+                                       # summary, /funnel, /activity, /interviews)
+        domain/                      # analytics.dart - mirrors backend/app/
+                                       # schemas/analytics.py response shapes
+        presentation/                 # analytics_state.dart/_controller.dart
+                                       # (one controller, all four endpoints,
+                                       # independent fetch/error per section),
+                                       # analytics_screen.dart (fl_chart)
       applications/
         data/applications_api.dart
         domain/                      # application.dart, application_draft.dart
