@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { name: 'interviews', label: 'Interviews', to: '/interviews' },
   { name: 'contacts', label: 'Contacts', to: '/contacts' },
   { name: 'documents', label: 'Documents', to: '/documents' },
+  { name: 'analytics', label: 'Analytics', to: '/analytics' },
 ]
 
 async function handleLogout() {
