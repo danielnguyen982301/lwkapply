@@ -18,7 +18,7 @@ top-level /contacts prefix (no application_id path param).
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, contains_eager
 
 from app.api.deps import get_current_user
@@ -43,8 +43,12 @@ def _get_owned_application(
     db: Session, application_id: uuid.UUID, user: User
 ) -> Application:
     application = (
-        db.query(Application)
-        .filter(Application.id == application_id, Application.user_id == user.id)
+        db.execute(
+            select(Application).where(
+                Application.id == application_id, Application.user_id == user.id
+            )
+        )
+        .scalars()
         .first()
     )
     if not application:
@@ -58,13 +62,16 @@ def _get_owned_contact(
     db: Session, application_id: uuid.UUID, contact_id: uuid.UUID, user: User
 ) -> Contact:
     contact = (
-        db.query(Contact)
-        .join(Application, Contact.application_id == Application.id)
-        .filter(
-            Contact.id == contact_id,
-            Contact.application_id == application_id,
-            Application.user_id == user.id,
+        db.execute(
+            select(Contact)
+            .join(Application, Contact.application_id == Application.id)
+            .where(
+                Contact.id == contact_id,
+                Contact.application_id == application_id,
+                Application.user_id == user.id,
+            )
         )
+        .scalars()
         .first()
     )
     if not contact:
@@ -82,9 +89,12 @@ def list_contacts(
 ):
     _get_owned_application(db, application_id, current_user)
     items = (
-        db.query(Contact)
-        .filter(Contact.application_id == application_id)
-        .order_by(Contact.created_at.desc())
+        db.execute(
+            select(Contact)
+            .where(Contact.application_id == application_id)
+            .order_by(Contact.created_at.desc())
+        )
+        .scalars()
         .all()
     )
     return ContactListResponse(
@@ -164,24 +174,31 @@ def list_all_contacts(
     # populate `Contact.application` instead of firing a second query per
     # row; it relies on the join/filter below being the exact source of
     # that relationship's rows, so don't reorder without care.
-    query = (
-        db.query(Contact)
+    #
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch.
+    stmt = (
+        select(Contact)
         .join(Application, Contact.application_id == Application.id)
         .options(contains_eager(Contact.application))
-        .filter(Application.user_id == current_user.id)
+        .where(Application.user_id == current_user.id)
     )
 
     if search:
         like = f"%{search}%"
-        query = query.filter(
+        stmt = stmt.where(
             or_(Contact.name.ilike(like), Application.company.ilike(like))
         )
 
-    total = query.count()
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
-        query.order_by(Contact.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        db.execute(
+            stmt.order_by(Contact.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
         .all()
     )
     return ContactWithApplicationListResponse(
