@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/analytics/presentation/analytics_screen.dart';
 import '../features/applications/presentation/application_form_screen.dart';
 import '../features/applications/presentation/applications_list_screen.dart';
 import '../features/auth/domain/auth_state.dart';
@@ -109,6 +110,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/documents',
         name: 'documents',
         builder: (context, state) => const DocumentDirectoryScreen(),
+      ),
+      // Also a plain top-level push, same reasoning — reached via the
+      // Analytics card on the Home tab (see home_screen.dart).
+      GoRoute(
+        path: '/analytics',
+        name: 'analytics',
+        builder: (context, state) => const AnalyticsScreen(),
       ),
       // Also a plain top-level push, same reasoning. Reached via the
       // settings icon on Applications'/Home's (and ideally every
