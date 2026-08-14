@@ -19,6 +19,7 @@
     "@primevue/themes": "^4.2.5",
     "@vee-validate/zod": "^4.15.1",
     "axios": "^1.7.9",
+    "chart.js": "^4.4.7",
     "luxon": "^3.7.2",
     "pinia": "^2.3.0",
     "primeicons": "^8.0.0",

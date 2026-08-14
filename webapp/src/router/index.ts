@@ -72,6 +72,11 @@ const router = createRouter({
           name: 'documents',
           component: () => import('@/views/documents/DocumentDirectoryView.vue'),
         },
+        {
+          path: 'analytics',
+          name: 'analytics',
+          component: () => import('@/views/analytics/AnalyticsDashboardView.vue'),
+        },
       ],
     },
     {
