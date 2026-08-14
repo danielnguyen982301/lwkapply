@@ -25,7 +25,7 @@ funnel.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -86,32 +86,44 @@ def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    base_query = db.query(Application).filter(Application.user_id == current_user.id)
-
-    total_applications = base_query.count()
-    active_applications = base_query.filter(
-        ~Application.status.in_(_OFF_RAMP_STATUSES)
-    ).count()
-    offers_received = base_query.filter(
-        Application.status.in_((ApplicationStatus.OFFER, ApplicationStatus.ACCEPTED))
-    ).count()
-
-    interviews_scheduled = (
-        db.query(Interview)
-        .join(Application, Interview.application_id == Application.id)
-        .filter(
-            Application.user_id == current_user.id,
-            Interview.result == InterviewResult.PENDING,
+    def _count(*conditions) -> int:
+        """COUNT(Application.id) scoped to current_user, plus whatever
+        extra where-conditions this particular metric needs. Selecting
+        just the count column directly (rather than a full Application
+        select wrapped in a subquery) avoids pulling every column across
+        the wire for something that only needs a number."""
+        return (
+            db.scalar(
+                select(func.count(Application.id)).where(
+                    Application.user_id == current_user.id, *conditions
+                )
+            )
+            or 0
         )
-        .count()
+
+    total_applications = _count()
+    active_applications = _count(~Application.status.in_(_OFF_RAMP_STATUSES))
+    offers_received = _count(
+        Application.status.in_((ApplicationStatus.OFFER, ApplicationStatus.ACCEPTED))
     )
 
-    applications_submitted = base_query.filter(
-        Application.status != ApplicationStatus.SAVED
-    ).count()
-    responded = base_query.filter(
+    interviews_scheduled = (
+        db.scalar(
+            select(func.count(Interview.id))
+            .select_from(Interview)
+            .join(Application, Interview.application_id == Application.id)
+            .where(
+                Application.user_id == current_user.id,
+                Interview.result == InterviewResult.PENDING,
+            )
+        )
+        or 0
+    )
+
+    applications_submitted = _count(Application.status != ApplicationStatus.SAVED)
+    responded = _count(
         ~Application.status.in_((ApplicationStatus.SAVED, ApplicationStatus.APPLIED))
-    ).count()
+    )
     response_rate = (
         responded / applications_submitted if applications_submitted > 0 else None
     )
@@ -130,12 +142,11 @@ def get_funnel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(Application.status, func.count(Application.id))
-        .filter(Application.user_id == current_user.id)
+    rows = db.execute(
+        select(Application.status, func.count(Application.id))
+        .where(Application.user_id == current_user.id)
         .group_by(Application.status)
-        .all()
-    )
+    ).all()
     counts = {status: count for status, count in rows}
 
     stages = [
@@ -165,15 +176,14 @@ def get_activity(
     range_start = _add_months(_first_of_month(now), -(months - 1))
 
     bucket_expr = func.date_trunc("month", Application.created_at)
-    rows = (
-        db.query(bucket_expr.label("bucket"), func.count(Application.id))
-        .filter(
+    rows = db.execute(
+        select(bucket_expr.label("bucket"), func.count(Application.id))
+        .where(
             Application.user_id == current_user.id,
             Application.created_at >= range_start,
         )
         .group_by(bucket_expr)
-        .all()
-    )
+    ).all()
     counts_by_period = {bucket.strftime("%Y-%m"): count for bucket, count in rows}
 
     buckets = []
@@ -195,13 +205,12 @@ def get_interview_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(Interview.result, func.count(Interview.id))
+    rows = db.execute(
+        select(Interview.result, func.count(Interview.id))
         .join(Application, Interview.application_id == Application.id)
-        .filter(Application.user_id == current_user.id)
+        .where(Application.user_id == current_user.id)
         .group_by(Interview.result)
-        .all()
-    )
+    ).all()
     counts = {result: count for result, count in rows}
 
     by_result = InterviewResultCounts(

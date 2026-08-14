@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -39,7 +40,11 @@ def register_device_token(
     this only ever updates `last_seen_at` rather than erroring on a
     duplicate register of the same token by the same user.
     """
-    existing = db.query(DeviceToken).filter(DeviceToken.token == payload.token).first()
+    existing = (
+        db.execute(select(DeviceToken).where(DeviceToken.token == payload.token))
+        .scalars()
+        .first()
+    )
     now = datetime.now(timezone.utc)
     platform = DevicePlatform(payload.platform)
 
@@ -76,7 +81,15 @@ def delete_device_token(
     # (still 204) rather than a 404 if the token is already gone/was
     # never registered/belongs to someone else - logout shouldn't be able
     # to fail visibly over this.
-    db.query(DeviceToken).filter(
-        DeviceToken.token == token, DeviceToken.user_id == current_user.id
-    ).delete()
+    #
+    # A bulk delete() construct, not Session.delete(instance) - there's no
+    # loaded instance to hand it (and no need to load one just to delete
+    # it). synchronize_session defaults to "auto" here, which is fine:
+    # nothing else in this request loads or holds a DeviceToken afterward
+    # that would need its in-memory state kept in sync with the DELETE.
+    db.execute(
+        delete(DeviceToken).where(
+            DeviceToken.token == token, DeviceToken.user_id == current_user.id
+        )
+    )
     db.commit()

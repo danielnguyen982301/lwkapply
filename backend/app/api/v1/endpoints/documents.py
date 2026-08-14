@@ -37,7 +37,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, contains_eager
 
 from app.api.deps import get_current_user
@@ -68,8 +68,12 @@ def _get_owned_application(
     db: Session, application_id: uuid.UUID, user: User
 ) -> Application:
     application = (
-        db.query(Application)
-        .filter(Application.id == application_id, Application.user_id == user.id)
+        db.execute(
+            select(Application).where(
+                Application.id == application_id, Application.user_id == user.id
+            )
+        )
+        .scalars()
         .first()
     )
     if not application:
@@ -83,13 +87,16 @@ def _get_owned_document(
     db: Session, application_id: uuid.UUID, document_id: uuid.UUID, user: User
 ) -> Document:
     document = (
-        db.query(Document)
-        .join(Application, Document.application_id == Application.id)
-        .filter(
-            Document.id == document_id,
-            Document.application_id == application_id,
-            Application.user_id == user.id,
+        db.execute(
+            select(Document)
+            .join(Application, Document.application_id == Application.id)
+            .where(
+                Document.id == document_id,
+                Document.application_id == application_id,
+                Application.user_id == user.id,
+            )
         )
+        .scalars()
         .first()
     )
     if not document:
@@ -108,13 +115,21 @@ def list_documents(
     page_size: int = Query(default=20, ge=1, le=100),
 ):
     _get_owned_application(db, application_id, current_user)
-    query = (
-        db.query(Document)
-        .filter(Document.application_id == application_id)
-        .order_by(Document.created_at.desc())
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch.
+    stmt = select(Document).where(Document.application_id == application_id)
+
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    items = (
+        db.execute(
+            stmt.order_by(Document.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
     )
-    total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return DocumentListResponse(
         items=[DocumentRead.model_validate(item) for item in items],
@@ -224,27 +239,34 @@ def list_all_documents(
     # populate `Document.application` instead of firing a second query per
     # row; it relies on the join/filter below being the exact source of
     # that relationship's rows, so don't reorder without care.
-    query = (
-        db.query(Document)
+    #
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch.
+    stmt = (
+        select(Document)
         .join(Application, Document.application_id == Application.id)
         .options(contains_eager(Document.application))
-        .filter(Application.user_id == current_user.id)
+        .where(Application.user_id == current_user.id)
     )
 
     if search:
         like = f"%{search}%"
-        query = query.filter(
+        stmt = stmt.where(
             or_(Document.file_name.ilike(like), Application.company.ilike(like))
         )
 
     if file_type:
-        query = query.filter(Document.file_type == file_type)
+        stmt = stmt.where(Document.file_type == file_type)
 
-    total = query.count()
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
-        query.order_by(Document.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        db.execute(
+            stmt.order_by(Document.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
         .all()
     )
     return DocumentWithApplicationListResponse(

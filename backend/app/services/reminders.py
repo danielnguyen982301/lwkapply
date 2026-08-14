@@ -24,6 +24,7 @@ concern, not a scheduling-time one.
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -43,12 +44,14 @@ def _get_pending_reminder(
     db: Session, interview_id, channel: ReminderChannel
 ) -> InterviewReminder | None:
     return (
-        db.query(InterviewReminder)
-        .filter(
-            InterviewReminder.interview_id == interview_id,
-            InterviewReminder.channel == channel,
-            InterviewReminder.sent_at.is_(None),
+        db.execute(
+            select(InterviewReminder).where(
+                InterviewReminder.interview_id == interview_id,
+                InterviewReminder.channel == channel,
+                InterviewReminder.sent_at.is_(None),
+            )
         )
+        .scalars()
         .first()
     )
 

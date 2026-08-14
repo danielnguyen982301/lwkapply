@@ -9,7 +9,7 @@ level (not just in the response) to avoid IDOR vulnerabilities.
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -31,8 +31,12 @@ def _get_owned_application(
     db: Session, application_id: uuid.UUID, user: User
 ) -> Application:
     application = (
-        db.query(Application)
-        .filter(Application.id == application_id, Application.user_id == user.id)
+        db.execute(
+            select(Application).where(
+                Application.id == application_id, Application.user_id == user.id
+            )
+        )
+        .scalars()
         .first()
     )
     if not application:
@@ -51,22 +55,29 @@ def list_applications(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
-    query = db.query(Application).filter(Application.user_id == current_user.id)
+    # Built without order_by/offset/limit - reused as-is for the count
+    # below (via .subquery()) and extended with those three only for the
+    # items fetch, so the count query doesn't do the (pointless, for a
+    # COUNT) work of sorting.
+    stmt = select(Application).where(Application.user_id == current_user.id)
 
     if status_filter:
-        query = query.filter(Application.status == status_filter)
+        stmt = stmt.where(Application.status == status_filter)
 
     if search:
         pattern = f"%{search}%"
-        query = query.filter(
+        stmt = stmt.where(
             or_(Application.company.ilike(pattern), Application.position.ilike(pattern))
         )
 
-    total = query.count()
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
-        query.order_by(Application.updated_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        db.execute(
+            stmt.order_by(Application.updated_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
         .all()
     )
 

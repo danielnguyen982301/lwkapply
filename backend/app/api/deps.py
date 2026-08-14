@@ -5,6 +5,7 @@ current-user resolution from a Bearer JWT.
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 import secrets
 
@@ -40,7 +41,7 @@ def get_current_user(
     if user_id is None:
         raise CREDENTIALS_EXCEPTION
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.execute(select(User).where(User.id == user_id)).scalars().first()
     if user is None or not user.is_active:
         raise CREDENTIALS_EXCEPTION
 
