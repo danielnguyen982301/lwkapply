@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../applications/domain/application.dart';
 import '../../applications/presentation/application_formatting.dart';
 import '../../applications/presentation/application_status_style.dart';
+import '../../settings/presentation/settings_icon_button.dart';
 import '../domain/document.dart';
 import '../domain/document_with_application.dart';
 import 'document_directory_controller.dart';
@@ -132,7 +133,10 @@ class _DocumentDirectoryScreenState
     final controller = ref.read(documentDirectoryControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Documents')),
+      appBar: AppBar(
+        title: const Text('Documents'),
+        actions: const [SettingsIconButton()],
+      ),
       body: Column(
         children: [
           Padding(

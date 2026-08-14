@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../applications/domain/application.dart';
 import '../../applications/presentation/application_status_style.dart';
+import '../../settings/presentation/settings_icon_button.dart';
 import '../domain/interview.dart';
 import '../domain/interview_with_application.dart';
 import 'interview_directory_controller.dart';
@@ -109,7 +110,10 @@ class _InterviewDirectoryScreenState
     final controller = ref.read(interviewDirectoryControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Interviews')),
+      appBar: AppBar(
+        title: const Text('Interviews'),
+        actions: const [SettingsIconButton()],
+      ),
       body: Column(
         children: [
           Padding(

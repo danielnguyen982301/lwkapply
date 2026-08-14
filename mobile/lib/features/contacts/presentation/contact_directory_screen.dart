@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../applications/domain/application.dart';
 import '../../applications/presentation/application_status_style.dart';
+import '../../settings/presentation/settings_icon_button.dart';
 import '../domain/contact_with_application.dart';
 import 'contact_directory_controller.dart';
 import 'contact_directory_state.dart';
@@ -109,7 +110,10 @@ class _ContactDirectoryScreenState
     final controller = ref.read(contactDirectoryControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Contacts')),
+      appBar: AppBar(
+        title: const Text('Contacts'),
+        actions: const [SettingsIconButton()],
+      ),
       body: Column(
         children: [
           Padding(
