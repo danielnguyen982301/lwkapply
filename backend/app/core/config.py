@@ -103,6 +103,16 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
+    # --- AI feature rate limiting (free tier only - see TODO.md "AI
+    # Features"). Shared budget across resume-analyses and ats-scores
+    # (both draw on the same Gemini cost) - see
+    # app/services/rate_limit.py. No premium tier exists yet
+    # (app/models/user.py's UserRole is just USER/ADMIN), so every user
+    # gets this same limit for now; the one place this would branch on a
+    # future premium tier is app/api/v1/endpoints/ai.py's call site, not
+    # this setting or the rate-limit service itself.
+    AI_FREE_TIER_DAILY_LIMIT: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:
