@@ -25,6 +25,8 @@ const resumeAnalyses = useResumeAnalysesStore()
 const atsScores = useAtsScoresStore()
 const loading = ref(false)
 
+const pastedDescription = ref('')
+
 // Reuses `current`/polling on both stores directly, same as
 // ResumeAnalysesView.vue/AtsScoresView.vue's own detail dialogs - safe
 // because this modal is mounted from a different route than either of
@@ -57,14 +59,25 @@ async function load() {
   }
 }
 
-watch(visible, (isVisible) => {
-  if (isVisible) {
-    load()
-  } else {
-    resumeAnalyses.stopPolling()
-    atsScores.stopPolling()
-  }
-})
+// immediate: true matters here - DocumentsPanel.vue mounts this component
+// with v-if="analysisModalDocumentId" *and* sets visible=true in the same
+// click handler (openAnalysisModal()), so on first open this component's
+// `visible` model starts at `true` from the very first render - there's
+// no false->true transition for a plain watch() to catch, so load()
+// silently never ran on the first open (only on a subsequent close+reopen,
+// which - since the component stays mounted - is a real transition).
+watch(
+  visible,
+  (isVisible) => {
+    if (isVisible) {
+      load()
+    } else {
+      resumeAnalyses.stopPolling()
+      atsScores.stopPolling()
+    }
+  },
+  { immediate: true },
+)
 
 // The moment polling resolves the analysis to 'completed', fetch its
 // score too - fetchOne() (stores/resumeAnalyses.ts) already stops polling
@@ -99,8 +112,6 @@ async function scoreNow() {
 // always wins over job_url server-side, so application_id is still sent
 // for record-keeping even though job_description is what actually drives
 // this attempt.
-const pastedDescription = ref('')
-
 async function scoreNowWithPaste() {
   if (!resumeAnalyses.current) return
   await atsScores
