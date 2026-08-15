@@ -11,6 +11,9 @@ and Documents below. All three now also have a cross-application
 directory view (Contacts, Interviews, and Documents), each mirroring the
 same `DataTable`/`Paginator` skeleton — see each section below. Phase 5's
 Analytics dashboard is implemented as of this pass — see Analytics below.
+Phase 7's Resume Parser and ATS Score (backend already existed) now have
+a web UI too — see AI Tools below, the first async/polling flow in this
+frontend.
 
 ## What's here
 
@@ -274,13 +277,86 @@ other three from rendering.
   `response_rate`/`pass_rate` (null when there's no data to compute them
   from yet).
 
+### AI Tools
+
+`ResumeAnalysesView.vue` (route `/resume-analyses`) and `AtsScoresView.vue`
+(route `/ats-scores`), reached via one "AI Tools" nav item
+(`layouts/AppLayout.vue`) pointing at `/resume-analyses`, with a shared
+`AiToolsTabs.vue` switching between the two routes — copies
+`ViewTabs.vue`'s List/Board toggle shape exactly (`TabMenu`,
+`router.push` per tab, `activeIndex` synced off `route.name`), not a new
+"combined tabs" pattern. Two separate stores
+(`stores/resumeAnalyses.ts`/`stores/atsScores.ts`), one per resource type,
+matching every other feature's "one store per resource" convention.
+
+- **First async/polling flow in this frontend.** Both backend endpoints
+  (`POST /ai/resume-analyses`, `POST /ai/ats-scores`) return `202` with a
+  `pending` row; each store's `startPolling(id)` sets a 3s `setInterval`
+  calling `fetchOne(id)` until status is `completed`/`failed`, with a
+  40-attempt (~2 min) safety cap (`pollingTimedOut`). Every view/component
+  that starts a poll stops it in `onUnmounted`/`onBeforeUnmount` — same
+  "don't leak a background operation into a screen the user has left"
+  reasoning `stores/documents.ts`'s `reset()`-on-unmount already
+  established, just applied to an interval instead of request state.
+- **New reusable components** (`components/ai/`): `ResumeDocumentPicker.vue`
+  / `ApplicationPicker.vue` (both a `defineModel`-based PrimeVue
+  `AutoComplete` — first use of that component in this codebase —
+  debounced search, mirroring `DocumentDirectoryView.vue`'s 300ms
+  debounce), `ParsedResumeDisplay.vue` / `AtsScoreDisplay.vue`
+  (read-only result renderers), `AiToolsTabs.vue`.
+- **Isolated search methods, not the existing directory stores' mutating
+  fetches.** `ResumeDocumentPicker`/`ApplicationPicker` need live search
+  against `documents`/`applications`, but calling
+  `documentDirectory.fetchDocuments()`/`applications.fetchApplications()`
+  directly would clobber the Documents/Applications List views' own
+  `items`/`page`/`filters` state, since both are reachable in the same
+  session without a full reload. Fixed by adding
+  `documentDirectory.searchResumeDocuments(query, pageSize?)` and
+  `applications.searchApplications(query)` — small isolated methods that
+  return data directly without touching shared list state. Same
+  reasoning extends to `resumeAnalyses.fetchLatestForDocument()`/
+  `fetchCompletedForPicker()` and `atsScores.fetchLatestForApplication()`.
+- **`ResumeAnalysisModal.vue`**: opened from a new per-row action on
+  `components/applications/DocumentsPanel.vue` (icon-only button, resume-
+  type documents only) — lets a user view/start an analysis and score it
+  against the current application directly from the Documents panel,
+  without switching to the AI Tools tab and hunting for which application
+  a resume belongs to. Shows only the *latest* analysis/score for
+  `(documentId, applicationId)`, not full history (that's the AI Tools
+  tab's job). Reuses `resumeAnalyses`/`atsScores`' `current`/polling state
+  directly rather than local component state — safe because this modal,
+  `ResumeAnalysesView`, and `AtsScoresView` are never mounted at the same
+  time (different routes, Vue Router unmounts one before mounting
+  another).
+- **Cross-link**: a completed analysis's detail view has a "Score against
+  a job" button that navigates to `{ name: 'ats-scores', query:
+  { resume_analysis_id } }`; `AtsScoresView.vue` reads that query param on
+  mount to pre-select the resume in its own create dialog.
+- **Bug caught during manual verification, fixed same pass**:
+  `ResumeAnalysisModal.vue`'s inline "Analyze now"/"Score now" buttons
+  originally had no error display at all — a `503`/`429` failure was
+  correctly caught by the store but the user got zero feedback, just a
+  button that silently stopped loading. Fixed by rendering
+  `resumeAnalyses.createError`/`atsScores.createError` in those two
+  states. `ResumeAnalysesView.vue`/`AtsScoresView.vue`'s own create
+  dialogs already had this (verified working), since they follow the
+  `DocumentsPanel.vue` upload-dialog convention of a `Message` at the top
+  of the form — the modal's inline buttons just didn't have an
+  equivalent form to attach one to.
+- Job-description length hint (50–20000 chars) on `AtsScoresView.vue`'s
+  paste `Textarea` is a client-side hint only — the server is the real
+  validator, same "hint, not a hard block" approach as everywhere else
+  a backend constraint is surfaced client-side in this app.
+
 ## What's deliberately not here yet
 
 - RBAC-aware UI — explicitly skipped per current backend scope
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts, Interviews, Documents, and Analytics
-  (including their directory/dashboard views/stores) are in the
-  same boat: no tests yet
+  views not yet covered) — Contacts, Interviews, Documents, Analytics, and
+  AI Tools (including their directory/dashboard views/stores) are in the
+  same boat: no tests yet, matching this frontend's existing convention of
+  shipping new feature UI without test coverage (only `LoginView`/
+  `authGuard`/`api.ts` have any)
 - Analytics reporting (CSV/PDF export) — the dashboard itself (charts,
   summary cards) is done; exporting it isn't
 
