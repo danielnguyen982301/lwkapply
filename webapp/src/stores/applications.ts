@@ -145,6 +145,36 @@ export const useApplicationsStore = defineStore('applications', {
       }
     },
 
+    /**
+     * Isolated: returns matching applications directly, without touching
+     * `items`/`page`/`filters`. Used by components/ai/ApplicationPicker.vue
+     * for a live debounced search - reusing fetchApplications() there would
+     * clobber whatever page/filters the actual Applications List view has
+     * set, since both can be reached in the same session without a full
+     * page reload. Small page_size - this backs autocomplete suggestions,
+     * not a real listing.
+     */
+    async searchApplications(query: string): Promise<Application[]> {
+      const { data } = await api.get<ApplicationListResponse>('/applications', {
+        params: { search: query || undefined, page: 1, page_size: 10 },
+      })
+      return data.items
+    },
+
+    /**
+     * Isolated, same reasoning as searchApplications() above - returns one
+     * application directly without touching `current`/`currentStatus`.
+     * Used by views/ai/AtsScoresView.vue to label a score's detail dialog
+     * with the application it was scored against ("Scored against Acme
+     * Corp — Backend Engineer"); reusing fetchApplication() there would
+     * clobber the Application Detail view's own `current` if both are
+     * reachable in the same session.
+     */
+    async fetchApplicationById(id: string): Promise<Application> {
+      const { data } = await api.get<Application>(`/applications/${id}`)
+      return data
+    },
+
     async fetchApplication(id: string) {
       this.currentStatus = 'loading'
       this.currentError = null

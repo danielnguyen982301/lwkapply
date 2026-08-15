@@ -89,6 +89,24 @@ export const useDocumentDirectoryStore = defineStore('documentDirectory', {
       await this.fetchDocuments({ search, page: 1 })
     },
 
+    /**
+     * Isolated: returns matching resume documents directly, without
+     * touching `items`/`page`/`search`/`fileType`. Used by
+     * components/ai/ResumeDocumentPicker.vue for a live debounced search
+     * (default pageSize=10 - autocomplete suggestions, not a real listing)
+     * and by ResumeAnalysesView.vue to build its document_id -> file_name
+     * label lookup (a larger pageSize, since it wants every resume the
+     * user has, not just top matches). Reusing fetchDocuments() for either
+     * would clobber whatever the actual Documents directory view has set,
+     * since both are reachable in the same session without a full reload.
+     */
+    async searchResumeDocuments(query: string, pageSize = 10): Promise<DocumentWithApplication[]> {
+      const { data } = await api.get<DocumentWithApplicationListResponse>('/documents', {
+        params: { search: query || undefined, file_type: 'resume', page: 1, page_size: pageSize },
+      })
+      return data.items
+    },
+
     /** Convenience wrapper: apply a new file-type filter and jump back to page 1. */
     async setFileTypeFilter(fileType: DocumentType | null) {
       await this.fetchDocuments({ file_type: fileType, page: 1 })

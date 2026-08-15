@@ -298,13 +298,15 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ## AI Features
 
-- [x] Resume parser — backend only (`POST`/`GET /ai/resume-analyses`,
-      async via Celery, Google Gemini) — no web/mobile UI yet. See
-      `backend/BACKEND_SUMMARY.md`'s "AI features" section
-- [x] ATS score — backend only (`POST`/`GET /ai/ats-scores`), prefers the
-      linked application's `job_url` (server-side fetch, SSRF-guarded)
-      over asking the user to paste a job description, falling back to a
-      pasted `job_description` when the URL is blank or can't be scraped
+- [x] Resume parser — backend (`POST`/`GET /ai/resume-analyses`, async via
+      Celery, Google Gemini) and web UI (`/resume-analyses`, one of the
+      two "AI Tools" tabs) done — no mobile UI yet. See
+      `backend/BACKEND_SUMMARY.md`'s "AI features" section and
+      `webapp/WEBAPP_SUMMARY.md`'s "AI Tools" section
+- [x] ATS score — backend (`POST`/`GET /ai/ats-scores`, prefers the linked
+      application's `job_url`, server-side fetch, SSRF-guarded, over
+      asking the user to paste a job description) and web UI
+      (`/ats-scores`, the other "AI Tools" tab) done — no mobile UI yet
 - [ ] Job match scoring — deferred until Resume Parser/ATS Score's
       parse-once-reuse-everywhere pattern is validated
 - [ ] Cover letter generator

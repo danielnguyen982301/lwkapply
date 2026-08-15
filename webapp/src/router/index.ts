@@ -77,6 +77,16 @@ const router = createRouter({
           name: 'analytics',
           component: () => import('@/views/analytics/AnalyticsDashboardView.vue'),
         },
+        {
+          path: 'resume-analyses',
+          name: 'resume-analyses',
+          component: () => import('@/views/ai/ResumeAnalysesView.vue'),
+        },
+        {
+          path: 'ats-scores',
+          name: 'ats-scores',
+          component: () => import('@/views/ai/AtsScoresView.vue'),
+        },
       ],
     },
     {

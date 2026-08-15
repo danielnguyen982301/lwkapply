@@ -308,7 +308,7 @@ watch(
               <label for="job_url" class="text-sm font-medium text-ink">Job posting URL</label>
               <CustomInputText
                 id="job_url"
-                name="jobUrl"
+                name="job_url"
                 type="url"
                 placeholder="https://…"
                 class="w-full"

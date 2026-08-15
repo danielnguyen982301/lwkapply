@@ -13,11 +13,21 @@ import { useConfirm } from 'primevue/useconfirm'
 
 import { useDocumentsStore } from '@/stores/documents'
 import { DOCUMENT_TYPE_LABELS, documentTypeOptions, documentTypeSeverity } from '@/lib/document-ui'
+import ResumeAnalysisModal from '@/components/ai/ResumeAnalysisModal.vue'
 import type { Document, DocumentType } from '@/types/document'
 
 const props = defineProps<{ applicationId: string }>()
 
 const store = useDocumentsStore()
+
+// --- AI analysis modal ---------------------------------------------------
+const analysisModalVisible = ref(false)
+const analysisModalDocumentId = ref<string | null>(null)
+
+function openAnalysisModal(doc: Document) {
+  analysisModalDocumentId.value = doc.id
+  analysisModalVisible.value = true
+}
 const confirm = useConfirm()
 
 const typeOptions = documentTypeOptions()
@@ -205,6 +215,14 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex shrink-0 gap-1">
               <Button
+                v-if="doc.file_type === 'resume'"
+                icon="pi pi-sparkles"
+                aria-label="View AI analysis"
+                link
+                size="small"
+                @click="openAnalysisModal(doc)"
+              />
+              <Button
                 icon="pi pi-download"
                 aria-label="Download document"
                 link
@@ -352,4 +370,11 @@ onBeforeUnmount(() => {
       </div>
     </form>
   </Dialog>
+
+  <ResumeAnalysisModal
+    v-if="analysisModalDocumentId"
+    v-model:visible="analysisModalVisible"
+    :document-id="analysisModalDocumentId"
+    :application-id="props.applicationId"
+  />
 </template>

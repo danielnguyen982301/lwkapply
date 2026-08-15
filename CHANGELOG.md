@@ -87,6 +87,39 @@
     `docker-compose.yml`, not a mocking library — same philosophy as
     this suite's real-Postgres DB tests; isolation comes from
     `make_user()`'s fresh random UUID per test, not an explicit rollback
+- **AI Tools web UI: Resume Parser + ATS Score** — the backend for both
+  already existed; nothing consumed it on any client until now. Full
+  detail in webapp/WEBAPP_SUMMARY.md's "AI Tools" section:
+  - One "AI Tools" nav item over two routes (`/resume-analyses`,
+    `/ats-scores`), joined by a shared tab bar copying `ViewTabs.vue`'s
+    List/Board toggle shape exactly, not a new pattern. Two new stores
+    (`stores/resumeAnalyses.ts`/`stores/atsScores.ts`), one per resource,
+    matching every other feature's convention
+  - **First async/polling UI in this frontend** — both `POST` endpoints
+    return `202` with a `pending` row; each store polls `GET .../{id}`
+    every 3s (40-attempt/~2min cap) until `completed`/`failed`
+  - **New reusable components** (`components/ai/`): `ResumeDocumentPicker.vue`/
+    `ApplicationPicker.vue` (first use of PrimeVue `AutoComplete` in this
+    codebase, debounced search), `ParsedResumeDisplay.vue`/
+    `AtsScoreDisplay.vue`, `AiToolsTabs.vue`
+  - **New isolated store search methods** (`documentDirectory.searchResumeDocuments()`,
+    `applications.searchApplications()`, plus a few on the two new AI
+    stores) — reusing the existing directory stores' mutating fetch
+    actions for live search would have clobbered the Documents/
+    Applications List views' own state, since both are reachable in the
+    same session without a reload
+  - **`ResumeAnalysisModal.vue`**: a new per-row action on
+    `DocumentsPanel.vue` (resume-type documents only) — view/start an
+    analysis and score it against the current application directly from
+    an application's Documents panel, no tab-switching or hunting
+    required. Cross-linked the other direction too: a completed
+    analysis's "Score against a job" button pre-fills `AtsScoresView.vue`'s
+    create dialog via a `resume_analysis_id` query param
+  - **Bug caught during manual verification, fixed same pass**:
+    `ResumeAnalysisModal.vue`'s inline "Analyze now"/"Score now" buttons
+    had no error display at all — a `503`/`429` was correctly caught by
+    the store but produced zero user feedback. Fixed by rendering the
+    store's `createError` in both states
 
 ## v0.10.0
 
