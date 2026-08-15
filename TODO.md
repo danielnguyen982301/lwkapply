@@ -309,21 +309,25 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       parse-once-reuse-everywhere pattern is validated
 - [ ] Cover letter generator
 - [ ] Interview coach
-- [ ] AI feature rate limiting, tiered by account (free vs. premium) —
-      product decision made 2026-08-15, not yet scoped as implementation
-      work. Today, `POST /ai/resume-analyses`/`POST /ai/ats-scores` only
-      have an in-flight (`pending`/`processing`) dedup guard; nothing
-      stops repeated real Gemini calls once a result is `completed`, and
-      `AI_CONTEXT.md`'s Security Requirements call for rate limiting more
-      generally anyway. Chosen over a flat per-user cap specifically so
-      limits can be monetized via a premium tier. Needs, in order:
-  - [ ] A premium/subscription role — `app/models/user.py`'s `UserRole`
-        enum only has `USER`/`ADMIN` today; `AI_CONTEXT.md`'s RBAC section
-        already documents "Premium User" as a planned role, but it isn't
-        implemented in code yet
-  - [ ] A payment/account-upgrade flow (none exists yet)
-  - [ ] The actual tier-aware rate limiter (Redis counter or a table),
-        once the above two exist to key limits off of
+- [x] AI feature rate limiting — free tier only (2026-08-15): a shared
+      daily budget (`AI_FREE_TIER_DAILY_LIMIT`, default 10) across
+      `POST /ai/resume-analyses` + `POST /ai/ats-scores`, backed by a
+      Redis atomic counter (`app/services/rate_limit.py`), applies to
+      every user today since no premium tier exists. Only counts an
+      actual new Gemini dispatch — not the dedup-reuse path, not a
+      request that fails validation first. See
+      `backend/BACKEND_SUMMARY.md`'s "Rate limiting" section
+  - [ ] Tiering by account (free vs. premium) — the limit value itself
+        is still flat for every user; only the extension *point* exists
+        (one call site in `app/api/v1/endpoints/ai.py` that would branch
+        on `current_user.role`). Needs, in order:
+    - [ ] A premium/subscription role — `app/models/user.py`'s `UserRole`
+          enum only has `USER`/`ADMIN` today; `AI_CONTEXT.md`'s RBAC
+          section already documents "Premium User" as a planned role,
+          but it isn't implemented in code yet
+    - [ ] A payment/account-upgrade flow (none exists yet)
+    - [ ] Wiring the premium limit into that one call site once the
+          above two exist to key off of
 
 ---
 
