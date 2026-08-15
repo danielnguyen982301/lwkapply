@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    ai,
     analytics,
     applications,
     auth,
@@ -68,3 +69,9 @@ api_router.include_router(
 api_router.include_router(
     contacts.directory_router, prefix="/contacts", tags=["contacts"]
 )
+
+# AI features (Resume Parser + ATS Score - TODO.md "AI Features") - two
+# top-level, user-owned resources (like Application), not nested under
+# /applications/{id}/. Both POST routes are async: they return 202 with
+# a pending row and dispatch a Celery task; see app/tasks/ai.py.
+api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
