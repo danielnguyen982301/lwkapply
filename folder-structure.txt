@@ -1,6 +1,7 @@
 .
 ├── AI_CONTEXT.md
 ├── CHANGELOG.md
+├── CLAUDE.md
 ├── README.md
 ├── TODO.md
 ├── backend
@@ -10,6 +11,7 @@
 │   │   ├── env.py
 │   │   ├── script.py.mako
 │   │   └── versions
+│   │       ├── 06abe39a184c_resume_analyses_and_ats_scores.py
 │   │       ├── 37f704e60528_first_migration.py
 │   │       ├── 873b7c6fdc36_device_tokens.py
 │   │       ├── d65db92902b9_interview_reminders_and_user_timezone.py
@@ -24,6 +26,7 @@
 │   │   │       ├── __init__.py
 │   │   │       ├── endpoints
 │   │   │       │   ├── __init__.py
+│   │   │       │   ├── ai.py
 │   │   │       │   ├── analytics.py
 │   │   │       │   ├── applications.py
 │   │   │       │   ├── auth.py
@@ -47,14 +50,17 @@
 │   │   │   ├── __init__.py
 │   │   │   ├── application.py
 │   │   │   ├── application_status_history.py
+│   │   │   ├── ats_score.py
 │   │   │   ├── contact.py
 │   │   │   ├── device_token.py
 │   │   │   ├── document.py
 │   │   │   ├── interview.py
 │   │   │   ├── interview_reminder.py
+│   │   │   ├── resume_analysis.py
 │   │   │   └── user.py
 │   │   ├── schemas
 │   │   │   ├── __init__.py
+│   │   │   ├── ai.py
 │   │   │   ├── analytics.py
 │   │   │   ├── application.py
 │   │   │   ├── auth.py
@@ -65,14 +71,22 @@
 │   │   │   └── user.py
 │   │   ├── services
 │   │   │   ├── __init__.py
+│   │   │   ├── ai
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── ats_scorer.py
+│   │   │   │   ├── client.py
+│   │   │   │   ├── job_description_fetcher.py
+│   │   │   │   └── resume_parser.py
 │   │   │   ├── application_history.py
 │   │   │   ├── email.py
 │   │   │   ├── push.py
 │   │   │   ├── r2.py
+│   │   │   ├── rate_limit.py
 │   │   │   ├── reminders.py
 │   │   │   └── s3.py
 │   │   ├── tasks
 │   │   │   ├── __init__.py
+│   │   │   ├── ai.py
 │   │   │   └── reminders.py
 │   │   └── utils
 │   │       ├── __init__.py
@@ -85,10 +99,15 @@
 │   └── tests
 │       ├── __init__.py
 │       ├── conftest.py
+│       ├── test_ai_client.py
+│       ├── test_ai_endpoints.py
+│       ├── test_ai_schemas.py
+│       ├── test_ai_tasks.py
 │       ├── test_analytics_endpoints.py
 │       ├── test_application_schema.py
 │       ├── test_application_status_history.py
 │       ├── test_applications_endpoints.py
+│       ├── test_ats_scorer.py
 │       ├── test_contact_schema.py
 │       ├── test_contacts_directory.py
 │       ├── test_contacts_endpoints.py
@@ -98,6 +117,9 @@
 │       ├── test_interview_schema.py
 │       ├── test_interviews_directory.py
 │       ├── test_interviews_endpoints.py
+│       ├── test_job_description_fetcher.py
+│       ├── test_rate_limit.py
+│       ├── test_resume_parser.py
 │       ├── test_security.py
 │       └── test_user_schema.py
 ├── docker-compose.yml
@@ -415,4 +437,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-119 directories, 297 files
+120 directories, 318 files
