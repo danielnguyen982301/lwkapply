@@ -26,6 +26,9 @@ secrets
 # test
 .coverage
 
+# Claude
+.claude
+
 # Misc
 *.tsbuildinfo
 .DS_Store
