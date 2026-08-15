@@ -13,6 +13,15 @@ under /applications/{id}/ the way Interview/Contact/Document are - see
 app/models/resume_analysis.py's module docstring for why ownership here
 is a direct user_id equality check rather than a join through
 Document/Application.
+
+Both POST routes are also rate-limited (_enforce_ai_rate_limit, below) -
+a shared free-tier daily budget (app/services/rate_limit.py) across both
+endpoints, since both trigger real Gemini calls. The check runs before
+any row is created for the request, not right before .delay() - so a
+rejected request never leaves an orphaned `pending` row behind, and
+never fires before validation (owned-resource checks, file_type, etc.)
+or the dedup-reuse path, so a request that either fails validation or
+just reuses an in-flight analysis never consumes budget either.
 """
 
 import uuid
@@ -22,6 +31,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.application import Application
 from app.models.ats_score import AtsScore
@@ -37,6 +47,11 @@ from app.schemas.ai import (
     ResumeAnalysisRead,
 )
 from app.services.ai.client import is_ai_configured
+from app.services.rate_limit import (
+    RateLimitExceeded,
+    ai_usage_key,
+    check_and_increment,
+)
 from app.tasks.ai import parse_resume_task, score_ats_task
 
 router = APIRouter()
@@ -48,6 +63,28 @@ def _require_ai_configured() -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI features are not configured.",
         )
+
+
+def _enforce_ai_rate_limit(user: User) -> None:
+    """Called immediately before dispatching a *new* Gemini-triggering
+    Celery task, not as a blanket guard at the top of an endpoint - the
+    in-flight dedup-reuse path and requests that fail validation first
+    never reach here, so neither consumes budget. Shared across
+    resume-analyses and ats-scores (see ai_usage_key's docstring): one
+    daily budget per user, not one per endpoint. Free-tier limit for
+    every user today - no premium tier exists yet (see
+    app/core/config.py's AI_FREE_TIER_DAILY_LIMIT); this is the one
+    place a future premium tier would branch on user.role instead of
+    always using the free-tier setting.
+    """
+    try:
+        check_and_increment(ai_usage_key(user.id), settings.AI_FREE_TIER_DAILY_LIMIT)
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Daily AI usage limit reached. Try again tomorrow.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
 
 
 def _get_owned_document(db: Session, document_id: uuid.UUID, user: User) -> Document:
@@ -161,6 +198,8 @@ def create_resume_analysis(
     if existing:
         return existing
 
+    _enforce_ai_rate_limit(current_user)
+
     analysis = ResumeAnalysis(user_id=current_user.id, document_id=document.id)
     db.add(analysis)
     db.commit()
@@ -245,6 +284,8 @@ def create_ats_score(
             detail="Provide job_description, or an application_id whose "
             "job_url is set.",
         )
+
+    _enforce_ai_rate_limit(current_user)
 
     ats_score = AtsScore(
         user_id=current_user.id,
