@@ -298,11 +298,32 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ## AI Features
 
-- [ ] Resume parser
-- [ ] ATS score
-- [ ] Job match scoring
+- [x] Resume parser — backend only (`POST`/`GET /ai/resume-analyses`,
+      async via Celery, Google Gemini) — no web/mobile UI yet. See
+      `backend/BACKEND_SUMMARY.md`'s "AI features" section
+- [x] ATS score — backend only (`POST`/`GET /ai/ats-scores`), prefers the
+      linked application's `job_url` (server-side fetch, SSRF-guarded)
+      over asking the user to paste a job description, falling back to a
+      pasted `job_description` when the URL is blank or can't be scraped
+- [ ] Job match scoring — deferred until Resume Parser/ATS Score's
+      parse-once-reuse-everywhere pattern is validated
 - [ ] Cover letter generator
 - [ ] Interview coach
+- [ ] AI feature rate limiting, tiered by account (free vs. premium) —
+      product decision made 2026-08-15, not yet scoped as implementation
+      work. Today, `POST /ai/resume-analyses`/`POST /ai/ats-scores` only
+      have an in-flight (`pending`/`processing`) dedup guard; nothing
+      stops repeated real Gemini calls once a result is `completed`, and
+      `AI_CONTEXT.md`'s Security Requirements call for rate limiting more
+      generally anyway. Chosen over a flat per-user cap specifically so
+      limits can be monetized via a premium tier. Needs, in order:
+  - [ ] A premium/subscription role — `app/models/user.py`'s `UserRole`
+        enum only has `USER`/`ADMIN` today; `AI_CONTEXT.md`'s RBAC section
+        already documents "Premium User" as a planned role, but it isn't
+        implemented in code yet
+  - [ ] A payment/account-upgrade flow (none exists yet)
+  - [ ] The actual tier-aware rate limiter (Redis counter or a table),
+        once the above two exist to key limits off of
 
 ---
 
