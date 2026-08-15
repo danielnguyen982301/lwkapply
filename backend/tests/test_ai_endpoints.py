@@ -18,6 +18,7 @@ import uuid
 import pytest
 
 import app.api.v1.endpoints.ai as ai_endpoints_module
+from app.core.config import settings
 from app.models.application import Application, ApplicationStatus
 from app.models.ats_score import AtsScore
 from app.models.document import Document, DocumentType
@@ -563,3 +564,117 @@ class TestGetAndListAtsScores:
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["application_id"] == str(application_a.id)
+
+
+class TestAiRateLimiting:
+    """The rate-limit check itself (Redis counting, TTL) is covered by
+    test_rate_limit.py - these tests are about where it's wired into the
+    endpoints: it fires on real new-resource creation, but not on the
+    dedup-reuse path or on requests that fail validation first, and it's
+    a single budget shared across both resume-analyses and ats-scores.
+
+    Uses the real Redis instance (see test_rate_limit.py's docstring) -
+    every test here monkeypatches settings.AI_FREE_TIER_DAILY_LIMIT down
+    to a small number so it doesn't need a real day's worth of requests
+    to hit the boundary, and each test's fresh make_user() gets a fresh
+    UUID-keyed counter, so tests never interfere with each other.
+    """
+
+    def test_returns_429_after_daily_limit_is_reached(
+        self, client, db_session, make_user, auth_headers, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 3)
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        for _ in range(3):
+            document = _make_document(db_session, application)
+            response = client.post(
+                RESUME_ANALYSES_URL,
+                json={"document_id": str(document.id)},
+                headers=auth_headers(user),
+            )
+            assert response.status_code == 202
+
+        document = _make_document(db_session, application)
+        response = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(document.id)},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 429
+        assert "Retry-After" in response.headers
+
+    def test_dedup_reuse_does_not_consume_budget(
+        self, client, db_session, make_user, auth_headers, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 1)
+        user = make_user()
+        application = _make_application(db_session, user)
+        document = _make_document(db_session, application)
+
+        first = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(document.id)},
+            headers=auth_headers(user),
+        )
+        assert first.status_code == 202
+        first_id = first.json()["id"]
+
+        # Same document, still pending (task dispatch is mocked) - hits
+        # the dedup-reuse path, not the rate limiter, even though the
+        # budget of 1 is already used up.
+        second = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(document.id)},
+            headers=auth_headers(user),
+        )
+        assert second.status_code == 202
+        assert second.json()["id"] == first_id
+
+        # A genuinely new resource, though, should now be rejected - the
+        # budget really was consumed exactly once, by the first call.
+        other_document = _make_document(db_session, application)
+        third = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(other_document.id)},
+            headers=auth_headers(user),
+        )
+        assert third.status_code == 429
+
+    def test_budget_is_shared_across_resume_analysis_and_ats_score(
+        self, client, db_session, make_user, auth_headers, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 2)
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        document = _make_document(db_session, application)
+        first = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(document.id)},
+            headers=auth_headers(user),
+        )
+        assert first.status_code == 202
+
+        other_document = _make_document(db_session, application)
+        completed_analysis = _make_resume_analysis(
+            db_session, user, other_document, status=AIJobStatus.COMPLETED
+        )
+        second = client.post(
+            ATS_SCORES_URL,
+            json={
+                "resume_analysis_id": str(completed_analysis.id),
+                "job_description": "x" * 60,
+            },
+            headers=auth_headers(user),
+        )
+        assert second.status_code == 202
+
+        third_document = _make_document(db_session, application)
+        third = client.post(
+            RESUME_ANALYSES_URL,
+            json={"document_id": str(third_document.id)},
+            headers=auth_headers(user),
+        )
+        assert third.status_code == 429
