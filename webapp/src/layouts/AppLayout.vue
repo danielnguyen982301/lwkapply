@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { name: 'contacts', label: 'Contacts', to: '/contacts' },
   { name: 'documents', label: 'Documents', to: '/documents' },
   { name: 'analytics', label: 'Analytics', to: '/analytics' },
+  { name: 'ai-tools', label: 'AI Tools', to: '/resume-analyses' },
 ]
 
 async function handleLogout() {
