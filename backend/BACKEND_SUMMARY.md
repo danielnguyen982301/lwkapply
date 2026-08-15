@@ -909,9 +909,15 @@ per-request-dispatched task, including eventually testing
 
 CI runs automatically on push/PR to `main` (see `.github/workflows/backend-ci.yml`):
 lint (`ruff check`), format check (`ruff format --check`), and tests
-with coverage — the `test` job now runs a `postgres:16-alpine` service
-container, since `pytest` includes both schema unit tests and the
-`GET /contacts` integration test.
+with coverage — the `test` job runs both a `postgres:16-alpine` and a
+`redis:7-alpine` service container, since `pytest` includes real-Postgres
+integration tests (starting with `GET /contacts`) and, as of the AI
+rate-limiting work, real-Redis tests too (`test_rate_limit.py`,
+`TestAiRateLimiting` in `test_ai_endpoints.py` — see "Rate limiting"
+above for why those use real Redis instead of a mock). `REDIS_URL` is
+set explicitly in the job's `env:` to match, alongside
+`TEST_DATABASE_URL`, even though it happens to equal the config
+default — same explicit-in-CI convention as the Postgres var.
 
 To catch the same issues locally _before_ pushing:
 
