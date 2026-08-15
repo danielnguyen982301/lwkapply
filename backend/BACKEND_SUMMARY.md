@@ -794,6 +794,60 @@ Two worth knowing before touching `app/tasks/ai.py` or `app/api/v1/endpoints/ai.
   through would have been a real (if rare) runtime `TypeError`, not just
   a type-checker complaint.
 
+### Rate limiting — free tier only, shared budget
+
+`POST /ai/resume-analyses` and `POST /ai/ats-scores` share one daily
+budget per user (`AI_FREE_TIER_DAILY_LIMIT`, default 10), enforced by
+`app/services/rate_limit.py` — the first direct `redis` client usage in
+this codebase (Redis previously only served as Celery's broker/backend).
+Free-tier-only for now: `User.role` has no premium concept yet (see
+"Not part of this pass" below and the `ai-rate-limiting-tiered-by-premium`
+memory note) — every user gets the same limit today.
+
+- **Atomic fixed-window counter**: `INCR` a key
+  (`ai_rate_limit:{user_id}:{YYYY-MM-DD}`, UTC date) and compare against
+  the limit; `EXPIRE` it (~25h) the first time it's created so it
+  self-cleans. `INCR` is a single atomic Redis command, so no race
+  between concurrent requests. Accepted imperfection of a fixed window:
+  a burst up to ~2x the limit is possible right at UTC midnight — fine
+  for a cost-control guard, not a security-critical limiter.
+- **One shared counter, not one per endpoint** — both routes call
+  Gemini, so `ai_usage_key()` is keyed by user only, not user+endpoint.
+- **The check runs before any row is created for the request**, in
+  `_enforce_ai_rate_limit()` (`app/api/v1/endpoints/ai.py`) — called
+  right after all the existing validation (ownership, `file_type`,
+  resume-completed, job-description-source) and the resume-analyses
+  dedup-reuse check, but *before* `db.add()`/`.delay()`. This means: a
+  rejected request never leaves an orphaned `pending` row behind (it's
+  rejected before one is ever created), a request that fails validation
+  never consumes budget (never reaches the check), and the dedup-reuse
+  path (an existing in-flight `ResumeAnalysis` for the same document)
+  never consumes budget either (no new Gemini call is happening) — only
+  a request that actually results in a fresh `.delay()` dispatch counts.
+  This is a deliberate departure from the simpler "wrap `get_current_user`
+  in one more `Depends()`" pattern `require_admin` uses
+  (`app/api/deps.py`) — that pattern is easier to read but would charge
+  quota for requests that error out before ever touching Gemini.
+- **`429 Too Many Requests`** (new status code for this codebase — every
+  other `ai.py` rejection is 503/404/422/409) with a `Retry-After`
+  header set from the Redis key's remaining TTL.
+- **Extension point for a future premium tier**: `check_and_increment()`
+  takes a plain `limit: int` — it has no concept of "free" or "premium".
+  The *only* place that resolves "what's this user's limit" is
+  `_enforce_ai_rate_limit()`'s one call to
+  `settings.AI_FREE_TIER_DAILY_LIMIT`; a premium tier would only need to
+  change that one line to branch on `current_user.role` (or a future
+  plan field), not the rate-limit service itself.
+- **Testing**: uses the real Redis instance already running in
+  `docker-compose.yml` (`tests/test_rate_limit.py`,
+  `TestAiRateLimiting` in `test_ai_endpoints.py`), not a mocking library
+  like `fakeredis` — same "use the real dependency you already
+  provision" philosophy as this suite's real-Postgres DB tests. Test
+  isolation falls out of `make_user()`'s fresh random UUID per test
+  (keys are namespaced by `user_id`), not an explicit rollback the way
+  Postgres SAVEPOINTs give the DB tests — Redis test keys genuinely
+  persist until their TTL expires, which is harmless at this volume.
+
 ### Testing: a new pattern for testing a per-request Celery task
 
 `test_ai_tasks.py` calls `parse_resume_task`/`score_ats_task` directly as
@@ -817,16 +871,12 @@ per-request-dispatched task, including eventually testing
 
 ### Not part of this pass
 
-- **Rate limiting / cost control** beyond a light dedup guard (reusing an
-  in-flight `ResumeAnalysis` for the same document instead of dispatching
-  a duplicate Gemini call): `AI_CONTEXT.md` lists rate limiting under
-  Security Requirements, but a real quota needs its own tracking (a
-  Redis counter or a table) — worth a fast follow, not bundled into this
-  already-multi-part pass. **Product decision (not yet scoped as work)**:
-  rate limits should be tiered by free/premium account, not a flat
-  per-user cap — see TODO.md's "AI Features" section for what that
-  actually requires before it can be built (a premium role + a payment/
-  upgrade flow, neither of which exist yet).
+- **Tiered (free/premium) rate limiting** — the flat free-tier limit
+  described above is implemented; a premium tier with a higher limit is
+  a deliberately deferred product decision, not yet scoped as
+  implementation work, since it needs a premium role and a payment/
+  upgrade flow that don't exist yet. See TODO.md's "AI Features" section
+  and the `ai-rate-limiting-tiered-by-premium` memory note.
 - Job Match, Cover Letter Generator, Interview Coach — the other three
   TODO.md "AI Features" items, all deferred until this pass's pattern
   (parse once, reuse everywhere) is proven.
