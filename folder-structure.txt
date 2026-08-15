@@ -356,6 +356,13 @@
     ├── src
     │   ├── App.vue
     │   ├── components
+    │   │   ├── ai
+    │   │   │   ├── AiToolsTabs.vue
+    │   │   │   ├── ApplicationPicker.vue
+    │   │   │   ├── AtsScoreDisplay.vue
+    │   │   │   ├── ParsedResumeDisplay.vue
+    │   │   │   ├── ResumeAnalysisModal.vue
+    │   │   │   └── ResumeDocumentPicker.vue
     │   │   ├── analytics
     │   │   │   ├── AnalyticsSection.vue
     │   │   │   └── StatCard.vue
@@ -378,6 +385,7 @@
     │   ├── lib
     │   │   ├── __tests__
     │   │   │   └── api.spec.ts
+    │   │   ├── ai-ui.ts
     │   │   ├── analytics-ui.ts
     │   │   ├── api.ts
     │   │   ├── application-ui.ts
@@ -393,17 +401,20 @@
     │   ├── stores
     │   │   ├── analytics.ts
     │   │   ├── applications.ts
+    │   │   ├── atsScores.ts
     │   │   ├── auth.ts
     │   │   ├── contactDirectory.ts
     │   │   ├── contacts.ts
     │   │   ├── documentDirectory.ts
     │   │   ├── documents.ts
     │   │   ├── interviewDirectory.ts
-    │   │   └── interviews.ts
+    │   │   ├── interviews.ts
+    │   │   └── resumeAnalyses.ts
     │   ├── style.css
     │   ├── test
     │   │   └── primevue.ts
     │   ├── types
+    │   │   ├── ai.ts
     │   │   ├── analytics.ts
     │   │   ├── application.ts
     │   │   ├── auth.ts
@@ -413,6 +424,9 @@
     │   ├── views
     │   │   ├── DashboardView.vue
     │   │   ├── NotFoundView.vue
+    │   │   ├── ai
+    │   │   │   ├── AtsScoresView.vue
+    │   │   │   └── ResumeAnalysesView.vue
     │   │   ├── analytics
     │   │   │   └── AnalyticsDashboardView.vue
     │   │   ├── applications
@@ -437,4 +451,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-120 directories, 318 files
+122 directories, 330 files
