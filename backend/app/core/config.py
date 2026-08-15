@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
     FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
 
+    # --- AI features (Resume Parser + ATS Score - see TODO.md "AI
+    # Features"). Empty by default, same "feature no-ops/fails clearly
+    # until configured" precedent as FIREBASE_SERVICE_ACCOUNT_* above -
+    # not a hard startup requirement. See app/services/ai/client.py.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
 
 @lru_cache
 def get_settings() -> Settings:
