@@ -101,7 +101,17 @@ class Settings(BaseSettings):
     # until configured" precedent as FIREBASE_SERVICE_ACCOUNT_* above -
     # not a hard startup requirement. See app/services/ai/client.py.
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    # "gemini-2.5-flash" (this setting's original default) started
+    # 404'ing in production with "no longer available to new users" -
+    # Gemini's models.list() API still listed it as available even after
+    # generateContent calls against it started failing, so don't trust
+    # that listing alone if this ever needs revisiting; confirm with a
+    # real generate_content call. "gemini-3.7-flash" (the newest non-
+    # preview/non-experimental flash-tier model at the time of that fix)
+    # then turned out to 503 ("high demand") noticeably more often than
+    # "gemini-3.6-flash" in practice - downgraded one point release for
+    # reliability, not because 3.7 was non-functional.
+    GEMINI_MODEL: str = "gemini-3.6-flash"
 
     # --- AI feature rate limiting (free tier only - see TODO.md "AI
     # Features"). Shared budget across resume-analyses and ats-scores
