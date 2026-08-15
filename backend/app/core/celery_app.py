@@ -19,7 +19,7 @@ celery_app = Celery(
     "lwkapply",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.reminders"],
+    include=["app.tasks.reminders", "app.tasks.ai"],
 )
 
 celery_app.conf.update(
