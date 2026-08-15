@@ -58,10 +58,35 @@
     re-resolve onto an `lxml` a local environment already has installed
     bare, so it's now its own explicit line in `requirements.txt` rather
     than relying on the transitive extra
-- Rate limiting for AI features is planned to be tiered by free/premium
-  account rather than a flat per-user cap — product decision, not yet
-  scoped as implementation work (needs a premium role and a payment/
-  upgrade flow first). See TODO.md's "AI Features" section.
+- **AI feature rate limiting, free tier** — a shared daily budget per
+  user (`AI_FREE_TIER_DAILY_LIMIT`, default 10) across
+  `POST /ai/resume-analyses` and `POST /ai/ats-scores`, since both draw
+  on the same Gemini cost. Full detail in BACKEND_SUMMARY.md's "Rate
+  limiting" section:
+  - **First direct `redis` client usage in this codebase**
+    (`app/services/rate_limit.py`) — Redis previously only served as
+    Celery's broker/backend. Atomic `INCR` + `EXPIRE` fixed-window
+    counter, keyed `ai_rate_limit:{user_id}:{date}` (UTC calendar day)
+  - **Only counts an actual new Gemini dispatch** — the check runs right
+    before a row is created for the request, after every existing
+    validation step and the resume-analyses dedup-reuse check, so a
+    request that fails validation or just reuses an in-flight analysis
+    never consumes budget, and a rejected request never leaves an
+    orphaned `pending` row behind
+  - **`429 Too Many Requests`** with a `Retry-After` header — a new
+    status code for this codebase (every other `ai.py` rejection is
+    503/404/422/409)
+  - **Free-tier-only, by design**: `User.role` has no premium concept
+    yet, so every user gets the same limit today; the counting logic
+    itself takes a plain `limit: int` with zero knowledge of tiers — one
+    call site (`app/api/v1/endpoints/ai.py`) is the single place a
+    future premium tier would plug in. Tiering itself (a premium role +
+    a payment/upgrade flow) is a deliberately deferred product decision,
+    not yet scoped as work — see TODO.md's "AI Features" section
+  - **Tests use the real Redis instance** already in
+    `docker-compose.yml`, not a mocking library — same philosophy as
+    this suite's real-Postgres DB tests; isolation comes from
+    `make_user()`'s fresh random UUID per test, not an explicit rollback
 
 ## v0.10.0
 
