@@ -298,11 +298,36 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ## AI Features
 
-- [ ] Resume parser
-- [ ] ATS score
-- [ ] Job match scoring
+- [x] Resume parser — backend only (`POST`/`GET /ai/resume-analyses`,
+      async via Celery, Google Gemini) — no web/mobile UI yet. See
+      `backend/BACKEND_SUMMARY.md`'s "AI features" section
+- [x] ATS score — backend only (`POST`/`GET /ai/ats-scores`), prefers the
+      linked application's `job_url` (server-side fetch, SSRF-guarded)
+      over asking the user to paste a job description, falling back to a
+      pasted `job_description` when the URL is blank or can't be scraped
+- [ ] Job match scoring — deferred until Resume Parser/ATS Score's
+      parse-once-reuse-everywhere pattern is validated
 - [ ] Cover letter generator
 - [ ] Interview coach
+- [x] AI feature rate limiting — free tier only (2026-08-15): a shared
+      daily budget (`AI_FREE_TIER_DAILY_LIMIT`, default 10) across
+      `POST /ai/resume-analyses` + `POST /ai/ats-scores`, backed by a
+      Redis atomic counter (`app/services/rate_limit.py`), applies to
+      every user today since no premium tier exists. Only counts an
+      actual new Gemini dispatch — not the dedup-reuse path, not a
+      request that fails validation first. See
+      `backend/BACKEND_SUMMARY.md`'s "Rate limiting" section
+  - [ ] Tiering by account (free vs. premium) — the limit value itself
+        is still flat for every user; only the extension *point* exists
+        (one call site in `app/api/v1/endpoints/ai.py` that would branch
+        on `current_user.role`). Needs, in order:
+    - [ ] A premium/subscription role — `app/models/user.py`'s `UserRole`
+          enum only has `USER`/`ADMIN` today; `AI_CONTEXT.md`'s RBAC
+          section already documents "Premium User" as a planned role,
+          but it isn't implemented in code yet
+    - [ ] A payment/account-upgrade flow (none exists yet)
+    - [ ] Wiring the premium limit into that one call site once the
+          above two exist to key off of
 
 ---
 

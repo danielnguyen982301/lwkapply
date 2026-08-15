@@ -23,6 +23,9 @@ __pycache__
 # secrets
 secrets
 
+# test
+.coverage
+
 # Misc
 *.tsbuildinfo
 .DS_Store

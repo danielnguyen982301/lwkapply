@@ -1,6 +1,94 @@
 # Changelog
 
-## v0.10.0 (in progress)
+## v0.11.0 (in progress)
+
+### Added
+
+- **AI Features (Phase 7): Resume Parser + ATS Score, backend only** —
+  the first two of TODO.md's five planned AI features, and this
+  codebase's first outbound LLM-provider integration (Google Gemini, via
+  `google-genai`). Full detail in BACKEND_SUMMARY.md's "AI features"
+  section; summary here:
+  - **Two new top-level, user-owned resources** — `ResumeAnalysis`
+    (`POST`/`GET /ai/resume-analyses`) and `AtsScore`
+    (`POST`/`GET /ai/ats-scores`) — deliberately not nested under
+    `/applications/{id}/` like Interview/Contact/Document, so ownership
+    is a direct `user_id` FK rather than a join chain
+  - **Async by design**: the first *per-request-dispatched* Celery tasks
+    in this codebase (`send_due_reminders` is beat-scheduled, not
+    request-triggered) — `POST` returns `202` with a `pending` row,
+    `GET .../{id}` for polling
+  - **Resume Parser**: extracts structured data (contact info, skills,
+    work experience, education) from an uploaded resume `Document` via
+    Gemini's structured-output mode. PDF and DOCX only this pass —
+    legacy `.doc` is a documented gap, not silently broken
+  - **ATS Score**: prefers the linked application's `job_url` over
+    asking the user to paste anything — fetches and extracts the job
+    posting server-side (`trafilatura`), SSRF-guarded (scheme allowlist,
+    public-IP-only resolution re-checked on every redirect hop, size/time
+    caps — see docs/SECURITY.md). Falls back to (and an explicit paste
+    always wins over) a pasted `job_description` when the URL is blank
+    or can't be scraped, which is common for JS-heavy/bot-blocking job
+    boards, not a rare edge case
+  - **Gemini structured-output gotcha**: the API rejects a
+    `response_schema` with default field values, so every field on the
+    four Gemini-facing schemas is `Field(...)` (required, nullable type
+    instead of an omittable one) — see
+    `googleapis/python-genai#699` and BACKEND_SUMMARY.md
+  - **`google-genai` pinned to `2.8.0`, not latest** — `>=2.9.0` requires
+    `pydantic>=2.12.5`, which would force bumping this app's core
+    `pydantic==2.9.2` pin app-wide; `2.8.0` is the newest release still
+    compatible. `httpx` bumped `0.27.2` → `0.28.1` for `google-genai`'s
+    own requirement (confirmed safe — no affected call sites)
+  - **New test pattern**: `test_ai_tasks.py` is the first test coverage
+    for a Celery task that opens its own `SessionLocal()` — solved via
+    SQLAlchemy 2.0's `join_transaction_mode="create_savepoint"` on a
+    second session bound to the test's own connection
+  - **New dev dependency `celery-types`** (PEP 561 stubs, dev-only) —
+    Celery ships no `py.typed` marker, so Pyright/Pylance inferred a bare
+    `FunctionType` for `@celery_app.task(...)`-decorated functions,
+    reporting `.delay()` as an unknown attribute at both call sites in
+    `ai.py`'s endpoints. Also added two explicit `None` guards in
+    `app/tasks/ai.py` (`Session.get()` returns `Optional[T]`) and one in
+    `app/services/ai/client.py` (Gemini's own stubs type `response.text`
+    as `str | None`) — see BACKEND_SUMMARY.md's "Type-checker gotchas"
+  - **`lxml_html_clean` pinned directly** — `trafilatura` → `justext`
+    imports `lxml.html.clean`, which lxml split into a separate package;
+    `justext`'s `lxml[html_clean]` extras marker doesn't reliably
+    re-resolve onto an `lxml` a local environment already has installed
+    bare, so it's now its own explicit line in `requirements.txt` rather
+    than relying on the transitive extra
+- **AI feature rate limiting, free tier** — a shared daily budget per
+  user (`AI_FREE_TIER_DAILY_LIMIT`, default 10) across
+  `POST /ai/resume-analyses` and `POST /ai/ats-scores`, since both draw
+  on the same Gemini cost. Full detail in BACKEND_SUMMARY.md's "Rate
+  limiting" section:
+  - **First direct `redis` client usage in this codebase**
+    (`app/services/rate_limit.py`) — Redis previously only served as
+    Celery's broker/backend. Atomic `INCR` + `EXPIRE` fixed-window
+    counter, keyed `ai_rate_limit:{user_id}:{date}` (UTC calendar day)
+  - **Only counts an actual new Gemini dispatch** — the check runs right
+    before a row is created for the request, after every existing
+    validation step and the resume-analyses dedup-reuse check, so a
+    request that fails validation or just reuses an in-flight analysis
+    never consumes budget, and a rejected request never leaves an
+    orphaned `pending` row behind
+  - **`429 Too Many Requests`** with a `Retry-After` header — a new
+    status code for this codebase (every other `ai.py` rejection is
+    503/404/422/409)
+  - **Free-tier-only, by design**: `User.role` has no premium concept
+    yet, so every user gets the same limit today; the counting logic
+    itself takes a plain `limit: int` with zero knowledge of tiers — one
+    call site (`app/api/v1/endpoints/ai.py`) is the single place a
+    future premium tier would plug in. Tiering itself (a premium role +
+    a payment/upgrade flow) is a deliberately deferred product decision,
+    not yet scoped as work — see TODO.md's "AI Features" section
+  - **Tests use the real Redis instance** already in
+    `docker-compose.yml`, not a mocking library — same philosophy as
+    this suite's real-Postgres DB tests; isolation comes from
+    `make_user()`'s fresh random UUID per test, not an explicit rollback
+
+## v0.10.0
 
 ### Added
 
@@ -1035,8 +1123,10 @@ salary_max` check previously only existed on `ApplicationCreate`, so a
   new code has tests yet
 - The webapp's home page (`/`, `DashboardView.vue`) is still an empty
   placeholder — see WEBAPP_SUMMARY.md's "Known gap"
-- Celery tasks (resume parsing, AI processing) — email sending is now
-  live (interview reminders, v0.9.0); the rest remain unwritten
+- Celery tasks: email (interview reminders, v0.9.0) and resume
+  parsing/ATS scoring (v0.10.0, this release) are now live; Job Match,
+  Cover Letter Generator, and Interview Coach's AI processing tasks
+  remain unwritten
 - RBAC beyond a `role` column
 - Test coverage for the reminder system (backend and mobile) — see
   TODO.md's Testing section

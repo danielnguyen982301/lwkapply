@@ -59,8 +59,36 @@ The application uses PostgreSQL as the primary relational database.
 - email
 - linkedin_url
 
+### resume_analyses (AI features — backend/BACKEND_SUMMARY.md)
+
+- id (UUID)
+- user_id — direct FK, not nested under an application (see backend summary)
+- document_id
+- status (pending/processing/completed/failed)
+- raw_text
+- parsed_data (JSONB)
+- error_message
+
+### ats_scores (AI features — backend/BACKEND_SUMMARY.md)
+
+- id (UUID)
+- user_id — direct FK, same reasoning as resume_analyses
+- resume_analysis_id
+- application_id (nullable — source of `job_url` when `job_description` isn't pasted)
+- job_description
+- job_description_source (pasted/url)
+- status (pending/processing/completed/failed)
+- score
+- feedback (JSONB)
+- error_message
+
 ## Relationships
 
 User -> Applications -> Interviews
 User -> Applications -> Documents
 Application -> Contacts
+User -> ResumeAnalyses (direct — not nested under Application)
+User -> AtsScores (direct — not nested under Application)
+ResumeAnalysis -> Document
+AtsScore -> ResumeAnalysis
+AtsScore -> Application (optional)

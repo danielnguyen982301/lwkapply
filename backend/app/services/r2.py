@@ -148,6 +148,22 @@ def delete_document(object_key: str) -> None:
         logger.exception("Failed to delete R2 object key=%s (orphaned)", object_key)
 
 
+def download_document(object_key: str) -> bytes:
+    """Fetches an object's raw bytes for server-side processing (Resume
+    Parser - app/tasks/ai.py). Everything else in this module only ever
+    hands the client a presigned URL; this is the first caller that needs
+    the actual file content in-process."""
+    try:
+        response = _r2_client().get_object(Bucket=settings.R2_BUCKET, Key=object_key)
+        return response["Body"].read()
+    except (BotoCoreError, ClientError):
+        logger.exception("R2 download failed for key=%s", object_key)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve document. Please try again.",
+        )
+
+
 def generate_download_url(object_key: str) -> str:
     try:
         return _r2_client().generate_presigned_url(
