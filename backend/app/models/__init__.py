@@ -11,3 +11,5 @@ from app.models.contact import Contact  # noqa: F401
 from app.models.interview_reminder import InterviewReminder  # noqa: F401
 from app.models.device_token import DeviceToken  # noqa: F401
 from app.models.application_status_history import ApplicationStatusHistory  # noqa: F401
+from app.models.resume_analysis import ResumeAnalysis  # noqa: F401
+from app.models.ats_score import AtsScore  # noqa: F401
