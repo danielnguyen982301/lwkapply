@@ -33,7 +33,6 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 import app.tasks.ai as ai_tasks_module
-from app.models.application import Application, ApplicationStatus
 from app.models.ats_score import AtsScore
 from app.models.document import Document, DocumentType
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
@@ -68,26 +67,11 @@ def _make_user(db_session):
     return user
 
 
-def _make_application(db_session, user, **overrides):
+def _make_document(db_session, user, **overrides):
     defaults = {
         "user_id": user.id,
-        "company": "Acme",
-        "position": "Backend Engineer",
-        "status": ApplicationStatus.SAVED,
-    }
-    defaults.update(overrides)
-    application = Application(**defaults)
-    db_session.add(application)
-    db_session.commit()
-    db_session.refresh(application)
-    return application
-
-
-def _make_document(db_session, application, **overrides):
-    defaults = {
-        "application_id": application.id,
         "file_name": "resume.pdf",
-        "file_url": f"users/fake/applications/fake/{uuid.uuid4().hex[:12]}-resume.pdf",
+        "file_url": f"users/{user.id}/documents/{uuid.uuid4().hex[:12]}-resume.pdf",
         "file_type": DocumentType.RESUME,
     }
     defaults.update(overrides)
@@ -123,8 +107,7 @@ class TestParseResumeTask:
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(db_session, user, document)
 
         parsed = ParsedResume(
@@ -153,13 +136,13 @@ class TestParseResumeTask:
         assert analysis.parsed_data is not None
         assert analysis.parsed_data["full_name"] == "Jane Doe"
         assert analysis.error_message is None
+        assert analysis.completed_at is not None
 
     def test_unsupported_format_marks_failed_with_clear_message(
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application, file_name="resume.doc")
+        document = _make_document(db_session, user, file_name="resume.doc")
         analysis = _make_resume_analysis(db_session, user, document)
 
         monkeypatch.setattr(
@@ -177,13 +160,13 @@ class TestParseResumeTask:
         assert analysis.status == AIJobStatus.FAILED
         assert analysis.error_message is not None
         assert "PDF or DOCX" in analysis.error_message
+        assert analysis.completed_at is None
 
     def test_unexpected_error_marks_failed_generically(
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(db_session, user, document)
 
         def _raise(key):
@@ -203,8 +186,7 @@ class TestScoreAtsTask:
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session,
             user,
@@ -252,10 +234,7 @@ class TestScoreAtsTask:
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(
-            db_session, user, job_url="https://jobs.example.com/posting/123"
-        )
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session,
             user,
@@ -264,7 +243,11 @@ class TestScoreAtsTask:
             raw_text="resume text",
         )
         ats_score = _make_ats_score(
-            db_session, user, analysis, application_id=application.id
+            db_session,
+            user,
+            analysis,
+            job_description_source="url",
+            job_url="https://jobs.example.com/posting/123",
         )
 
         result = AtsScoreResult(
@@ -295,10 +278,7 @@ class TestScoreAtsTask:
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(
-            db_session, user, job_url="https://jobs.example.com/blocked"
-        )
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session,
             user,
@@ -307,7 +287,11 @@ class TestScoreAtsTask:
             raw_text="resume text",
         )
         ats_score = _make_ats_score(
-            db_session, user, analysis, application_id=application.id
+            db_session,
+            user,
+            analysis,
+            job_description_source="url",
+            job_url="https://jobs.example.com/blocked",
         )
 
         monkeypatch.setattr(ai_tasks_module, "fetch_job_description", lambda url: None)
@@ -324,8 +308,7 @@ class TestScoreAtsTask:
         self, db_session, patch_ai_tasks_session, monkeypatch
     ):
         user = _make_user(db_session)
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session,
             user,
