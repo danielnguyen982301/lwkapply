@@ -10,6 +10,7 @@ import { useApplicationDocumentsStore } from '@/stores/applicationDocuments'
 import { useDocumentsStore } from '@/stores/documents'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { DOCUMENT_TYPE_LABELS, documentTypeSeverity } from '@/lib/document-ui'
+import { formatDateTime } from '@/lib/date-utils'
 import type { Document } from '@/types/document'
 
 // Attaches an existing document from the user's library to one
@@ -74,14 +75,7 @@ function closeDialog() {
 // Date + time, not just date - two documents can share a file_name (e.g.
 // "resume.pdf" re-uploaded after edits), so the upload timestamp is what
 // actually tells them apart in the suggestion list.
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
-function formatUploadedAt(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+const formatUploadedAt = formatDateTime
 </script>
 
 <template>

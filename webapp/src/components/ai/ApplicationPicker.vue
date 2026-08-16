@@ -4,6 +4,7 @@ import AutoComplete from 'primevue/autocomplete'
 import Tag from 'primevue/tag'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useApplicationsStore } from '@/stores/applications'
+import { formatDate } from '@/lib/date-utils'
 import type { Application } from '@/types/application'
 
 // Plain v-model, same reasoning as ResumeDocumentPicker.vue.
@@ -31,12 +32,9 @@ function onComplete(event: { query: string }) {
   }, 300)
 }
 
-// Date only - applied_date is a backend `date`, not a `datetime`.
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
-
-function formatAppliedDate(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+// applied_date is a backend `date`, not a `datetime` - formatDate (not
+// formatDateTime) matches that.
+const formatAppliedDate = formatDate
 </script>
 
 <template>

@@ -20,6 +20,7 @@ import {
   interviewResultSeverity,
 } from '@/lib/interview-ui'
 import { useApplicationRowClick } from '@/lib/row-click'
+import { formatDateTime } from '@/lib/date-utils'
 import type { InterviewResult, InterviewWithApplication } from '@/types/interview'
 
 const store = useInterviewDirectoryStore()
@@ -47,17 +48,7 @@ async function onPageChange(event: { first: number; rows: number }) {
   await store.fetchInterviews({ page }).catch(() => {})
 }
 
-// Kept local rather than pulled from a shared date helper, since only
-// this view needs a "date + time" display for a directory row (the panel
-// version, InterviewsPanel.vue, formats via its own Dialog fields).
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
-function formatScheduledAt(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+const formatScheduledAt = formatDateTime
 
 const handleRowClick = useApplicationRowClick<InterviewWithApplication>(
   (interview) => interview.application.id,

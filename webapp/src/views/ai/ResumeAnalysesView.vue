@@ -17,6 +17,7 @@ import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { useDocumentsStore } from '@/stores/documents'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, isAiJobInFlight } from '@/lib/ai-ui'
+import { formatDate, formatDateTime } from '@/lib/date-utils'
 import type { ResumeAnalysis } from '@/types/ai'
 import type { Document } from '@/types/document'
 
@@ -38,23 +39,17 @@ async function loadDocumentLabels() {
   documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
 }
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
-// Date + time - completed_at is the one field that actually distinguishes
-// re-runs of the same resume, so a date-only label would collapse them.
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
 function labelFor(analysis: ResumeAnalysis): string {
   return (
     documentLabels.value[analysis.document_id] ??
-    `Resume analysis · ${dateFormatter.format(new Date(analysis.created_at))}`
+    `Resume analysis · ${formatDate(analysis.created_at)}`
   )
 }
 
+// Date + time - completed_at is the one field that actually distinguishes
+// re-runs of the same resume, so a date-only label would collapse them.
 function formatAnalyzedAt(value: string | null): string {
-  return value ? dateTimeFormatter.format(new Date(value)) : '—'
+  return value ? formatDateTime(value) : '—'
 }
 
 // --- list ----------------------------------------------------------------
@@ -199,7 +194,7 @@ onBeforeUnmount(() => {
         </Column>
         <Column header="Created">
           <template #body="{ data }: { data: ResumeAnalysis }">
-            {{ dateFormatter.format(new Date(data.created_at)) }}
+            {{ formatDate(data.created_at) }}
           </template>
         </Column>
         <Column header="Analyzed At">

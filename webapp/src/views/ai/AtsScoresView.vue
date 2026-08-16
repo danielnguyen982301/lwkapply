@@ -17,6 +17,7 @@ import { useAtsScoresStore } from '@/stores/atsScores'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { useDocumentsStore } from '@/stores/documents'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, atsScoreSeverity } from '@/lib/ai-ui'
+import { formatDate } from '@/lib/date-utils'
 import type { AtsScore, ResumeAnalysis } from '@/types/ai'
 import type { Document } from '@/types/document'
 
@@ -33,8 +34,6 @@ async function loadDocumentLabels() {
   const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
   documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
 }
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 
 // resume_analysis_id -> document_id, built once on mount from the same
 // fetch NewAtsScoreDialog's picker needs (see loadResumeAnalysisIndex()
@@ -223,7 +222,7 @@ onBeforeUnmount(() => {
         </Column>
         <Column header="Created">
           <template #body="{ data }: { data: AtsScore }">
-            {{ dateFormatter.format(new Date(data.created_at)) }}
+            {{ formatDate(data.created_at) }}
           </template>
         </Column>
       </DataTable>

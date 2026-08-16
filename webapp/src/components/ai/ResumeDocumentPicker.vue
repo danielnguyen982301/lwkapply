@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useDocumentsStore } from '@/stores/documents'
+import { formatDateTime } from '@/lib/date-utils'
 import type { Document } from '@/types/document'
 
 // v-model'd to the selected resume Document (or null). Plain v-model, not
@@ -38,14 +39,7 @@ function onComplete(event: { query: string }) {
 // Date + time, not just date - two resumes can share a file_name (e.g.
 // "resume.pdf" re-uploaded after edits), so the upload timestamp is what
 // actually tells them apart in the suggestion list.
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
-function formatUploadedAt(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+const formatUploadedAt = formatDateTime
 </script>
 
 <template>

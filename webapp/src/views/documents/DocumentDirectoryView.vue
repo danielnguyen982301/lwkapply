@@ -23,6 +23,7 @@ import {
   documentTypeSeverity,
 } from '@/lib/document-ui'
 import { tooltip } from '@/lib/tooltip'
+import { formatDateTime } from '@/lib/date-utils'
 import type { Document, DocumentType } from '@/types/document'
 
 // The user's whole document library - a document is a top-level, standalone
@@ -80,11 +81,11 @@ async function onPageChange(event: { first: number; rows: number }) {
   await store.fetchDocuments({ page: Math.floor(event.first / event.rows) + 1 }).catch(() => {})
 }
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
-
-function formatUploadedAt(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+// Date + time, not just date - two documents can share an upload date, and
+// the time is what actually tells them apart (matches the same "Uploaded"
+// timestamp shown in ResumeDocumentPicker.vue/DocumentAttachDialog.vue's
+// suggestion lists).
+const formatUploadedAt = formatDateTime
 
 // --- Upload / edit dialogs ---------------------------------------------
 // Both extracted into components/documents/ so DocumentsPanel.vue

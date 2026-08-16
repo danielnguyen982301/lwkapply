@@ -11,6 +11,7 @@ import Textarea from 'primevue/textarea'
 import ApplicationPicker from './ApplicationPicker.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useAtsScoresStore } from '@/stores/atsScores'
+import { formatDateTime } from '@/lib/date-utils'
 import type { AtsScore, ResumeAnalysis } from '@/types/ai'
 import type { Application } from '@/types/application'
 
@@ -46,19 +47,14 @@ const selectedApplication = ref<Application | null>(null)
 const pastedJobUrl = ref('')
 const pastedDescription = ref('')
 
-// Date + time, matching ResumeAnalysesView.vue's "Completed At" column -
-// this is the field that actually tells apart two runs of the same resume.
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
 function resumeLabelFor(analysis: ResumeAnalysis): string {
   return props.documentLabels[analysis.document_id] || 'Resume analysis'
 }
 
+// Matches ResumeAnalysesView.vue's "Completed At" column - this is the
+// field that actually tells apart two runs of the same resume.
 function analyzedAtFor(analysis: ResumeAnalysis): string {
-  return analysis.completed_at ? dateTimeFormatter.format(new Date(analysis.completed_at)) : '—'
+  return analysis.completed_at ? formatDateTime(analysis.completed_at) : '—'
 }
 
 function selectedAnalysis(id: string | null): ResumeAnalysis | undefined {
