@@ -120,6 +120,46 @@
     had no error display at all — a `503`/`429` was correctly caught by
     the store but produced zero user feedback. Fixed by rendering the
     store's `createError` in both states
+- **AI Tools mobile UI: Resume Parser + ATS Score** — backend and web UI
+  already existed; this is the mobile client for both. Full detail in
+  MOBILE_SUMMARY.md's "AI Tools feature" section; summary here:
+  - **One pushed screen with a `TabBar`, not two routes** —
+    `AiToolsScreen` (`/ai-tools`, reached from a new Home-tab card), since
+    mobile has no route-based tab-toggle precedent the way web's
+    Applications List/Board split gave it. `FloatingActionButton` swaps
+    between "New Analysis"/"New Score" based on the active tab
+  - **First `Timer.periodic` usage in `mobile/lib/`**: `data/polling_timer.dart`,
+    a plain (non-Riverpod) wrapper (3s interval, 40-attempt/~2min cap,
+    matching the web store's constants), owned by two new `.family`-scoped
+    detail controllers that are **fetch-and-poll only** — every create
+    action (both FABs, "Try again", "Score again"/paste-retry) calls the
+    API directly from the owning screen and navigates to a fresh detail
+    route, rather than one controller instance repointing at a different
+    id mid-flight. A deliberate narrowing from web's monolithic Pinia
+    stores, which also own `create()`
+  - **New remote-search pickers** (`resume_document_picker.dart`/
+    `application_picker.dart`): debounced `TextField`s calling
+    `DocumentDirectoryApi`/`ApplicationsApi` directly — needed **no new
+    isolated search method**, unlike web's stores, since these API
+    classes are already stateless and can't clobber the real list
+    screens' state
+  - **`ResumeAnalysisDetailScreen`'s existing-score lookup**: only wired
+    up when reached via `DocumentsPanel`'s "View Analysis" (which threads
+    its `applicationId` through as a query param) — calls
+    `AtsScoresApi.latestForApplication` and shows the existing score
+    instead of always offering a blank "Score against a job" button
+  - **Bug caught after this shipped, fixed same pass**:
+    `DocumentsPanel`'s "View Analysis" action originally called
+    `ResumeAnalysesApi.create()` automatically whenever no analysis
+    existed yet for a resume — silently spending one of the user's ten
+    daily free-tier calls on a single tap, with no confirmation. Fixed to
+    match web's `ResumeAnalysisModal.vue` contract: show a confirm dialog
+    ("No analysis yet — analyze now?") and only call `create()` if the
+    user agrees. A `pending`/`processing`/`failed` analysis is still
+    treated as existing (navigates straight through, no new call), since
+    only the true no-row-at-all case needed the guard
+  - **No new tests**, matching web's/every other mobile feature's
+    existing precedent
 
 ## v0.10.0
 
