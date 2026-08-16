@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# (registers every model before any mapper configures - see app/core/celery_app.py's identical import for
+# why this can't be left to endpoint modules importing models
+# incidentally; today's router.py import chain happens to touch every
+# model, but that's fragile, not a guarantee)
+from app import models  # noqa: F401
+
 from app.api.v1.router import api_router
 from app.core.config import settings
 

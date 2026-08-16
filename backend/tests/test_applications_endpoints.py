@@ -74,7 +74,23 @@ class TestCreateApplication:
         assert body["position"] == "Backend Engineer"
         assert body["status"] == "saved"
         assert body["user_id"] == str(user.id)
+        assert body["application_name"] is None
         assert "id" in body
+
+    def test_application_name_round_trips(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "application_name": "Referral via Jane",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["application_name"] == "Referral via Jane"
 
     def test_missing_company_is_rejected(self, client, make_user, auth_headers):
         user = make_user()
@@ -297,6 +313,21 @@ class TestUpdateApplication:
         assert body["status"] == "applied"
         assert body["company"] == "Initech"
         assert body["position"] == "Backend Engineer"
+
+    def test_updates_application_name(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"application_name": "Second attempt"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["application_name"] == "Second attempt"
 
     def test_invalid_status_is_rejected(
         self, client, db_session, make_user, auth_headers
@@ -544,6 +575,29 @@ class TestListApplicationsSearch:
         )
 
         assert response.json()["total"] == 0
+
+    def test_search_matches_application_name(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        _make_application(
+            db_session,
+            user,
+            company="Initech",
+            position="Backend Engineer",
+            application_name="Re-applied after rejection",
+        )
+        _make_application(db_session, user, company="Globex", position="Manager")
+
+        response = client.get(
+            APPLICATIONS_URL,
+            params={"search": "re-applied"},
+            headers=auth_headers(user),
+        )
+
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["company"] == "Initech"
 
 
 class TestListApplicationsPagination:

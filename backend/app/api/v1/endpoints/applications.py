@@ -51,7 +51,9 @@ def list_applications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     status_filter: ApplicationStatus | None = Query(default=None, alias="status"),
-    search: str | None = Query(default=None, description="Search company/position"),
+    search: str | None = Query(
+        default=None, description="Search company/position/application_name"
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
@@ -67,7 +69,11 @@ def list_applications(
     if search:
         pattern = f"%{search}%"
         stmt = stmt.where(
-            or_(Application.company.ilike(pattern), Application.position.ilike(pattern))
+            or_(
+                Application.company.ilike(pattern),
+                Application.position.ilike(pattern),
+                Application.application_name.ilike(pattern),
+            )
         )
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
