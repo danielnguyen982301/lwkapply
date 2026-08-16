@@ -49,6 +49,7 @@ export interface ContactApplicationSummary {
   id: string
   company: string
   position: string
+  application_name: string | null
   status: ApplicationStatus
 }
 
