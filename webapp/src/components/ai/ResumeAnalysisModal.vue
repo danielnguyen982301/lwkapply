@@ -15,10 +15,14 @@ import { isAiJobInFlight } from '@/lib/ai-ui'
 // Opened from components/applications/DocumentsPanel.vue, one row at a
 // time - see that file for why this exists (quick "view analysis" from
 // an application's Documents section, without switching to the AI Tools
-// tab and hunting for which resume/application this was). Shows only the
-// *latest* analysis/score for (documentId, applicationId), not full
-// history - that's the AI Tools tab's job.
-const props = defineProps<{ documentId: string; applicationId: string }>()
+// tab and hunting for which resume this was). Shows only the *latest*
+// analysis/score for documentId, not full history - that's the AI Tools
+// tab's job. `jobUrl` is the current application's job_url (looked up by
+// the caller, which already has the full Application on hand) - AtsScore
+// itself has no application link any more (see BACKEND_SUMMARY.md's "A
+// note on Document / ApplicationDocument"), so this modal has to be
+// handed the job_url explicitly rather than deriving it server-side.
+const props = defineProps<{ documentId: string; jobUrl: string | null }>()
 const visible = defineModel<boolean>('visible', { default: false })
 
 const resumeAnalyses = useResumeAnalysesStore()
@@ -26,6 +30,7 @@ const atsScores = useAtsScoresStore()
 const loading = ref(false)
 
 const pastedDescription = ref('')
+const hasJobUrl = computed(() => !!props.jobUrl)
 
 // Reuses `current`/polling on both stores directly, same as
 // ResumeAnalysesView.vue/AtsScoresView.vue's own detail dialogs - safe
@@ -40,7 +45,7 @@ async function loadRelatedScore() {
     return
   }
   atsScores.current = await atsScores
-    .fetchLatestForApplication(props.applicationId, resumeAnalyses.current.id)
+    .fetchLatestForResumeAnalysis(resumeAnalyses.current.id)
     .catch(() => null)
 }
 
@@ -94,47 +99,37 @@ async function analyzeNow() {
 }
 
 async function scoreNow() {
-  if (!resumeAnalyses.current) return
+  if (!resumeAnalyses.current || !props.jobUrl) return
   await atsScores
     .create({
       resume_analysis_id: resumeAnalyses.current.id,
-      application_id: props.applicationId,
+      job_url: props.jobUrl,
     })
     .catch(() => {})
 }
 
-// Fallback for when the automatic job_url path fails (most commonly: the
-// application has no job_url, or it couldn't be fetched - see backend/
-// app/tasks/ai.py's JobDescriptionUnavailableError, whose message
-// explicitly asks the caller to resubmit with job_description pasted).
-// Without this, that failure was a dead end - no picker/textarea existed
-// anywhere in this modal to act on that instruction. An explicit paste
-// always wins over job_url server-side, so application_id is still sent
-// for record-keeping even though job_description is what actually drives
-// this attempt.
 async function scoreNowWithPaste() {
   if (!resumeAnalyses.current) return
   await atsScores
     .create({
       resume_analysis_id: resumeAnalyses.current.id,
-      application_id: props.applicationId,
       job_description: pastedDescription.value,
     })
     .catch(() => {})
 }
 
-// Two distinct ways a scoreNow() attempt can fail, both needing the same
-// paste-and-retry recovery, but only one of them ever sets
-// atsScores.current: (1) the request is rejected synchronously - e.g. the
-// application has no job_url at all, so the backend 422s before any row
-// is ever created, and only atsScores.createError reflects it; (2) the
-// request succeeds (a pending row is created) but the async job_url
-// fetch fails later, reflected in atsScores.current.status/error_message
-// once polling resolves it. Gating the paste fallback on
-// `atsScores.current?.status === 'failed'` alone (as an earlier version
-// of this file did) made it unreachable for case (1) - arguably the more
-// common one, since "no job_url set at all" fails immediately, with no
-// fetch attempt needed to know it can't work.
+// Fallback for when the automatic job_url path fails (the application's
+// job_url couldn't be fetched - see backend/app/tasks/ai.py's
+// JobDescriptionUnavailableError, whose message explicitly asks the
+// caller to resubmit with job_description pasted). Two distinct ways a
+// scoreNow() attempt can fail, both needing the same paste-and-retry
+// recovery, but only one of them ever sets atsScores.current: (1) the
+// request is rejected synchronously - the async job_url fetch fails
+// later, reflected in atsScores.current.status/error_message once
+// polling resolves it; (2) some other synchronous rejection, reflected
+// only in atsScores.createError. Also shown whenever there's no job_url
+// at all - the "Score now" round trip is skipped entirely in that case
+// (see hasJobUrl above), so paste is the only path forward from the start.
 const atsScoreErrorMessage = computed(() => {
   if (atsScores.current?.status === 'failed') {
     return atsScores.current.error_message ?? 'Scoring failed. Try again.'
@@ -147,6 +142,7 @@ const atsScoreErrorMessage = computed(() => {
 
 const showAtsPasteFallback = computed(
   () =>
+    !hasJobUrl.value ||
     atsScores.current?.status === 'failed' ||
     (!atsScores.current && atsScores.createStatus === 'error'),
 )
@@ -228,6 +224,7 @@ onBeforeUnmount(() => {
             :score="atsScores.current.feedback"
             :job-description="atsScores.current.job_description"
             :job-description-source="atsScores.current.job_description_source"
+            :job-url="atsScores.current.job_url"
           />
 
           <div v-else class="text-center">
@@ -245,6 +242,7 @@ onBeforeUnmount(() => {
             </Message>
 
             <Button
+              v-if="hasJobUrl"
               label="Score now"
               class="mt-3"
               :severity="showAtsPasteFallback ? 'secondary' : undefined"
@@ -254,8 +252,12 @@ onBeforeUnmount(() => {
             />
 
             <div v-if="showAtsPasteFallback" class="mt-4 space-y-2 text-left">
+              <p v-if="!hasJobUrl" class="text-sm text-slate">
+                This application has no job URL saved. Provide job URL to the application or paste
+                the job description to score against it.
+              </p>
               <label for="modal-ats-retry-description" class="text-sm font-medium text-ink">
-                Or paste the job description directly
+                {{ hasJobUrl ? 'Or paste the job description directly' : 'Job description' }}
               </label>
               <Textarea
                 id="modal-ats-retry-description"
