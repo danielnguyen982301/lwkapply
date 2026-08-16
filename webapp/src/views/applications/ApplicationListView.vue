@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
@@ -19,11 +19,11 @@ import ViewTabs from '@/components/applications/ViewTabs.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { applicationStatusFilterOptions } from '@/lib/application-ui'
 import { tooltip } from '@/lib/tooltip'
+import { useApplicationRowClick } from '@/lib/row-click'
 import type { Application, ApplicationStatus } from '@/types/application'
 
 const store = useApplicationsStore()
 const confirm = useConfirm()
-const router = useRouter()
 
 const statusFilterOptions = applicationStatusFilterOptions()
 
@@ -85,18 +85,7 @@ async function onPageChange(event: { first: number; rows: number }) {
   await store.fetchApplications({ page }).catch(() => {})
 }
 
-// Ignores clicks that originated on an interactive element already inside
-// the row (the Company link, the Edit link, the Delete button) - those
-// either already navigate themselves or need to open the delete confirm
-// dialog without also navigating out from under it. Anywhere else in the
-// row (Position, Location, Status, Salary, Applied, empty cell space)
-// falls through to the same application-detail route the Company link
-// and Edit button already go to.
-function handleRowClick(event: { originalEvent: Event; data: Application }) {
-  const target = event.originalEvent.target as HTMLElement
-  if (target.closest('a, button')) return
-  router.push({ name: 'application-detail', params: { id: event.data.id } })
-}
+const handleRowClick = useApplicationRowClick<Application>((app) => app.id)
 
 function confirmDelete(app: Application) {
   confirm.require({
