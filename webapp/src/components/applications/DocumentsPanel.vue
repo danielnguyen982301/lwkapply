@@ -11,6 +11,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
 
+import { tooltip } from '@/lib/tooltip'
 import { useDocumentsStore } from '@/stores/documents'
 import { DOCUMENT_TYPE_LABELS, documentTypeOptions, documentTypeSeverity } from '@/lib/document-ui'
 import ResumeAnalysisModal from '@/components/ai/ResumeAnalysisModal.vue'
@@ -216,6 +217,7 @@ onBeforeUnmount(() => {
             <div class="flex shrink-0 gap-1">
               <Button
                 v-if="doc.file_type === 'resume'"
+                v-tooltip.bottom="tooltip('View AI analysis')"
                 icon="pi pi-sparkles"
                 aria-label="View AI analysis"
                 link
@@ -223,6 +225,7 @@ onBeforeUnmount(() => {
                 @click="openAnalysisModal(doc)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Download document')"
                 icon="pi pi-download"
                 aria-label="Download document"
                 link
@@ -231,6 +234,7 @@ onBeforeUnmount(() => {
                 @click="handleDownload(doc)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Edit document type')"
                 icon="pi pi-pencil"
                 aria-label="Edit document type"
                 link
@@ -238,9 +242,10 @@ onBeforeUnmount(() => {
                 @click="openEditDialog(doc)"
               />
               <Button
-                icon="pi pi-trash"
-                aria-label="Delete document"
-                link
+                v-tooltip.bottom="tooltip('Remove from this application')"
+                icon="pi pi-times"
+                aria-label="Remove from this application"
+                text
                 severity="danger"
                 size="small"
                 @click="confirmDelete(doc)"

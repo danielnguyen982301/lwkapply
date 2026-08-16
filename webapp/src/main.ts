@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
+import Tooltip from 'primevue/tooltip'
 import Aura from '@primevue/themes/aura'
 import { createPinia } from 'pinia'
 
@@ -21,5 +22,10 @@ app.use(PrimeVue, {
   },
 })
 app.use(ConfirmationService)
+// Registered globally so any `v-tooltip` usage works without a per-file
+// import - used instead of the native `title` attribute anywhere a fast,
+// consistent show delay matters (native title's ~1s OS-level delay isn't
+// controllable). See lib/tooltip.ts for the shared fast-show-delay preset.
+app.directive('tooltip', Tooltip)
 
 app.mount('#app')

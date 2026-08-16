@@ -10,6 +10,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
 import { useForm } from 'vee-validate'
 
+import { tooltip } from '@/lib/tooltip'
 import { useContactsStore } from '@/stores/contacts'
 import type { Contact, ContactCreatePayload } from '@/types/contact'
 import CustomInputText from '../custom_form_fields/CustomInputText.vue'
@@ -201,6 +202,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex shrink-0 gap-1">
               <Button
+                v-tooltip.bottom="tooltip('Edit contact')"
                 icon="pi pi-pencil"
                 aria-label="Edit contact"
                 link
@@ -208,9 +210,10 @@ onBeforeUnmount(() => {
                 @click="openEditDialog(contact)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Remove contact')"
                 icon="pi pi-trash"
                 aria-label="Remove contact"
-                link
+                text
                 severity="danger"
                 size="small"
                 @click="confirmDelete(contact)"

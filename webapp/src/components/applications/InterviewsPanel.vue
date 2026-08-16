@@ -12,6 +12,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
 import { useForm } from 'vee-validate'
 import { DateTime } from 'luxon'
+import { tooltip } from '@/lib/tooltip'
 
 import { useInterviewsStore } from '@/stores/interviews'
 import {
@@ -252,6 +253,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex shrink-0 gap-1">
               <Button
+                v-tooltip.bottom="tooltip('Edit interview')"
                 icon="pi pi-pencil"
                 aria-label="Edit interview"
                 link
@@ -259,9 +261,10 @@ onBeforeUnmount(() => {
                 @click="openEditDialog(interview)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Delete interview')"
                 icon="pi pi-trash"
                 aria-label="Delete interview"
-                link
+                text
                 severity="danger"
                 size="small"
                 @click="confirmDelete(interview)"
