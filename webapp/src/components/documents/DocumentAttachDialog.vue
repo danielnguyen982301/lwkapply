@@ -83,6 +83,7 @@ const formatUploadedAt = formatDateTime
     v-model:visible="visible"
     header="Attach an existing document"
     modal
+    dismissable-mask
     class="w-full max-w-md"
     @hide="closeDialog"
   >

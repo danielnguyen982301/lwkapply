@@ -229,6 +229,7 @@ onBeforeUnmount(() => {
     v-model:visible="dialogVisible"
     :header="dialogTitle"
     modal
+    dismissable-mask
     class="w-full max-w-md"
     @hide="closeDialog"
   >

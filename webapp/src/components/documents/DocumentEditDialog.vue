@@ -56,6 +56,7 @@ function closeDialog() {
     v-model:visible="visible"
     header="Edit document type"
     modal
+    dismissable-mask
     class="w-full max-w-sm"
     @hide="closeDialog"
   >

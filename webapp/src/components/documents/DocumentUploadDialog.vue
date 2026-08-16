@@ -74,6 +74,7 @@ function closeDialog() {
     v-model:visible="visible"
     header="Upload document"
     modal
+    dismissable-mask
     class="w-full max-w-md"
     @hide="closeDialog"
   >

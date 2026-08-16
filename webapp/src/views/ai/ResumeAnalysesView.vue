@@ -220,6 +220,7 @@ onBeforeUnmount(() => {
     v-model:visible="createDialogVisible"
     header="New resume analysis"
     modal
+    dismissable-mask
     class="w-full max-w-lg"
     @hide="closeCreateDialog"
   >
@@ -255,6 +256,7 @@ onBeforeUnmount(() => {
     v-model:visible="detailDialogVisible"
     header="Resume analysis"
     modal
+    dismissable-mask
     class="w-full max-w-2xl"
     @hide="closeDetailDialog"
   >

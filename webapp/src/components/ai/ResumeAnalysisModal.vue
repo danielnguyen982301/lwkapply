@@ -194,7 +194,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" header="Resume analysis" modal class="w-full max-w-2xl">
+  <Dialog
+    v-model:visible="visible"
+    header="Resume analysis"
+    modal
+    dismissable-mask
+    class="w-full max-w-2xl"
+  >
     <div v-if="loading" class="flex justify-center py-10" aria-live="polite">
       <ProgressSpinner aria-label="Loading" style="width: 2rem; height: 2rem" />
     </div>

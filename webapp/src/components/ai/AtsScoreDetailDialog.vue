@@ -72,6 +72,7 @@ function closeDialog() {
     v-model:visible="visible"
     header="ATS score"
     modal
+    dismissable-mask
     class="w-full max-w-2xl"
     @hide="closeDialog"
   >
