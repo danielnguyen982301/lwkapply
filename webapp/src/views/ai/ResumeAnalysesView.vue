@@ -13,15 +13,16 @@ import Tag from 'primevue/tag'
 import AiToolsTabs from '@/components/ai/AiToolsTabs.vue'
 import ResumeDocumentPicker from '@/components/ai/ResumeDocumentPicker.vue'
 import ParsedResumeDisplay from '@/components/ai/ParsedResumeDisplay.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
-import { useDocumentDirectoryStore } from '@/stores/documentDirectory'
+import { useDocumentsStore } from '@/stores/documents'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, isAiJobInFlight } from '@/lib/ai-ui'
 import type { ResumeAnalysis } from '@/types/ai'
-import type { DocumentWithApplication } from '@/types/document'
+import type { Document } from '@/types/document'
 
 const router = useRouter()
 const store = useResumeAnalysesStore()
-const documentDirectory = useDocumentDirectoryStore()
+const documents = useDocumentsStore()
 
 // --- friendly row labels (document_id -> file_name) ---------------------
 // ResumeAnalysisRead has no file_name, only document_id - see BACKEND_SUMMARY.md/
@@ -33,19 +34,27 @@ const documentDirectory = useDocumentDirectoryStore()
 const documentLabels = ref<Record<string, string>>({})
 
 async function loadDocumentLabels() {
-  const docs = await documentDirectory
-    .searchResumeDocuments('', 100)
-    .catch(() => [] as DocumentWithApplication[])
+  const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
   documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+// Date + time - completed_at is the one field that actually distinguishes
+// re-runs of the same resume, so a date-only label would collapse them.
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
 
 function labelFor(analysis: ResumeAnalysis): string {
   return (
     documentLabels.value[analysis.document_id] ??
     `Resume analysis · ${dateFormatter.format(new Date(analysis.created_at))}`
   )
+}
+
+function formatAnalyzedAt(value: string | null): string {
+  return value ? dateTimeFormatter.format(new Date(value)) : '—'
 }
 
 // --- list ----------------------------------------------------------------
@@ -63,7 +72,7 @@ async function onPageChange(event: { first: number; rows: number }) {
 
 // --- create dialog ---------------------------------------------------
 const createDialogVisible = ref(false)
-const selectedDocument = ref<DocumentWithApplication | null>(null)
+const selectedDocument = ref<Document | null>(null)
 
 function openCreateDialog() {
   selectedDocument.value = null
@@ -173,9 +182,11 @@ onBeforeUnmount(() => {
       >
         <Column header="Resume">
           <template #body="{ data }: { data: ResumeAnalysis }">
-            <span class="cursor-pointer font-medium text-ink hover:underline">{{
-              labelFor(data)
-            }}</span>
+            <TruncatedText
+              :text="labelFor(data)"
+              max-width="16rem"
+              class="cursor-pointer font-medium text-ink hover:underline"
+            />
           </template>
         </Column>
         <Column header="Status">
@@ -189,6 +200,11 @@ onBeforeUnmount(() => {
         <Column header="Created">
           <template #body="{ data }: { data: ResumeAnalysis }">
             {{ dateFormatter.format(new Date(data.created_at)) }}
+          </template>
+        </Column>
+        <Column header="Analyzed At">
+          <template #body="{ data }: { data: ResumeAnalysis }">
+            {{ formatAnalyzedAt(data.completed_at) }}
           </template>
         </Column>
       </DataTable>
