@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     ai,
     analytics,
+    application_documents,
     applications,
     auth,
     contacts,
@@ -25,10 +26,10 @@ api_router.include_router(
 # user's own applications/interviews (see analytics.py's own docstring).
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
-# Interviews/Documents/Contacts are nested under a specific application -
-# they never exist independently of one, so their CRUD routes and ownership
-# checks are scoped through applications/{application_id}/... rather than
-# living at the top level. See docstrings in each endpoint module.
+# Interviews/Contacts are nested under a specific application - they never
+# exist independently of one, so their CRUD routes and ownership checks are
+# scoped through applications/{application_id}/... rather than living at
+# the top level. See docstrings in each endpoint module.
 api_router.include_router(
     interviews.router,
     prefix="/applications/{application_id}/interviews",
@@ -42,19 +43,18 @@ api_router.include_router(
 api_router.include_router(
     interviews.directory_router, prefix="/interviews", tags=["interviews"]
 )
+
+# Documents are the opposite of Interviews/Contacts: a top-level,
+# user-owned resource in their own right (upload/read/update/delete all
+# live here, unscoped by any application), reusable across zero or more
+# applications - see app/models/document.py. application_documents below
+# only handles attaching/detaching an existing document to/from a
+# specific application.
+api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(
-    documents.router,
+    application_documents.router,
     prefix="/applications/{application_id}/documents",
     tags=["documents"],
-)
-
-# Documents additionally has one flat, top-level, read-only route: a
-# cross-application directory of every document the user owns (mirrors
-# the Interviews/Contacts directory routes above). Upload/update/delete
-# stay nested above - this is just a different read path over the same
-# rows.
-api_router.include_router(
-    documents.directory_router, prefix="/documents", tags=["documents"]
 )
 api_router.include_router(
     contacts.router,
