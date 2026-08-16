@@ -13,9 +13,14 @@ import ProgressSpinner from 'primevue/progressspinner'
 
 import { useContactDirectoryStore } from '@/stores/contactDirectory'
 import ApplicationStatusTag from '@/components/applications/ApplicationStatusTag.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
+import { useApplicationRowClick } from '@/lib/row-click'
 import type { ContactWithApplication } from '@/types/contact'
 
 const store = useContactDirectoryStore()
+const handleRowClick = useApplicationRowClick<ContactWithApplication>(
+  (contact) => contact.application.id,
+)
 
 // Seeded from the store so returning to this view keeps whatever search
 // was active, same convention as ApplicationListView.vue.
@@ -121,18 +126,21 @@ async function onPageChange(event: { first: number; rows: number }) {
         :loading="store.listStatus === 'loading'"
         size="small"
         striped-rows
+        selection-mode="single"
         aria-label="All your contacts"
+        @row-click="handleRowClick"
       >
         <Column field="name" header="Name">
           <template #body="{ data }: { data: ContactWithApplication }">
-            <span class="font-medium text-ink">{{ data.name }}</span>
+            <TruncatedText :text="data.name" max-width="10rem" class="font-medium text-ink" />
           </template>
         </Column>
         <Column header="Company">
           <template #body="{ data }: { data: ContactWithApplication }">
             <RouterLink
               :to="{ name: 'application-detail', params: { id: data.application.id } }"
-              class="text-ink hover:underline"
+              class="block max-w-[10rem] truncate text-ink hover:underline"
+              :title="data.application.company"
             >
               {{ data.application.company }}
             </RouterLink>
@@ -140,7 +148,7 @@ async function onPageChange(event: { first: number; rows: number }) {
         </Column>
         <Column header="Position">
           <template #body="{ data }: { data: ContactWithApplication }">
-            {{ data.application.position }}
+            <TruncatedText :text="data.application.position" max-width="10rem" />
           </template>
         </Column>
         <Column header="Status">
@@ -150,7 +158,7 @@ async function onPageChange(event: { first: number; rows: number }) {
         </Column>
         <Column field="title" header="Title">
           <template #body="{ data }: { data: ContactWithApplication }">
-            {{ data.title ?? '—' }}
+            <TruncatedText :text="data.title" max-width="10rem" />
           </template>
         </Column>
         <Column header="Email">
@@ -158,7 +166,8 @@ async function onPageChange(event: { first: number; rows: number }) {
             <a
               v-if="data.email"
               :href="`mailto:${data.email}`"
-              class="text-slate hover:text-ink hover:underline"
+              class="block max-w-[12rem] truncate text-slate hover:text-ink hover:underline"
+              :title="data.email"
             >
               {{ data.email }}
             </a>
@@ -177,6 +186,11 @@ async function onPageChange(event: { first: number; rows: number }) {
               View profile
             </a>
             <span v-else>—</span>
+          </template>
+        </Column>
+        <Column header="Application Name">
+          <template #body="{ data }: { data: ContactWithApplication }">
+            <TruncatedText :text="data.application.application_name" max-width="10rem" />
           </template>
         </Column>
       </DataTable>
