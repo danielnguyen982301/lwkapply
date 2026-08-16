@@ -14,10 +14,6 @@ import '../../settings/presentation/settings_icon_button.dart';
 /// own — this screen is just a launcher, it owns no data. Each card
 /// pushes a route (see router.dart), covering the bottom nav, same as
 /// tapping into an application's edit form does.
-///
-/// An AI-tools card is a planned future addition here, NOT part of this
-/// pass — see the mobile-nav planning discussion. It slots in below
-/// Analytics once that feature is actually designed.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -56,8 +52,11 @@ class HomeScreen extends StatelessWidget {
               label: 'Analytics',
               onTap: () => context.push('/analytics'),
             ),
-            // AI-tools card goes here next — deferred, see class doc
-            // comment above.
+            _HomeCard(
+              icon: Icons.auto_awesome_outlined,
+              label: 'AI Tools',
+              onTap: () => context.push('/ai-tools'),
+            ),
           ],
         ),
       ),
