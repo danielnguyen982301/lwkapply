@@ -1,6 +1,11 @@
 """
-Integration tests for /applications/{application_id}/documents
-(app/api/v1/endpoints/documents.py).
+Integration tests for /documents (app/api/v1/endpoints/documents.py).
+
+Documents are a top-level, user-owned resource - not nested under an
+application (see app/models/document.py's module docstring). Uploading,
+reading, updating, deleting, downloading, listing/searching/filtering all
+live here. Attaching/detaching a document to/from a specific application
+is a separate concern, covered by test_application_documents_endpoints.py.
 
 Uses the same fixtures as the other endpoint test files (client,
 db_session, make_user, auth_headers - see conftest.py), plus a local,
@@ -34,40 +39,17 @@ import pytest
 from botocore.exceptions import ClientError
 
 import app.services.r2 as r2_service
-from app.models.application import Application, ApplicationStatus
 from app.models.document import Document, DocumentType
 
 PDF_BYTES = b"%PDF-1.4 fake pdf content for testing"
+DOCUMENTS_URL = "/api/v1/documents"
 
 
-def _applications_url(application_id) -> str:
-    return f"/api/v1/applications/{application_id}"
-
-
-def _documents_url(application_id) -> str:
-    return f"{_applications_url(application_id)}/documents"
-
-
-def _make_application(db_session, user, **overrides):
+def _make_document(db_session, user, **overrides):
     defaults = {
         "user_id": user.id,
-        "company": "Initech",
-        "position": "Backend Engineer",
-        "status": ApplicationStatus.SAVED,
-    }
-    defaults.update(overrides)
-    application = Application(**defaults)
-    db_session.add(application)
-    db_session.commit()
-    db_session.refresh(application)
-    return application
-
-
-def _make_document(db_session, application, **overrides):
-    defaults = {
-        "application_id": application.id,
         "file_name": "resume.pdf",
-        "file_url": f"users/fake/applications/fake/{uuid.uuid4().hex[:12]}-resume.pdf",
+        "file_url": f"users/{user.id}/documents/{uuid.uuid4().hex[:12]}-resume.pdf",
         "file_type": DocumentType.RESUME,
     }
     defaults.update(overrides)
@@ -98,31 +80,26 @@ def fake_r2_client(monkeypatch):
 
 
 class TestDocumentsAuth:
-    def test_list_requires_authentication(self, client, db_session, make_user):
-        user = make_user()
-        application = _make_application(db_session, user)
-        response = client.get(_documents_url(application.id))
+    def test_list_requires_authentication(self, client):
+        response = client.get(DOCUMENTS_URL)
         assert response.status_code == 401
 
-    def test_upload_requires_authentication(self, client, db_session, make_user):
-        user = make_user()
-        application = _make_application(db_session, user)
+    def test_upload_requires_authentication(self, client):
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
         )
         assert response.status_code == 401
 
 
 class TestUploadDocument:
-    def test_uploads_document_for_owned_application(
-        self, client, db_session, make_user, auth_headers, fake_r2_client
+    def test_uploads_document_standalone(
+        self, client, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
             headers=auth_headers(user),
         )
@@ -130,32 +107,26 @@ class TestUploadDocument:
         assert response.status_code == 201
         body = response.json()
         assert body["file_name"] == "resume.pdf"
-        assert body["application_id"] == str(application.id)
+        assert "application_id" not in body
         assert "file_url" not in body
         fake_r2_client.put_object.assert_called_once()
 
-    def test_defaults_to_other_file_type(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_defaults_to_other_file_type(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
             headers=auth_headers(user),
         )
 
         assert response.json()["file_type"] == "other"
 
-    def test_explicit_file_type_is_respected(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_explicit_file_type_is_respected(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
             data={"file_type": "resume"},
             headers=auth_headers(user),
@@ -167,10 +138,9 @@ class TestUploadDocument:
         self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.txt", b"plain text resume", "text/plain")},
             headers=auth_headers(user),
         )
@@ -178,10 +148,7 @@ class TestUploadDocument:
         assert response.status_code == 415
         fake_r2_client.put_object.assert_not_called()
         assert (
-            db_session.query(Document)
-            .filter(Document.application_id == application.id)
-            .count()
-            == 0
+            db_session.query(Document).filter(Document.user_id == user.id).count() == 0
         )
 
     def test_rejects_file_over_size_limit(
@@ -192,11 +159,10 @@ class TestUploadDocument:
         # path in r2.upload_document without the overhead.
         monkeypatch.setattr(r2_service.settings, "MAX_UPLOAD_SIZE_MB", 1)
         user = make_user()
-        application = _make_application(db_session, user)
         oversized_bytes = b"x" * (2 * 1024 * 1024)  # 2MB > the 1MB limit above
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", oversized_bytes, "application/pdf")},
             headers=auth_headers(user),
         )
@@ -204,10 +170,7 @@ class TestUploadDocument:
         assert response.status_code == 413
         fake_r2_client.put_object.assert_not_called()
         assert (
-            db_session.query(Document)
-            .filter(Document.application_id == application.id)
-            .count()
-            == 0
+            db_session.query(Document).filter(Document.user_id == user.id).count() == 0
         )
 
     def test_r2_failure_during_upload_returns_502(
@@ -217,60 +180,26 @@ class TestUploadDocument:
             {"Error": {"Code": "500", "Message": "boom"}}, "PutObject"
         )
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.post(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
             headers=auth_headers(user),
         )
 
         assert response.status_code == 502
         assert (
-            db_session.query(Document)
-            .filter(Document.application_id == application.id)
-            .count()
-            == 0
+            db_session.query(Document).filter(Document.user_id == user.id).count() == 0
         )
-
-    def test_cannot_upload_to_nonexistent_application(
-        self, client, make_user, auth_headers, fake_r2_client
-    ):
-        user = make_user()
-        response = client.post(
-            _documents_url(uuid.uuid4()),
-            files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
-            headers=auth_headers(user),
-        )
-        assert response.status_code == 404
-        fake_r2_client.put_object.assert_not_called()
-
-    def test_cannot_upload_to_another_users_application(
-        self, client, db_session, make_user, auth_headers, fake_r2_client
-    ):
-        owner = make_user()
-        other_user = make_user()
-        application = _make_application(db_session, owner)
-
-        response = client.post(
-            _documents_url(application.id),
-            files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
-            headers=auth_headers(other_user),
-        )
-
-        assert response.status_code == 404
-        fake_r2_client.put_object.assert_not_called()
 
 
 class TestGetDocument:
     def test_returns_owned_document(self, client, db_session, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application, file_name="cover_letter.pdf")
+        document = _make_document(db_session, user, file_name="cover_letter.pdf")
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(user)
         )
 
         assert response.status_code == 200
@@ -280,25 +209,19 @@ class TestGetDocument:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(user)
         )
 
         assert "file_url" not in response.json()
 
-    def test_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_nonexistent_document_is_404(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{uuid.uuid4()}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{uuid.uuid4()}", headers=auth_headers(user)
         )
         assert response.status_code == 404
 
@@ -309,12 +232,10 @@ class TestDocumentOwnership:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(other_user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(other_user)
         )
         assert response.status_code == 404
 
@@ -323,11 +244,10 @@ class TestDocumentOwnership:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application, file_type=DocumentType.OTHER)
+        document = _make_document(db_session, owner, file_type=DocumentType.OTHER)
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{document.id}",
+            f"{DOCUMENTS_URL}/{document.id}",
             json={"file_type": "resume"},
             headers=auth_headers(other_user),
         )
@@ -341,12 +261,10 @@ class TestDocumentOwnership:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
 
         response = client.delete(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(other_user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(other_user)
         )
         assert response.status_code == 404
         fake_r2_client.delete_object.assert_not_called()
@@ -361,63 +279,28 @@ class TestDocumentOwnership:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}/download",
+            f"{DOCUMENTS_URL}/{document.id}/download",
             headers=auth_headers(other_user),
         )
         assert response.status_code == 404
         fake_r2_client.generate_presigned_url.assert_not_called()
 
-    def test_cannot_list_another_users_documents(
+    def test_cannot_see_another_users_document_in_list(
         self, client, db_session, make_user, auth_headers
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        _make_document(db_session, application)
+        _make_document(db_session, owner)
+        other_document = _make_document(db_session, other_user)
 
-        response = client.get(
-            _documents_url(application.id), headers=auth_headers(other_user)
-        )
-        assert response.status_code == 404
-
-
-class TestDocumentApplicationScoping:
-    """Same concern as Interviews: a document under one application must
-    not be reachable through a sibling application's URL, even for the
-    same user."""
-
-    def test_cannot_get_document_via_sibling_application(
-        self, client, db_session, make_user, auth_headers
-    ):
-        user = make_user()
-        application_a = _make_application(db_session, user, company="Initech")
-        application_b = _make_application(db_session, user, company="Globex")
-        document = _make_document(db_session, application_a)
-
-        response = client.get(
-            f"{_documents_url(application_b.id)}/{document.id}",
-            headers=auth_headers(user),
-        )
-        assert response.status_code == 404
-
-    def test_cannot_delete_document_via_sibling_application(
-        self, client, db_session, make_user, auth_headers, fake_r2_client
-    ):
-        user = make_user()
-        application_a = _make_application(db_session, user, company="Initech")
-        application_b = _make_application(db_session, user, company="Globex")
-        document = _make_document(db_session, application_a)
-
-        response = client.delete(
-            f"{_documents_url(application_b.id)}/{document.id}",
-            headers=auth_headers(user),
-        )
-        assert response.status_code == 404
-        fake_r2_client.delete_object.assert_not_called()
+        response = client.get(DOCUMENTS_URL, headers=auth_headers(other_user))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == str(other_document.id)
 
 
 class TestDownloadDocument:
@@ -425,12 +308,10 @@ class TestDownloadDocument:
         self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}/download",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}/download", headers=auth_headers(user)
         )
 
         assert response.status_code == 200
@@ -450,24 +331,20 @@ class TestDownloadDocument:
             {"Error": {"Code": "500", "Message": "boom"}}, "GeneratePresignedUrl"
         )
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{document.id}/download",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}/download", headers=auth_headers(user)
         )
         assert response.status_code == 502
 
     def test_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers, fake_r2_client
+        self, client, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.get(
-            f"{_documents_url(application.id)}/{uuid.uuid4()}/download",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{uuid.uuid4()}/download", headers=auth_headers(user)
         )
         assert response.status_code == 404
         fake_r2_client.generate_presigned_url.assert_not_called()
@@ -476,11 +353,10 @@ class TestDownloadDocument:
 class TestUpdateDocument:
     def test_updates_file_type(self, client, db_session, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application, file_type=DocumentType.OTHER)
+        document = _make_document(db_session, user, file_type=DocumentType.OTHER)
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{document.id}",
+            f"{DOCUMENTS_URL}/{document.id}",
             json={"file_type": "resume"},
             headers=auth_headers(user),
         )
@@ -492,11 +368,10 @@ class TestUpdateDocument:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{document.id}",
+            f"{DOCUMENTS_URL}/{document.id}",
             json={"file_type": "not-a-real-type"},
             headers=auth_headers(user),
         )
@@ -510,11 +385,10 @@ class TestUpdateDocument:
         them. A client can't redirect a document's stored R2 key to an
         object it doesn't own by PATCHing file_url."""
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application, file_url="original/key.pdf")
+        document = _make_document(db_session, user, file_url="original/key.pdf")
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{document.id}",
+            f"{DOCUMENTS_URL}/{document.id}",
             json={"file_type": "resume", "file_url": "someone/elses/key.pdf"},
             headers=auth_headers(user),
         )
@@ -527,13 +401,10 @@ class TestUpdateDocument:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(
-            db_session, application, file_type=DocumentType.RESUME
-        )
+        document = _make_document(db_session, user, file_type=DocumentType.RESUME)
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{document.id}",
+            f"{DOCUMENTS_URL}/{document.id}",
             json={},
             headers=auth_headers(user),
         )
@@ -542,13 +413,12 @@ class TestUpdateDocument:
         assert response.json()["file_type"] == "resume"
 
     def test_updating_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers
+        self, client, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.patch(
-            f"{_documents_url(application.id)}/{uuid.uuid4()}",
+            f"{DOCUMENTS_URL}/{uuid.uuid4()}",
             json={"file_type": "resume"},
             headers=auth_headers(user),
         )
@@ -560,24 +430,19 @@ class TestDeleteDocument:
         self, client, db_session, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(
-            db_session, application, file_url="users/x/apps/y/key.pdf"
-        )
+        document = _make_document(db_session, user, file_url="users/x/docs/key.pdf")
 
         response = client.delete(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(user)
         )
 
         assert response.status_code == 204
         fake_r2_client.delete_object.assert_called_once()
         _, call_kwargs = fake_r2_client.delete_object.call_args
-        assert call_kwargs["Key"] == "users/x/apps/y/key.pdf"
+        assert call_kwargs["Key"] == "users/x/docs/key.pdf"
 
         get_response = client.get(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(user)
         )
         assert get_response.status_code == 404
 
@@ -593,12 +458,10 @@ class TestDeleteDocument:
             {"Error": {"Code": "500", "Message": "boom"}}, "DeleteObject"
         )
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.delete(
-            f"{_documents_url(application.id)}/{document.id}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{document.id}", headers=auth_headers(user)
         )
 
         assert response.status_code == 204
@@ -608,14 +471,12 @@ class TestDeleteDocument:
         assert still_there is None
 
     def test_deleting_nonexistent_document_is_404(
-        self, client, db_session, make_user, auth_headers, fake_r2_client
+        self, client, make_user, auth_headers, fake_r2_client
     ):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.delete(
-            f"{_documents_url(application.id)}/{uuid.uuid4()}",
-            headers=auth_headers(user),
+            f"{DOCUMENTS_URL}/{uuid.uuid4()}", headers=auth_headers(user)
         )
         assert response.status_code == 404
         fake_r2_client.delete_object.assert_not_called()
@@ -628,44 +489,27 @@ class TestListDocumentsOrdering:
         """Explicit created_at values, not wall-clock gaps - see module
         docstring."""
         user = make_user()
-        application = _make_application(db_session, user)
         now = datetime.now(timezone.utc)
 
         oldest = _make_document(
-            db_session,
-            application,
-            file_name="a.pdf",
-            created_at=now - timedelta(days=3),
+            db_session, user, file_name="a.pdf", created_at=now - timedelta(days=3)
         )
         newest = _make_document(
-            db_session,
-            application,
-            file_name="c.pdf",
-            created_at=now - timedelta(days=1),
+            db_session, user, file_name="c.pdf", created_at=now - timedelta(days=1)
         )
         middle = _make_document(
-            db_session,
-            application,
-            file_name="b.pdf",
-            created_at=now - timedelta(days=2),
+            db_session, user, file_name="b.pdf", created_at=now - timedelta(days=2)
         )
 
-        response = client.get(
-            _documents_url(application.id), headers=auth_headers(user)
-        )
+        response = client.get(DOCUMENTS_URL, headers=auth_headers(user))
 
         ids_in_order = [item["id"] for item in response.json()["items"]]
         assert ids_in_order == [str(newest.id), str(middle.id), str(oldest.id)]
 
-    def test_empty_application_returns_empty_list(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_empty_when_user_has_no_documents(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
-        response = client.get(
-            _documents_url(application.id), headers=auth_headers(user)
-        )
+        response = client.get(DOCUMENTS_URL, headers=auth_headers(user))
 
         assert response.status_code == 200
         body = response.json()
@@ -675,26 +519,78 @@ class TestListDocumentsOrdering:
         assert body["page_size"] == 20
 
 
+class TestListDocumentsSearchAndFilter:
+    def test_filters_by_file_name(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        _make_document(db_session, user, file_name="cover_letter_v2.pdf")
+        _make_document(db_session, user, file_name="resume_final.pdf")
+
+        response = client.get(
+            DOCUMENTS_URL,
+            params={"search": "cover_letter"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["file_name"] == "cover_letter_v2.pdf"
+
+    def test_filters_by_file_type(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        _make_document(db_session, user, file_type=DocumentType.RESUME)
+        _make_document(db_session, user, file_type=DocumentType.COVER_LETTER)
+
+        response = client.get(
+            DOCUMENTS_URL, params={"file_type": "resume"}, headers=auth_headers(user)
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["file_type"] == "resume"
+
+    def test_invalid_file_type_value_is_rejected(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.get(
+            DOCUMENTS_URL,
+            params={"file_type": "not-a-real-type"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+
+    def test_no_filters_returns_all_documents(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        _make_document(db_session, user, file_type=DocumentType.RESUME)
+        _make_document(db_session, user, file_type=DocumentType.COVER_LETTER)
+
+        response = client.get(DOCUMENTS_URL, headers=auth_headers(user))
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+
+
 class TestListDocumentsPagination:
     def test_paginates_results(self, client, db_session, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
         now = datetime.now(timezone.utc)
         for i in range(5):
             _make_document(
                 db_session,
-                application,
+                user,
                 file_name=f"doc_{i}.pdf",
                 created_at=now - timedelta(days=i),
             )
 
         page_1 = client.get(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             params={"page": 1, "page_size": 2},
             headers=auth_headers(user),
         )
         page_2 = client.get(
-            _documents_url(application.id),
+            DOCUMENTS_URL,
             params={"page": 2, "page_size": 2},
             headers=auth_headers(user),
         )
@@ -708,28 +604,18 @@ class TestListDocumentsPagination:
         page_2_ids = {item["id"] for item in page_2.json()["items"]}
         assert page_1_ids.isdisjoint(page_2_ids)
 
-    def test_page_size_is_capped_at_100(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_page_size_is_capped_at_100(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.get(
-            _documents_url(application.id),
-            params={"page_size": 500},
-            headers=auth_headers(user),
+            DOCUMENTS_URL, params={"page_size": 500}, headers=auth_headers(user)
         )
         assert response.status_code == 422
 
-    def test_page_below_one_is_rejected(
-        self, client, db_session, make_user, auth_headers
-    ):
+    def test_page_below_one_is_rejected(self, client, make_user, auth_headers):
         user = make_user()
-        application = _make_application(db_session, user)
 
         response = client.get(
-            _documents_url(application.id),
-            params={"page": 0},
-            headers=auth_headers(user),
+            DOCUMENTS_URL, params={"page": 0}, headers=auth_headers(user)
         )
         assert response.status_code == 422

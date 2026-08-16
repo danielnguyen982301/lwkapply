@@ -19,9 +19,10 @@ this module's AIJobStatus enum.
 
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,6 +76,13 @@ class ResumeAnalysis(Base, UUIDMixin, TimestampMixin):
     # (app/schemas/ai.py), which both produces and validates this shape.
     parsed_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set only when status transitions to COMPLETED (app/tasks/ai.py::
+    # parse_resume_task) - distinct from created_at (when the request was
+    # submitted), since parsing is async and the two can be seconds or
+    # minutes apart. Stays NULL on a failed run.
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     user: Mapped["User"] = relationship()
     document: Mapped["Document"] = relationship()

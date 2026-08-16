@@ -26,3 +26,9 @@ class TestDocumentReadShape:
         # Guards against someone accidentally re-adding file_url to
         # DocumentRead later and silently exposing the permanent S3 key.
         assert "file_url" not in DocumentRead.model_fields
+
+    def test_application_id_is_not_a_field(self):
+        # A document is a standalone resource reusable across zero or
+        # more applications (see ApplicationDocument) - it no longer has
+        # a single owning application_id.
+        assert "application_id" not in DocumentRead.model_fields

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
-    from app.models.application import Application
+    from app.models.application_document import ApplicationDocument
+    from app.models.user import User
 
 
 class DocumentType(str, enum.Enum):
@@ -19,11 +20,20 @@ class DocumentType(str, enum.Enum):
 
 
 class Document(Base, UUIDMixin, TimestampMixin):
+    """
+    Top-level, user-owned resource - like ResumeAnalysis/AtsScore, not
+    nested under a single Application. A document can be attached to zero,
+    one, or several applications (see ApplicationDocument); ownership is
+    therefore a direct user_id FK rather than derived through an
+    application join, since an unattached document has no application to
+    derive it from.
+    """
+
     __tablename__ = "documents"
 
-    application_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("applications.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -38,4 +48,11 @@ class Document(Base, UUIDMixin, TimestampMixin):
         server_default=DocumentType.OTHER,
     )
 
-    application: Mapped["Application"] = relationship(back_populates="documents")
+    user: Mapped["User"] = relationship()
+    # Deleting a document should drop its application links, not the
+    # applications themselves - delete-orphan only, no cascade onto
+    # Application (mirrors the ondelete="CASCADE" FK on
+    # ApplicationDocument.document_id).
+    application_documents: Mapped[list["ApplicationDocument"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )

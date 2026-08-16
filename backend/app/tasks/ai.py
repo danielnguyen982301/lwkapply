@@ -14,10 +14,10 @@ forever without at least a `failed` stamp attempt.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
-from app.models.application import Application
 from app.models.ats_score import AtsScore
 from app.models.document import Document
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
@@ -74,6 +74,7 @@ def parse_resume_task(resume_analysis_id: str) -> None:
             analysis.raw_text = text
             analysis.parsed_data = parsed.model_dump()
             analysis.status = AIJobStatus.COMPLETED
+            analysis.completed_at = datetime.now(timezone.utc)
         except UnsupportedResumeFormatError as exc:
             analysis.status = AIJobStatus.FAILED
             analysis.error_message = str(exc)
@@ -104,19 +105,12 @@ def score_ats_task(ats_score_id: str) -> None:
         try:
             job_description = ats_score.job_description
             if job_description is None:
-                # Not pasted at creation time - resolve from the linked
-                # application's job_url (validated to exist by the
-                # endpoint at creation time, but re-checked here since
-                # the application/job_url could theoretically have
-                # changed between request and task run).
-                application = (
-                    db.get(Application, ats_score.application_id)
-                    if ats_score.application_id
-                    else None
-                )
+                # Not pasted at creation time - resolve from the pasted
+                # job_url instead (validated to be set by the endpoint at
+                # creation time whenever job_description is None).
                 fetched = (
-                    fetch_job_description(application.job_url)
-                    if application and application.job_url
+                    fetch_job_description(ats_score.job_url)
+                    if ats_score.job_url
                     else None
                 )
                 if not fetched:

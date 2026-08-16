@@ -88,6 +88,7 @@ class ResumeAnalysisRead(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
+    completed_at: datetime | None = None
 
 
 class ResumeAnalysisListResponse(BaseModel):
@@ -102,12 +103,13 @@ class ResumeAnalysisListResponse(BaseModel):
 
 class AtsScoreCreate(BaseModel):
     resume_analysis_id: uuid.UUID
-    application_id: uuid.UUID | None = None
-    # Optional: prefers the linked application's job_url when omitted -
-    # see app/api/v1/endpoints/ai.py's create endpoint and
-    # app/tasks/ai.py::score_ats_task. Length-bounded so an empty/garbage
-    # submission doesn't burn a real Gemini call.
+    # Exactly one of these two is required (enforced in the endpoint, not
+    # here, since "at least one of two optional fields" isn't expressible
+    # as a plain Field constraint). job_description wins if both are set -
+    # see app/api/v1/endpoints/ai.py's create endpoint. Length-bounded so
+    # an empty/garbage submission doesn't burn a real Gemini call.
     job_description: str | None = Field(default=None, min_length=50, max_length=20000)
+    job_url: str | None = Field(default=None, max_length=1000)
 
 
 class AtsScoreRead(BaseModel):
@@ -115,9 +117,9 @@ class AtsScoreRead(BaseModel):
 
     id: uuid.UUID
     resume_analysis_id: uuid.UUID
-    application_id: uuid.UUID | None
     job_description: str | None
     job_description_source: str | None
+    job_url: str | None
     status: AIJobStatus
     score: int | None = None
     feedback: dict | None = None

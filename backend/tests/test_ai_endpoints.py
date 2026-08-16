@@ -19,7 +19,6 @@ import pytest
 
 import app.api.v1.endpoints.ai as ai_endpoints_module
 from app.core.config import settings
-from app.models.application import Application, ApplicationStatus
 from app.models.ats_score import AtsScore
 from app.models.document import Document, DocumentType
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
@@ -28,26 +27,11 @@ RESUME_ANALYSES_URL = "/api/v1/ai/resume-analyses"
 ATS_SCORES_URL = "/api/v1/ai/ats-scores"
 
 
-def _make_application(db_session, user, **overrides):
+def _make_document(db_session, user, **overrides):
     defaults = {
         "user_id": user.id,
-        "company": "Acme",
-        "position": "Backend Engineer",
-        "status": ApplicationStatus.SAVED,
-    }
-    defaults.update(overrides)
-    application = Application(**defaults)
-    db_session.add(application)
-    db_session.commit()
-    db_session.refresh(application)
-    return application
-
-
-def _make_document(db_session, application, **overrides):
-    defaults = {
-        "application_id": application.id,
         "file_name": "resume.pdf",
-        "file_url": f"users/fake/applications/fake/{uuid.uuid4().hex[:12]}-resume.pdf",
+        "file_url": f"users/{user.id}/documents/{uuid.uuid4().hex[:12]}-resume.pdf",
         "file_type": DocumentType.RESUME,
     }
     defaults.update(overrides)
@@ -103,8 +87,7 @@ class TestAiFeaturesRequireConfiguration:
     ):
         monkeypatch.setattr(ai_endpoints_module, "is_ai_configured", lambda: False)
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.post(
             RESUME_ANALYSES_URL,
@@ -118,8 +101,7 @@ class TestAiFeaturesRequireConfiguration:
     ):
         monkeypatch.setattr(ai_endpoints_module, "is_ai_configured", lambda: False)
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -138,8 +120,7 @@ class TestAiFeaturesRequireConfiguration:
 class TestCreateResumeAnalysis:
     def test_requires_authentication(self, client, db_session, make_user):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         response = client.post(
             RESUME_ANALYSES_URL, json={"document_id": str(document.id)}
         )
@@ -154,8 +135,7 @@ class TestCreateResumeAnalysis:
         no_real_celery_dispatch,
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         response = client.post(
             RESUME_ANALYSES_URL,
@@ -176,8 +156,7 @@ class TestCreateResumeAnalysis:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
 
         response = client.post(
             RESUME_ANALYSES_URL,
@@ -199,10 +178,7 @@ class TestCreateResumeAnalysis:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(
-            db_session, application, file_type=DocumentType.COVER_LETTER
-        )
+        document = _make_document(db_session, user, file_type=DocumentType.COVER_LETTER)
 
         response = client.post(
             RESUME_ANALYSES_URL,
@@ -220,8 +196,7 @@ class TestCreateResumeAnalysis:
         no_real_celery_dispatch,
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         existing = _make_resume_analysis(db_session, user, document)
 
         response = client.post(
@@ -239,8 +214,7 @@ class TestGetAndListResumeAnalyses:
     def test_get_requires_ownership(self, client, db_session, make_user, auth_headers):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
         analysis = _make_resume_analysis(db_session, owner, document)
 
         response = client.get(
@@ -252,8 +226,7 @@ class TestGetAndListResumeAnalyses:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(db_session, user, document)
 
         response = client.get(
@@ -267,10 +240,8 @@ class TestGetAndListResumeAnalyses:
     ):
         user = make_user()
         other_user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
-        other_application = _make_application(db_session, other_user)
-        other_document = _make_document(db_session, other_application)
+        document = _make_document(db_session, user)
+        other_document = _make_document(db_session, other_user)
         _make_resume_analysis(db_session, user, document)
         _make_resume_analysis(db_session, other_user, other_document)
 
@@ -283,8 +254,7 @@ class TestGetAndListResumeAnalyses:
 class TestCreateAtsScore:
     def test_requires_authentication(self, client, db_session, make_user):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -306,8 +276,7 @@ class TestCreateAtsScore:
         no_real_celery_dispatch,
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -325,11 +294,12 @@ class TestCreateAtsScore:
         body = response.json()
         assert body["status"] == "pending"
         assert body["job_description_source"] == "pasted"
+        assert body["job_url"] is None
         no_real_celery_dispatch["score_ats_task"].delay.assert_called_once_with(
             body["id"]
         )
 
-    def test_creates_pending_score_from_application_job_url(
+    def test_creates_pending_score_from_job_url(
         self,
         client,
         db_session,
@@ -338,10 +308,7 @@ class TestCreateAtsScore:
         no_real_celery_dispatch,
     ):
         user = make_user()
-        application = _make_application(
-            db_session, user, job_url="https://jobs.example.com/posting"
-        )
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -350,7 +317,7 @@ class TestCreateAtsScore:
             ATS_SCORES_URL,
             json={
                 "resume_analysis_id": str(analysis.id),
-                "application_id": str(application.id),
+                "job_url": "https://jobs.example.com/posting",
             },
             headers=auth_headers(user),
         )
@@ -358,7 +325,8 @@ class TestCreateAtsScore:
         assert response.status_code == 202
         body = response.json()
         assert body["job_description"] is None
-        assert body["job_description_source"] is None
+        assert body["job_description_source"] == "url"
+        assert body["job_url"] == "https://jobs.example.com/posting"
 
     def test_pasted_description_wins_over_job_url(
         self,
@@ -369,10 +337,7 @@ class TestCreateAtsScore:
         no_real_celery_dispatch,
     ):
         user = make_user()
-        application = _make_application(
-            db_session, user, job_url="https://jobs.example.com/posting"
-        )
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -381,7 +346,7 @@ class TestCreateAtsScore:
             ATS_SCORES_URL,
             json={
                 "resume_analysis_id": str(analysis.id),
-                "application_id": str(application.id),
+                "job_url": "https://jobs.example.com/posting",
                 "job_description": "y" * 60,
             },
             headers=auth_headers(user),
@@ -391,33 +356,13 @@ class TestCreateAtsScore:
         body = response.json()
         assert body["job_description"] == "y" * 60
         assert body["job_description_source"] == "pasted"
+        assert body["job_url"] is None
 
-    def test_422_when_no_job_description_source_available(
+    def test_422_with_no_job_description_and_no_job_url(
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user, job_url=None)
-        document = _make_document(db_session, application)
-        analysis = _make_resume_analysis(
-            db_session, user, document, status=AIJobStatus.COMPLETED
-        )
-
-        response = client.post(
-            ATS_SCORES_URL,
-            json={
-                "resume_analysis_id": str(analysis.id),
-                "application_id": str(application.id),
-            },
-            headers=auth_headers(user),
-        )
-        assert response.status_code == 422
-
-    def test_422_with_no_application_and_no_job_description(
-        self, client, db_session, make_user, auth_headers
-    ):
-        user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -433,8 +378,7 @@ class TestCreateAtsScore:
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.PENDING
         )
@@ -454,8 +398,7 @@ class TestCreateAtsScore:
     ):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
         analysis = _make_resume_analysis(
             db_session, owner, document, status=AIJobStatus.COMPLETED
         )
@@ -468,38 +411,13 @@ class TestCreateAtsScore:
             },
             headers=auth_headers(other_user),
         )
-        assert response.status_code == 404
-
-    def test_404_for_another_users_application(
-        self, client, db_session, make_user, auth_headers
-    ):
-        owner = make_user()
-        other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
-        analysis = _make_resume_analysis(
-            db_session, owner, document, status=AIJobStatus.COMPLETED
-        )
-        other_application = _make_application(db_session, other_user)
-
-        response = client.post(
-            ATS_SCORES_URL,
-            json={
-                "resume_analysis_id": str(analysis.id),
-                "application_id": str(other_application.id),
-                "job_description": "x" * 60,
-            },
-            headers=auth_headers(other_user),
-        )
-        # owner's resume analysis isn't visible to other_user regardless
         assert response.status_code == 404
 
     def test_job_description_too_short_is_rejected(
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         analysis = _make_resume_analysis(
             db_session, user, document, status=AIJobStatus.COMPLETED
         )
@@ -516,8 +434,7 @@ class TestGetAndListAtsScores:
     def test_get_requires_ownership(self, client, db_session, make_user, auth_headers):
         owner = make_user()
         other_user = make_user()
-        application = _make_application(db_session, owner)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, owner)
         analysis = _make_resume_analysis(
             db_session, owner, document, status=AIJobStatus.COMPLETED
         )
@@ -530,40 +447,30 @@ class TestGetAndListAtsScores:
         )
         assert response.status_code == 404
 
-    def test_list_filters_by_application_id(
+    def test_list_filters_by_resume_analysis_id(
         self, client, db_session, make_user, auth_headers
     ):
         user = make_user()
-        application_a = _make_application(db_session, user, company="A")
-        application_b = _make_application(db_session, user, company="B")
-        document = _make_document(db_session, application_a)
-        analysis = _make_resume_analysis(
-            db_session, user, document, status=AIJobStatus.COMPLETED
+        document_a = _make_document(db_session, user)
+        document_b = _make_document(db_session, user)
+        analysis_a = _make_resume_analysis(
+            db_session, user, document_a, status=AIJobStatus.COMPLETED
         )
-        _make_ats_score(
-            db_session,
-            user,
-            analysis,
-            application_id=application_a.id,
-            job_description="x" * 60,
+        analysis_b = _make_resume_analysis(
+            db_session, user, document_b, status=AIJobStatus.COMPLETED
         )
-        _make_ats_score(
-            db_session,
-            user,
-            analysis,
-            application_id=application_b.id,
-            job_description="y" * 60,
-        )
+        _make_ats_score(db_session, user, analysis_a, job_description="x" * 60)
+        _make_ats_score(db_session, user, analysis_b, job_description="y" * 60)
 
         response = client.get(
             ATS_SCORES_URL,
-            params={"application_id": str(application_a.id)},
+            params={"resume_analysis_id": str(analysis_a.id)},
             headers=auth_headers(user),
         )
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 1
-        assert body["items"][0]["application_id"] == str(application_a.id)
+        assert body["items"][0]["resume_analysis_id"] == str(analysis_a.id)
 
 
 class TestAiRateLimiting:
@@ -585,10 +492,9 @@ class TestAiRateLimiting:
     ):
         monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 3)
         user = make_user()
-        application = _make_application(db_session, user)
 
         for _ in range(3):
-            document = _make_document(db_session, application)
+            document = _make_document(db_session, user)
             response = client.post(
                 RESUME_ANALYSES_URL,
                 json={"document_id": str(document.id)},
@@ -596,7 +502,7 @@ class TestAiRateLimiting:
             )
             assert response.status_code == 202
 
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         response = client.post(
             RESUME_ANALYSES_URL,
             json={"document_id": str(document.id)},
@@ -610,8 +516,7 @@ class TestAiRateLimiting:
     ):
         monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 1)
         user = make_user()
-        application = _make_application(db_session, user)
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
 
         first = client.post(
             RESUME_ANALYSES_URL,
@@ -634,7 +539,7 @@ class TestAiRateLimiting:
 
         # A genuinely new resource, though, should now be rejected - the
         # budget really was consumed exactly once, by the first call.
-        other_document = _make_document(db_session, application)
+        other_document = _make_document(db_session, user)
         third = client.post(
             RESUME_ANALYSES_URL,
             json={"document_id": str(other_document.id)},
@@ -647,9 +552,8 @@ class TestAiRateLimiting:
     ):
         monkeypatch.setattr(settings, "AI_FREE_TIER_DAILY_LIMIT", 2)
         user = make_user()
-        application = _make_application(db_session, user)
 
-        document = _make_document(db_session, application)
+        document = _make_document(db_session, user)
         first = client.post(
             RESUME_ANALYSES_URL,
             json={"document_id": str(document.id)},
@@ -657,7 +561,7 @@ class TestAiRateLimiting:
         )
         assert first.status_code == 202
 
-        other_document = _make_document(db_session, application)
+        other_document = _make_document(db_session, user)
         completed_analysis = _make_resume_analysis(
             db_session, user, other_document, status=AIJobStatus.COMPLETED
         )
@@ -671,7 +575,7 @@ class TestAiRateLimiting:
         )
         assert second.status_code == 202
 
-        third_document = _make_document(db_session, application)
+        third_document = _make_document(db_session, user)
         third = client.post(
             RESUME_ANALYSES_URL,
             json={"document_id": str(third_document.id)},
