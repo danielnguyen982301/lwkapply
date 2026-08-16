@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../ai/data/resume_analyses_api.dart';
 import '../../applications/presentation/application_formatting.dart';
 import '../data/documents_api.dart';
 import '../domain/document.dart';
@@ -35,6 +39,10 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
   /// spinner instead of the download icon — mirrors
   /// `store.downloadingId` in webapp/src/stores/documents.ts.
   String? _downloadingId;
+
+  /// Same spinner-swap treatment for the "View Analysis" row action
+  /// while it fetches-or-creates a `ResumeAnalysis` for that document.
+  String? _analyzingId;
 
   @override
   void initState() {
@@ -140,6 +148,72 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Reuses ResumeAnalysisDetailScreen wholesale rather than building a
+  /// second display for the same data — see that screen's doc comment.
+  /// Fetches the most recent analysis for this document if one exists
+  /// (`latestForDocument`, page_size-1 trick — see that method's doc
+  /// comment on ResumeAnalysesApi). If none exists, confirms with the
+  /// user before calling `create()` — mirrors
+  /// webapp/src/components/ai/ResumeAnalysisModal.vue's "No analysis
+  /// yet for this resume" + explicit "Analyze now" button: `create()`
+  /// hits a rate-limited AI call, so it must never fire just because
+  /// someone tapped "View Analysis", only when they've actually said
+  /// they want a new analysis.
+  Future<void> _viewAnalysis(Document document) async {
+    setState(() => _analyzingId = document.id);
+    try {
+      final api = ref.read(resumeAnalysesApiProvider);
+      var analysis = await api.latestForDocument(document.id);
+      if (analysis == null) {
+        if (!mounted) return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('No analysis yet'),
+            content: Text(
+              '"${document.fileName}" hasn\'t been analyzed yet. Analyze '
+              'it now?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Analyze now'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        analysis = await api.create(document.id);
+      }
+      if (!mounted) return;
+      // Threading applicationId through as a query param is what lets
+      // ResumeAnalysisDetailScreen look up (via AtsScoresApi
+      // .latestForApplication) and show a score already run against
+      // *this* application, rather than only ever offering "Score
+      // against a job" as if none had ever been run — this is the one
+      // entry point into that screen that actually has an application
+      // in context (AiToolsScreen's tab/create flow has none, since a
+      // resume analysis isn't owned by any single application).
+      unawaited(
+        context.push(
+          '/resume-analyses/${analysis.id}'
+          '?applicationId=${Uri.encodeQueryComponent(widget.applicationId)}',
+        ),
+      );
+    } on ResumeAnalysesException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _analyzingId = null);
     }
   }
 
@@ -254,7 +328,11 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
         return _DocumentCard(
           document: document,
           isDownloading: _downloadingId == document.id,
+          isAnalyzing: _analyzingId == document.id,
           onDownload: () => _download(document),
+          onViewAnalysis: document.fileType == DocumentType.resume
+              ? () => _viewAnalysis(document)
+              : null,
           onEdit: () => _openEditSheet(document),
           onDelete: () => _confirmDelete(document),
         );
@@ -299,14 +377,22 @@ class _DocumentCard extends StatelessWidget {
   const _DocumentCard({
     required this.document,
     required this.isDownloading,
+    required this.isAnalyzing,
     required this.onDownload,
+    required this.onViewAnalysis,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Document document;
   final bool isDownloading;
+  final bool isAnalyzing;
   final VoidCallback onDownload;
+
+  /// Null for non-resume documents — "View Analysis" only makes sense
+  /// for a resume, mirroring DocumentsPanel.vue's own file-type gating
+  /// on this same row action.
+  final VoidCallback? onViewAnalysis;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -347,6 +433,21 @@ class _DocumentCard extends StatelessWidget {
                     tooltip: 'Download',
                     onPressed: onDownload,
                   ),
+            if (onViewAnalysis != null)
+              isAnalyzing
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      tooltip: 'View Analysis',
+                      onPressed: onViewAnalysis,
+                    ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit type',
