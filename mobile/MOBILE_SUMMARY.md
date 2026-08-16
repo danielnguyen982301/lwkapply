@@ -14,13 +14,17 @@ and displays push notifications for interview reminders (Android only —
 see "Push notifications" below) and reports the device's timezone to the
 backend (see "Timezone reporting" below).
 
-**As of this pass**: the bottom nav shrank from 4 tabs to 2
-(Applications + a card-grid "Home" hub) to make room for Analytics and a
-future AI-tools section without crowding the tab bar further — see
-"Navigation shell" below for the full reasoning. Settings now exists as
-its own screen (currently just hosting the logout action, moved off
-Applications' AppBar) — see "Settings screen" below. Analytics is
-implemented — see "Analytics feature" below.
+The bottom nav shrank from 4 tabs to 2 (Applications + a card-grid
+"Home" hub) to make room for Analytics and AI Tools without crowding
+the tab bar further — see "Navigation shell" below for the full
+reasoning. Settings now exists as its own screen (currently just
+hosting the logout action, moved off Applications' AppBar) — see
+"Settings screen" below. Analytics is implemented — see "Analytics
+feature" below.
+
+**As of this pass**: AI Tools (Resume Parser + ATS Score) is
+implemented — the backend and web UI already existed; this is the
+mobile client for both. See "AI Tools feature" below.
 
 Package name: `lwkapply_mobile`.
 
@@ -259,6 +263,123 @@ one combined request.
   proxy; pass rate excludes pending/cancelled.
 - `AnalyticsScreen`'s doc comment explains all of the above in place,
   rather than requiring a reader to cross-reference this file.
+
+### AI Tools feature (`lib/features/ai/`)
+
+Mobile client for the Resume Parser + ATS Score backend
+(`POST`/`GET /ai/resume-analyses`, `POST`/`GET /ai/ats-scores`) —
+backend and web UI already existed (see `BACKEND_SUMMARY.md`'s "AI
+features" and `WEBAPP_SUMMARY.md`'s "AI Tools" sections); this is a
+translation into this app's own idioms, not a literal port of the web
+components. Same `data`/`domain`/`presentation` split as every other
+feature, but two genuinely new pieces of infrastructure this codebase
+didn't have before: polling and a remote-search picker.
+
+- **One screen with a `TabBar`, not two routes joined by a shared tab
+  widget.** Web's "AI Tools" nav item pairs two routes
+  (`/resume-analyses`/`/ats-scores`) via `ViewTabs.vue`'s List/Board
+  toggle pattern, because that pattern already existed there
+  (Applications). Mobile has no route-based tab-toggle precedent
+  anywhere, so `AiToolsScreen` (reached from a new "AI Tools" card on
+  the Home tab, `/ai-tools`) uses Flutter's own `TabBar`/`TabBarView`
+  instead — one pushed screen, two tabs (`ResumeAnalysesTab`/
+  `AtsScoresTab`), a `FloatingActionButton` that swaps between "New
+  Analysis"/"New Score" based on the active tab.
+- **`data/polling_timer.dart`**: a plain (non-Riverpod) `PollingTimer`
+  wrapping `Timer.periodic` (3s interval, 40-attempt/~2min cap, matching
+  `webapp/src/stores/resumeAnalyses.ts`'s constants for consistency
+  across clients), with `start({onTick, onTimeout})`/`stop()`. Both
+  detail controllers below own one as a private field. First
+  `Timer.periodic` usage anywhere in `mobile/lib/`.
+- **Detail controllers are fetch-and-poll only** —
+  `resume_analysis_detail_controller.dart`/`ats_score_detail_controller.dart`,
+  `.family`-scoped by id (mirroring `InterviewsListController`'s
+  per-application family-scoping, here scoped by resource id instead).
+  Deliberately narrower than web's monolithic Pinia stores, which also
+  own `create()`: every "create" action (the two FABs' bottom sheets,
+  "Try again" on a failed analysis, "Score again"/paste-retry on a
+  failed score) calls the relevant `*Api.create()` directly from the
+  screen that owns the button, then navigates to a fresh
+  `/resume-analyses/:id` or `/ats-scores/:id` route for the new row,
+  rather than asking one controller instance to "repoint" at a
+  different id mid-flight. `autoDispose` stops each controller's
+  `PollingTimer` automatically when its detail screen is popped — this
+  app's equivalent of web's `onUnmounted`-calls-`stopPolling()`
+  convention.
+- **`resume_document_picker.dart`/`application_picker.dart`**: no prior
+  art anywhere in this app (or on web, where the equivalent was also
+  new) for a "remote search picker" — a plain debounced (350ms,
+  matching the existing constant) `TextField` + results list below it,
+  not Flutter's built-in `Autocomplete<T>` (its async `optionsBuilder`
+  integration was fiddlier to get predictably right than a small
+  purpose-built widget). Both call their target API class
+  (`DocumentDirectoryApi`/`ApplicationsApi`) directly rather than
+  through `DocumentDirectoryController`/`ApplicationsListController` —
+  and unlike web, this needed **no new isolated search method**: those
+  API classes are already stateless, so calling `.list(search: ...)`
+  directly from a picker can never disturb the real Documents/
+  Applications list screens' own state the way reusing a Pinia store's
+  paginated fetch action would have. A genuine architectural difference
+  worth remembering, not an oversight.
+- **`new_ats_score_sheet.dart`**: a `SegmentedButton` toggles between
+  "Tracked application" (`ApplicationPicker`) and "Paste a job
+  description" (a plain multiline `TextField`, 50–20000 char hint,
+  server is the real validator) — mirrors web's automatic-job_url-first/
+  paste-as-fallback contract, just surfaced as an upfront choice instead
+  of a retry path. Also accepts an optional `initialAnalysis` (used by
+  `ResumeAnalysisDetailScreen`'s "Score against a job" button), which
+  skips the resume-picker step entirely.
+- **The completed-resume-analysis picker inside `new_ats_score_sheet.dart`
+  and the label lookups in `resume_analyses_tab.dart`/`ats_scores_tab.dart`**
+  all solve the same problem: `ResumeAnalysisRead`/`AtsScoreRead` carry
+  no human-readable file name, so each fetches the user's resume
+  documents (and, for scores, applications) once via the existing
+  directory/list APIs and joins client-side — same fix, applied
+  independently at each call site rather than factored into shared
+  infrastructure, since each needed a slightly different shape (a
+  bottom-sheet list vs. a plain `Map` lookup).
+- **`ResumeAnalysisDetailScreen`'s existing-score lookup**: only wired
+  up when reached via `DocumentsPanel`'s "View Analysis" row action,
+  which threads its `applicationId` through as a `?applicationId=`
+  query param (the one entry point into this screen that actually has
+  an application in context — `AiToolsScreen`'s tab/create flow has
+  none, since a resume analysis isn't owned by any single application).
+  When present, the screen calls `AtsScoresApi.latestForApplication`
+  and shows the existing score (with a "Score again" fallback) instead
+  of always offering a blank "Score against a job" button as if nothing
+  had ever been scored.
+- **`DocumentsPanel`'s "View Analysis" row action** (resume documents
+  only) fetches the latest `ResumeAnalysis` for that document
+  (`latestForDocument`, a page-size-1 trick) and pushes
+  `ResumeAnalysisDetailScreen` — reusing the exact same screen/
+  controller `AiToolsScreen`'s tab uses, so there's no second
+  implementation of the polling/display logic. If no analysis exists
+  yet, it does **not** silently call `create()` — that hits a
+  rate-limited AI call, so it shows a confirm dialog ("No analysis yet
+  — analyze now?") first, mirroring web's `ResumeAnalysisModal.vue`'s
+  explicit "Analyze now" button. This was a bug caught after the first
+  pass shipped (see CHANGELOG.md v0.11.0): the initial version called
+  `create()` automatically whenever `latestForDocument` returned
+  nothing, which meant one tap on a never-analyzed resume silently
+  spent one of the user's ten daily free-tier calls with no
+  confirmation. Note this only guards the *no-row-at-all* case — a
+  `pending`/`processing`/`failed` analysis is still non-null and
+  navigates straight through without a new `create()` call, same as
+  intended.
+- **Result display**: `parsed_resume_card.dart`/`ats_score_result_card.dart`
+  mirror `ParsedResumeDisplay.vue`/`AtsScoreDisplay.vue` field-for-field
+  (skills/keywords as `Chip`s, work experience/education lists, the
+  scrollable "job description used" box). Plain widgets, not `Card`s,
+  embedded directly in each detail screen's scroll body.
+- **Pushed screens, not a dialog or bottom sheet**, for both detail
+  views and "View Analysis" — web used a `Dialog` (desktop has the
+  vertical room); this app's own convention reserves bottom sheets/
+  `AlertDialog` for short forms and confirmations, and a scrollable
+  parsed-resume-plus-score result is closer to Analytics/Documents-
+  directory content, which are full pushed screens here.
+- **No new tests** — same "not part of this pass" precedent every other
+  mobile feature and the web AI Tools work already established (see
+  Testing below).
 
 ### Applications feature (`lib/features/applications/`)
 
@@ -611,8 +732,6 @@ whatever the device gives back.
   BACKEND_SUMMARY.md; Settings currently only hosts logout — see
   "Settings screen" above)
   screen has it, these two don't yet (see "Settings screen" above)
-- An AI-tools card on the Home tab — explicitly deferred until that
-  feature is actually designed (see "Navigation shell" above)
 - In-app document download / offline document storage — downloads
   currently open the presigned URL externally via `url_launcher` only,
   no on-device copy kept
@@ -626,8 +745,9 @@ whatever the device gives back.
   real usage data from 6a/6b to design against
 - Widget/unit tests beyond the one auth smoke test — Applications, the
   nested Contacts/Interviews/Documents panels, the three
-  cross-application directory screens (v0.8.0), and the new
-  push-notification/session-provider code all have none yet
+  cross-application directory screens (v0.8.0), the
+  push-notification/session-provider code, and the AI Tools feature all
+  have none yet
 - iOS build in CI (Android debug build only currently)
 - `file_picker`'s Android/iOS native setup (manifest `queries` entries
   for content-type intents on Android API 30+, any iOS document-picker
@@ -745,7 +865,8 @@ mobile/
       router.dart                 # go_router config: redirects, 2-tab shell
                                    # (Applications + Home) + top-level pushed
                                    # routes (forms, Interviews/Contacts/
-                                   # Documents/Analytics/Settings directories)
+                                   # Documents/Analytics/AI Tools/Settings
+                                   # directories)
       app_shell.dart               # bottom NavigationBar - 2 tabs now, see
                                     # its own doc comment for the full
                                     # 4-tabs-to-2 reasoning
@@ -778,8 +899,7 @@ mobile/
       home/
         presentation/                 # home_screen.dart - card-grid launcher,
                                        # the "Home" tab (Interviews/Contacts/
-                                       # Documents/Analytics cards; AI-tools
-                                       # card planned, not yet added)
+                                       # Documents/Analytics/AI Tools cards)
       settings/
         presentation/                 # settings_screen.dart (currently just
                                        # logout), settings_icon_button.dart
@@ -794,6 +914,26 @@ mobile/
                                        # (one controller, all four endpoints,
                                        # independent fetch/error per section),
                                        # analytics_screen.dart (fl_chart)
+      ai/
+        data/                        # resume_analyses_api.dart, ats_scores_api.dart,
+                                       # polling_timer.dart (Timer.periodic wrapper,
+                                       # first usage in mobile/lib/)
+        domain/                      # ai_job_status.dart, parsed_resume.dart,
+                                       # ats_score_result.dart, resume_analysis.dart,
+                                       # ats_score.dart - mirror backend/app/schemas/ai.py
+        presentation/                 # ai_tools_screen.dart (TabBar host, FAB),
+                                       # resume_analyses_tab.dart/ats_scores_tab.dart,
+                                       # new_analysis_sheet.dart/new_ats_score_sheet.dart
+                                       # (create bottom sheets), resume_document_picker.dart/
+                                       # application_picker.dart (debounced remote search,
+                                       # call the stateless API classes directly - no
+                                       # isolated search method needed, unlike web),
+                                       # resume_analysis_detail_controller.dart/
+                                       # ats_score_detail_controller.dart (.family, fetch-
+                                       # and-poll only - create() lives in the screens),
+                                       # resume_analysis_detail_screen.dart/
+                                       # ats_score_detail_screen.dart, parsed_resume_card.dart/
+                                       # ats_score_result_card.dart, ai_job_status_style.dart
       applications/
         data/applications_api.dart
         domain/                      # application.dart, application_draft.dart
