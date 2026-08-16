@@ -71,7 +71,7 @@ export const useAtsScoresStore = defineStore('atsScores', {
       try {
         const { data } = await api.get<AtsScoreListResponse>('/ai/ats-scores', {
           params: {
-            application_id: params.application_id || undefined,
+            resume_analysis_id: params.resume_analysis_id || undefined,
             page,
             page_size: pageSize,
           },
@@ -143,22 +143,17 @@ export const useAtsScoresStore = defineStore('atsScores', {
 
     /**
      * Isolated, like resumeAnalyses.fetchLatestForDocument() - returns the
-     * most recent score for (applicationId, resumeAnalysisId) directly,
-     * without touching `items`/pagination. The backend's GET /ai/ats-scores
-     * only filters by application_id, not resume_analysis_id, so the
-     * resume_analysis_id match happens client-side over the (already
-     * created_at-desc-ordered) page - `.find()` naturally returns the most
-     * recent match. page_size 100 is a generous cap for one application's
-     * score history; used by ResumeAnalysisModal.vue.
+     * most recent score for resumeAnalysisId directly, without touching
+     * `items`/pagination. The backend's GET /ai/ats-scores filters by
+     * resume_analysis_id directly now and already orders by
+     * created_at desc, so page_size 1 is enough - no client-side `.find()`
+     * needed any more. Used by ResumeAnalysisModal.vue.
      */
-    async fetchLatestForApplication(
-      applicationId: string,
-      resumeAnalysisId: string,
-    ): Promise<AtsScore | null> {
+    async fetchLatestForResumeAnalysis(resumeAnalysisId: string): Promise<AtsScore | null> {
       const { data } = await api.get<AtsScoreListResponse>('/ai/ats-scores', {
-        params: { application_id: applicationId, page: 1, page_size: 100 },
+        params: { resume_analysis_id: resumeAnalysisId, page: 1, page_size: 1 },
       })
-      return data.items.find((item) => item.resume_analysis_id === resumeAnalysisId) ?? null
+      return data.items[0] ?? null
     },
 
     /** Called on unmount of the AI Tools ats-scores view. */
