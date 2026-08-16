@@ -20,10 +20,12 @@ Design notes (unchanged from the S3 version):
 - Downloads are always presigned, time-limited URLs - we never return a
   permanent public R2 URL to the client, and the bucket itself should be
   private (no public-access custom domain configured for it).
-- Object keys are namespaced by user_id/application_id so a bucket listing
-  (if ever misconfigured) doesn't trivially expose one user's files next
-  to another's, and so we can reason about/clean up a user's files by
-  prefix if they delete their account.
+- Object keys are namespaced by user_id so a bucket listing (if ever
+  misconfigured) doesn't trivially expose one user's files next to
+  another's, and so we can reason about/clean up a user's files by prefix
+  if they delete their account. No application_id in the key - a
+  document is no longer created in the context of one application (it
+  can be attached to several, or none - see app/models/document.py).
 
 R2-specific notes:
 - `region_name` must be the literal string "auto" - R2 doesn't have AWS
@@ -72,14 +74,12 @@ def _r2_client():
     )
 
 
-def _build_object_key(
-    user_id: uuid.UUID, application_id: uuid.UUID, filename: str
-) -> str:
+def _build_object_key(user_id: uuid.UUID, filename: str) -> str:
     # A random suffix (not just the original filename) prevents key
     # collisions when a user uploads two files with the same name, and
     # avoids leaking any meaning from the filename itself into the key.
     safe_suffix = uuid.uuid4().hex[:12]
-    return f"users/{user_id}/applications/{application_id}/{safe_suffix}-{filename}"
+    return f"users/{user_id}/documents/{safe_suffix}-{filename}"
 
 
 def validate_upload(file: UploadFile) -> None:
@@ -93,7 +93,6 @@ def validate_upload(file: UploadFile) -> None:
 def upload_document(
     file: UploadFile,
     user_id: uuid.UUID,
-    application_id: uuid.UUID,
 ) -> tuple[str, str]:
     """
     Streams `file` to R2, enforcing MAX_UPLOAD_SIZE_MB without loading
@@ -102,7 +101,7 @@ def upload_document(
     validate_upload(file)
 
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    object_key = _build_object_key(user_id, application_id, file.filename or "upload")
+    object_key = _build_object_key(user_id, file.filename or "upload")
 
     # Read in chunks to enforce the size limit without trusting a
     # client-supplied Content-Length header, which can be forged.
