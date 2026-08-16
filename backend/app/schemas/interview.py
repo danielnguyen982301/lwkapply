@@ -61,6 +61,7 @@ class ApplicationSummary(BaseModel):
     id: uuid.UUID
     company: str
     position: str
+    application_name: str | None
     status: ApplicationStatus
 
 
