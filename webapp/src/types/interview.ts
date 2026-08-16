@@ -79,6 +79,7 @@ export interface InterviewApplicationSummary {
   id: string
   company: string
   position: string
+  application_name: string | null
   status: ApplicationStatus
 }
 

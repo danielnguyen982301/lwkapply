@@ -69,6 +69,10 @@ export interface ResumeAnalysis {
   error_message: string | null
   created_at: string
   updated_at: string
+  /** Set only once status transitions to 'completed' (distinct from
+   * created_at, since parsing is async) - null otherwise, including on a
+   * failed run. */
+  completed_at: string | null
 }
 
 export interface ResumeAnalysisListResponse {
@@ -88,11 +92,16 @@ export interface ResumeAnalysisListParams {
 
 export interface AtsScoreCreatePayload {
   resume_analysis_id: string
-  application_id?: string | null
-  /** Optional - prefers the linked application's job_url when omitted.
-   * Server-enforced 50-20000 char bounds when provided; see
-   * AtsScoresView.vue's create dialog for the client-side hint. */
+  /** Exactly one of these two is required - job_description wins if both
+   * are sent. No application_id anywhere here any more: a score is never
+   * cross-checked against any application's own job details, so there's
+   * nothing for the backend to derive a job_url from server-side - see
+   * BACKEND_SUMMARY.md's "A note on Document / ApplicationDocument".
+   * Server-enforced 50-20000 char bounds on job_description when
+   * provided; see AtsScoresView.vue's create dialog for the client-side
+   * hint. */
   job_description?: string | null
+  job_url?: string | null
 }
 
 // Mirrors AtsScoreRead. `feedback` is typed as AtsScoreResult|null for the
@@ -100,9 +109,9 @@ export interface AtsScoreCreatePayload {
 export interface AtsScore {
   id: string
   resume_analysis_id: string
-  application_id: string | null
   job_description: string | null
   job_description_source: 'pasted' | 'url' | null
+  job_url: string | null
   status: AIJobStatus
   score: number | null
   feedback: AtsScoreResult | null
@@ -119,7 +128,7 @@ export interface AtsScoreListResponse {
 }
 
 export interface AtsScoreListParams {
-  application_id?: string
+  resume_analysis_id?: string
   page?: number
   page_size?: number
 }
