@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
@@ -12,17 +11,28 @@ import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
+import { useConfirm } from 'primevue/useconfirm'
 
-import { useDocumentDirectoryStore } from '@/stores/documentDirectory'
-import ApplicationStatusTag from '@/components/applications/ApplicationStatusTag.vue'
+import { useDocumentsStore } from '@/stores/documents'
+import TruncatedText from '@/components/common/TruncatedText.vue'
+import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue'
+import DocumentEditDialog from '@/components/documents/DocumentEditDialog.vue'
 import {
   DOCUMENT_TYPE_LABELS,
   documentTypeFilterOptions,
   documentTypeSeverity,
 } from '@/lib/document-ui'
-import type { DocumentType, DocumentWithApplication } from '@/types/document'
+import { tooltip } from '@/lib/tooltip'
+import type { Document, DocumentType } from '@/types/document'
 
-const store = useDocumentDirectoryStore()
+// The user's whole document library - a document is a top-level, standalone
+// resource now (see stores/documents.ts / BACKEND_SUMMARY.md's "A note on
+// Document / ApplicationDocument"), so upload/edit/delete all live here
+// rather than only on an application's Documents panel. Attaching an
+// already-uploaded document to a specific application still happens from
+// that application's detail page (components/applications/DocumentsPanel.vue).
+const store = useDocumentsStore()
+const confirm = useConfirm()
 
 const typeFilterOptions = documentTypeFilterOptions()
 
@@ -56,15 +66,18 @@ function clearFilters() {
   store.fetchDocuments({ search: null, file_type: null, page: 1 }).catch(() => {})
 }
 
+function loadDocuments(page = 1) {
+  store.fetchDocuments({ page }).catch(() => {})
+}
+
 onMounted(() => {
-  store.fetchDocuments().catch(() => {})
+  loadDocuments()
 })
 
 const paginatorFirst = computed(() => (store.page - 1) * store.pageSize)
 
 async function onPageChange(event: { first: number; rows: number }) {
-  const page = Math.floor(event.first / event.rows) + 1
-  await store.fetchDocuments({ page }).catch(() => {})
+  await store.fetchDocuments({ page: Math.floor(event.first / event.rows) + 1 }).catch(() => {})
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
@@ -72,17 +85,57 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }
 function formatUploadedAt(value: string): string {
   return dateFormatter.format(new Date(value))
 }
+
+// --- Upload / edit dialogs ---------------------------------------------
+// Both extracted into components/documents/ so DocumentsPanel.vue
+// (application-scoped) can reuse the same upload/edit UX - see those
+// files for why the library store owns both, regardless of which view
+// opened the dialog.
+const uploadDialogVisible = ref(false)
+const editDialogVisible = ref(false)
+const editingDocument = ref<Document | null>(null)
+
+function openEditDialog(doc: Document) {
+  editingDocument.value = doc
+  editDialogVisible.value = true
+}
+
+// --- Delete / download -------------------------------------------------
+function confirmDelete(doc: Document) {
+  confirm.require({
+    message: `Permanently delete "${doc.file_name}"? This removes it from every application it's attached to, and can't be undone.`,
+    header: 'Confirm deletion',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Delete',
+    rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true },
+    acceptProps: { label: 'Delete', severity: 'danger' },
+    accept: () => {
+      store.deleteDocument(doc.id).catch(() => {})
+    },
+  })
+}
+
+function handleDownload(doc: Document) {
+  store.downloadDocument(doc.id).catch(() => {})
+}
 </script>
 
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h1 class="font-display text-xl font-semibold text-ink">Documents</h1>
+      <Button
+        label="Upload document"
+        icon="pi pi-upload"
+        size="small"
+        @click="uploadDialogVisible = true"
+      />
     </div>
 
     <p class="max-w-2xl text-sm text-slate">
-      Every resume, cover letter, and attachment across all your applications, in one place. To
-      upload, replace, or delete a document, open the application it belongs to.
+      Your resume, cover letter, and other file library. Attach a document to as many applications
+      as you like from that application's detail page.
     </p>
 
     <div class="flex flex-wrap items-center gap-3">
@@ -91,7 +144,7 @@ function formatUploadedAt(value: string): string {
         <InputText
           v-model="searchInput"
           type="search"
-          placeholder="Search by file name or company"
+          placeholder="Search by file name"
           class="w-72"
           aria-label="Search documents"
           @input="handleSearchInput"
@@ -110,13 +163,16 @@ function formatUploadedAt(value: string): string {
 
     <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
       <span>{{ store.listError }}</span>
-      <Button
-        label="Retry"
-        link
-        size="small"
-        class="ml-2"
-        @click="store.fetchDocuments().catch(() => {})"
-      />
+      <Button label="Retry" link size="small" class="ml-2" @click="loadDocuments(store.page)" />
+    </Message>
+
+    <Message
+      v-if="store.downloadError"
+      severity="error"
+      closable
+      @close="store.downloadError = null"
+    >
+      {{ store.downloadError }}
     </Message>
 
     <div
@@ -136,10 +192,7 @@ function formatUploadedAt(value: string): string {
       </h2>
       <p class="mx-auto mt-2 max-w-sm text-sm text-slate">
         <template v-if="hasActiveFilter">Try a different search term or type filter.</template>
-        <template v-else>
-          Upload a resume or cover letter from within an application's detail page and it'll show up
-          here.
-        </template>
+        <template v-else>Upload a resume, cover letter, or other file to get started.</template>
       </p>
       <Button
         v-if="hasActiveFilter"
@@ -147,6 +200,13 @@ function formatUploadedAt(value: string): string {
         link
         class="mt-4"
         @click="clearFilters"
+      />
+      <Button
+        v-else
+        label="Upload document"
+        link
+        class="mt-4"
+        @click="uploadDialogVisible = true"
       />
     </div>
 
@@ -159,41 +219,53 @@ function formatUploadedAt(value: string): string {
         aria-label="All your documents"
       >
         <Column header="File name">
-          <template #body="{ data }: { data: DocumentWithApplication }">
-            <span class="font-medium text-ink">{{ data.file_name }}</span>
+          <template #body="{ data }: { data: Document }">
+            <TruncatedText :text="data.file_name" max-width="16rem" class="font-medium text-ink" />
           </template>
         </Column>
         <Column header="Type">
-          <template #body="{ data }: { data: DocumentWithApplication }">
+          <template #body="{ data }: { data: Document }">
             <Tag
               :value="DOCUMENT_TYPE_LABELS[data.file_type]"
               :severity="documentTypeSeverity(data.file_type)"
             />
           </template>
         </Column>
-        <Column header="Company">
-          <template #body="{ data }: { data: DocumentWithApplication }">
-            <RouterLink
-              :to="{ name: 'application-detail', params: { id: data.application.id } }"
-              class="text-ink hover:underline"
-            >
-              {{ data.application.company }}
-            </RouterLink>
-          </template>
-        </Column>
-        <Column header="Position">
-          <template #body="{ data }: { data: DocumentWithApplication }">
-            {{ data.application.position }}
-          </template>
-        </Column>
-        <Column header="Status">
-          <template #body="{ data }: { data: DocumentWithApplication }">
-            <ApplicationStatusTag :status="data.application.status" />
-          </template>
-        </Column>
         <Column header="Uploaded">
-          <template #body="{ data }: { data: DocumentWithApplication }">
+          <template #body="{ data }: { data: Document }">
             {{ formatUploadedAt(data.created_at) }}
+          </template>
+        </Column>
+        <Column header="" style="width: 8rem">
+          <template #body="{ data }: { data: Document }">
+            <div class="flex justify-end gap-1">
+              <Button
+                v-tooltip.bottom="tooltip('Download document')"
+                icon="pi pi-download"
+                aria-label="Download document"
+                link
+                size="small"
+                :loading="store.downloadingId === data.id"
+                @click="handleDownload(data)"
+              />
+              <Button
+                v-tooltip.bottom="tooltip('Edit document type')"
+                icon="pi pi-pencil"
+                aria-label="Edit document type"
+                link
+                size="small"
+                @click="openEditDialog(data)"
+              />
+              <Button
+                v-tooltip.bottom="tooltip('Delete document')"
+                icon="pi pi-trash"
+                aria-label="Delete document"
+                text
+                severity="danger"
+                size="small"
+                @click="confirmDelete(data)"
+              />
+            </div>
           </template>
         </Column>
       </DataTable>
@@ -209,4 +281,8 @@ function formatUploadedAt(value: string): string {
       />
     </div>
   </div>
+
+  <DocumentUploadDialog v-model:visible="uploadDialogVisible" />
+
+  <DocumentEditDialog v-model:visible="editDialogVisible" :document="editingDocument" />
 </template>
