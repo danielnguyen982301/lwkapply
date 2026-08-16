@@ -37,6 +37,7 @@ class SalaryRangeValidationMixin(BaseModel):
 class ApplicationBase(SalaryRangeValidationMixin):
     company: str = Field(min_length=1, max_length=255)
     position: str = Field(min_length=1, max_length=255)
+    application_name: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     status: ApplicationStatus = ApplicationStatus.SAVED
     applied_date: date | None = None
@@ -51,6 +52,7 @@ class ApplicationCreate(ApplicationBase):
 class ApplicationUpdate(SalaryRangeValidationMixin):
     company: str | None = Field(default=None, min_length=1, max_length=255)
     position: str | None = Field(default=None, min_length=1, max_length=255)
+    application_name: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     status: ApplicationStatus | None = None
     applied_date: date | None = None
