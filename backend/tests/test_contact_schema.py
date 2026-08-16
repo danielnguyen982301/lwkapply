@@ -71,6 +71,7 @@ def _application_summary_payload(**overrides: Any) -> dict[str, Any]:
         "id": uuid.uuid4(),
         "company": "Initech",
         "position": "Backend Engineer",
+        "application_name": None,
         "status": ApplicationStatus.SAVED,
     }
     payload.update(overrides)
@@ -121,6 +122,7 @@ class TestApplicationSummary:
             id = uuid.uuid4()
             company = "Initech"
             position = "Backend Engineer"
+            application_name = None
             status = ApplicationStatus.SAVED
 
         summary = ApplicationSummary.model_validate(FakeApplicationRow())
@@ -161,6 +163,7 @@ class TestContactWithApplicationRead:
             id = uuid.uuid4()
             company = "Initech"
             position = "Backend Engineer"
+            application_name = None
             status = ApplicationStatus.SAVED
 
         class FakeContactRow:
