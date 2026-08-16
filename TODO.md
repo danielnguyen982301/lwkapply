@@ -289,6 +289,12 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       card, new `fl_chart` dependency. Same four independently-fetched
       sections as web (Overview/Pipeline/Interview Outcomes/Activity) —
       see MOBILE_SUMMARY.md's "Analytics feature"
+- [x] AI Tools screen (`features/ai/`) — mirrors the backend/web Resume
+      Parser + ATS Score feature, reached from the Home tab's AI Tools
+      card. One `TabBar`-based screen (not two routes, unlike web) with
+      "Resume Analyses"/"ATS Scores" tabs, new create/poll/result flow,
+      and a "View Analysis" row action on the Documents panel — see
+      MOBILE_SUMMARY.md's "AI Tools feature" and CHANGELOG.md v0.11.0
 - [ ] Offline support
 - [ ] In-app document download / offline document storage (currently
       opens the presigned URL externally via `url_launcher` only — see
@@ -299,14 +305,17 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 ## AI Features
 
 - [x] Resume parser — backend (`POST`/`GET /ai/resume-analyses`, async via
-      Celery, Google Gemini) and web UI (`/resume-analyses`, one of the
-      two "AI Tools" tabs) done — no mobile UI yet. See
-      `backend/BACKEND_SUMMARY.md`'s "AI features" section and
-      `webapp/WEBAPP_SUMMARY.md`'s "AI Tools" section
+      Celery, Google Gemini), web UI (`/resume-analyses`, one of the two
+      "AI Tools" tabs), and mobile UI (`AiToolsScreen`'s "Resume
+      Analyses" tab, `/ai-tools`) all done. See
+      `backend/BACKEND_SUMMARY.md`'s "AI features" section,
+      `webapp/WEBAPP_SUMMARY.md`'s "AI Tools" section, and
+      `mobile/MOBILE_SUMMARY.md`'s "AI Tools feature" section
 - [x] ATS score — backend (`POST`/`GET /ai/ats-scores`, prefers the linked
       application's `job_url`, server-side fetch, SSRF-guarded, over
-      asking the user to paste a job description) and web UI
-      (`/ats-scores`, the other "AI Tools" tab) done — no mobile UI yet
+      asking the user to paste a job description), web UI (`/ats-scores`,
+      the other "AI Tools" tab), and mobile UI (`AiToolsScreen`'s "ATS
+      Scores" tab) all done
 - [ ] Job match scoring — deferred until Resume Parser/ATS Score's
       parse-once-reuse-everywhere pattern is validated
 - [ ] Cover letter generator
