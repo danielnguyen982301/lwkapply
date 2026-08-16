@@ -112,6 +112,20 @@ class TestContactsDirectoryAggregation:
         assert by_name["Alice Recruiter"]["application"]["company"] == "Initech"
         assert by_name["Bob Hiring Manager"]["application"]["company"] == "Globex"
 
+    def test_embeds_application_name(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        application = _make_application(
+            db_session, user, application_name="Referral via Jane"
+        )
+        _make_contact(db_session, application, name="Alice Recruiter")
+
+        response = client.get(CONTACTS_URL, headers=auth_headers(user))
+
+        body = response.json()
+        assert (
+            body["items"][0]["application"]["application_name"] == "Referral via Jane"
+        )
+
     def test_empty_when_user_has_no_contacts(self, client, make_user, auth_headers):
         user = make_user()
         response = client.get(CONTACTS_URL, headers=auth_headers(user))
