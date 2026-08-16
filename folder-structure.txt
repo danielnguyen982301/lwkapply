@@ -242,6 +242,38 @@
 │   │   │   └── utils
 │   │   │       └── timezone.dart
 │   │   ├── features
+│   │   │   ├── ai
+│   │   │   │   ├── data
+│   │   │   │   │   ├── ats_scores_api.dart
+│   │   │   │   │   ├── polling_timer.dart
+│   │   │   │   │   └── resume_analyses_api.dart
+│   │   │   │   ├── domain
+│   │   │   │   │   ├── ai_job_status.dart
+│   │   │   │   │   ├── ats_score.dart
+│   │   │   │   │   ├── ats_score_result.dart
+│   │   │   │   │   ├── parsed_resume.dart
+│   │   │   │   │   └── resume_analysis.dart
+│   │   │   │   └── presentation
+│   │   │   │       ├── ai_job_status_style.dart
+│   │   │   │       ├── ai_tools_screen.dart
+│   │   │   │       ├── application_picker.dart
+│   │   │   │       ├── ats_score_detail_controller.dart
+│   │   │   │       ├── ats_score_detail_screen.dart
+│   │   │   │       ├── ats_score_detail_state.dart
+│   │   │   │       ├── ats_score_result_card.dart
+│   │   │   │       ├── ats_scores_list_controller.dart
+│   │   │   │       ├── ats_scores_list_state.dart
+│   │   │   │       ├── ats_scores_tab.dart
+│   │   │   │       ├── new_analysis_sheet.dart
+│   │   │   │       ├── new_ats_score_sheet.dart
+│   │   │   │       ├── parsed_resume_card.dart
+│   │   │   │       ├── resume_analyses_list_controller.dart
+│   │   │   │       ├── resume_analyses_list_state.dart
+│   │   │   │       ├── resume_analyses_tab.dart
+│   │   │   │       ├── resume_analysis_detail_controller.dart
+│   │   │   │       ├── resume_analysis_detail_screen.dart
+│   │   │   │       ├── resume_analysis_detail_state.dart
+│   │   │   │       └── resume_document_picker.dart
 │   │   │   ├── analytics
 │   │   │   │   ├── data
 │   │   │   │   │   └── analytics_api.dart
@@ -451,4 +483,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-122 directories, 330 files
+126 directories, 358 files
