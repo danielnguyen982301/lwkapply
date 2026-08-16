@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/ai/presentation/ai_tools_screen.dart';
+import '../features/ai/presentation/ats_score_detail_screen.dart';
+import '../features/ai/presentation/resume_analysis_detail_screen.dart';
 import '../features/analytics/presentation/analytics_screen.dart';
 import '../features/applications/presentation/application_form_screen.dart';
 import '../features/applications/presentation/applications_list_screen.dart';
@@ -117,6 +120,35 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/analytics',
         name: 'analytics',
         builder: (context, state) => const AnalyticsScreen(),
+      ),
+      // Also a plain top-level push, reached via the "AI Tools" card on
+      // the Home tab. One route for the tabbed landing screen, plus two
+      // detail routes it (and DocumentsPanel's "View Analysis" row
+      // action) navigate into — see ai_tools_screen.dart's doc comment
+      // for why this is a single `TabBar` screen rather than two
+      // separate shell branches or routes the way Applications'
+      // List/Board split works on web.
+      GoRoute(
+        path: '/ai-tools',
+        name: 'ai-tools',
+        builder: (context, state) => const AiToolsScreen(),
+      ),
+      GoRoute(
+        path: '/resume-analyses/:id',
+        name: 'resume-analysis-detail',
+        builder: (context, state) => ResumeAnalysisDetailScreen(
+          analysisId: state.pathParameters['id']!,
+          // Only ever set by DocumentsPanel's "View Analysis" row
+          // action — see that call site's doc comment for why.
+          applicationId: state.uri.queryParameters['applicationId'],
+        ),
+      ),
+      GoRoute(
+        path: '/ats-scores/:id',
+        name: 'ats-score-detail',
+        builder: (context, state) => AtsScoreDetailScreen(
+          scoreId: state.pathParameters['id']!,
+        ),
       ),
       // Also a plain top-level push, same reasoning. Reached via the
       // settings icon on Applications'/Home's (and ideally every
