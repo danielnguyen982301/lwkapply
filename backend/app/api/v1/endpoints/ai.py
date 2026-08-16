@@ -33,7 +33,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.application import Application
 from app.models.ats_score import AtsScore
 from app.models.document import Document, DocumentType
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
@@ -90,9 +89,9 @@ def _enforce_ai_rate_limit(user: User) -> None:
 def _get_owned_document(db: Session, document_id: uuid.UUID, user: User) -> Document:
     document = (
         db.execute(
-            select(Document)
-            .join(Application, Document.application_id == Application.id)
-            .where(Document.id == document_id, Application.user_id == user.id)
+            select(Document).where(
+                Document.id == document_id, Document.user_id == user.id
+            )
         )
         .scalars()
         .first()
@@ -102,25 +101,6 @@ def _get_owned_document(db: Session, document_id: uuid.UUID, user: User) -> Docu
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
     return document
-
-
-def _get_owned_application(
-    db: Session, application_id: uuid.UUID, user: User
-) -> Application:
-    application = (
-        db.execute(
-            select(Application).where(
-                Application.id == application_id, Application.user_id == user.id
-            )
-        )
-        .scalars()
-        .first()
-    )
-    if not application:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
-        )
-    return application
 
 
 def _get_owned_resume_analysis(
@@ -273,16 +253,10 @@ def create_ats_score(
             "wait for resume_analysis.status to be 'completed' before scoring it.",
         )
 
-    application = None
-    if payload.application_id:
-        application = _get_owned_application(db, payload.application_id, current_user)
-
-    has_job_url = bool(application and application.job_url)
-    if not payload.job_description and not has_job_url:
+    if not payload.job_description and not payload.job_url:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Provide job_description, or an application_id whose "
-            "job_url is set.",
+            detail="Provide job_description or job_url.",
         )
 
     _enforce_ai_rate_limit(current_user)
@@ -290,9 +264,9 @@ def create_ats_score(
     ats_score = AtsScore(
         user_id=current_user.id,
         resume_analysis_id=resume_analysis.id,
-        application_id=application.id if application else None,
         job_description=payload.job_description,
-        job_description_source="pasted" if payload.job_description else None,
+        job_description_source="pasted" if payload.job_description else "url",
+        job_url=payload.job_url if not payload.job_description else None,
     )
     db.add(ats_score)
     db.commit()
@@ -313,15 +287,15 @@ def get_ats_score(
 
 @router.get("/ats-scores", response_model=AtsScoreListResponse)
 def list_ats_scores(
-    application_id: uuid.UUID | None = None,
+    resume_analysis_id: uuid.UUID | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     stmt = select(AtsScore).where(AtsScore.user_id == current_user.id)
-    if application_id:
-        stmt = stmt.where(AtsScore.application_id == application_id)
+    if resume_analysis_id:
+        stmt = stmt.where(AtsScore.resume_analysis_id == resume_analysis_id)
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
