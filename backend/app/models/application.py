@@ -39,6 +39,12 @@ class Application(Base, UUIDMixin, TimestampMixin):
     )
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     position: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Optional user-chosen label to tell apart multiple applications to the
+    # same company/position (e.g. re-applying after a rejection, or two
+    # different postings with the same title) - falls back to
+    # "company - position" for display wherever it's blank, purely a
+    # client-side concern (see webapp's application-ui.ts).
+    application_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[ApplicationStatus] = mapped_column(
         Enum(
