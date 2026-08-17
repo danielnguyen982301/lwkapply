@@ -142,6 +142,10 @@ class AtsScoreRead(BaseModel):
     # AtsScore.document_file_name - see that property's docstring. Always
     # present, same reasoning as ResumeAnalysisRead.document_file_name.
     document_file_name: str
+    # AtsScore.analysis_name - see that property's docstring. Always
+    # present too, despite ResumeAnalysis.analysis_name itself being
+    # nullable.
+    analysis_name: str
 
 
 class AtsScoreListResponse(BaseModel):
