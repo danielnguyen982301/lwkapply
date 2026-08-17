@@ -154,6 +154,11 @@ onBeforeUnmount(() => {
             />
           </template>
         </Column>
+        <Column field="analysis_name" header="Analysis used">
+          <template #body="{ data }: { data: AtsScore }">
+            <TruncatedText :text="data.analysis_name" max-width="14rem" />
+          </template>
+        </Column>
         <Column header="Status">
           <template #body="{ data }: { data: AtsScore }">
             <Tag
