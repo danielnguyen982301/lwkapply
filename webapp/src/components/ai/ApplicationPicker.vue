@@ -41,10 +41,11 @@ const formatAppliedDate = formatDate
   <AutoComplete
     v-model="model"
     :suggestions="suggestions"
-    option-label="company"
+    :option-label="model?.application_name ? 'application_name' : 'company'"
     placeholder="Search your tracked applications…"
     class="w-full"
     fluid
+    complete-on-focus
     @complete="onComplete"
   >
     <template #option="{ option }: { option: Application }">

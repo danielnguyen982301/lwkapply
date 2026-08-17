@@ -101,6 +101,7 @@ const formatUploadedAt = formatDateTime
           placeholder="Search your document library…"
           class="w-full"
           fluid
+          complete-on-focus
           @complete="onSearch"
         >
           <template #option="{ option }: { option: Document }">

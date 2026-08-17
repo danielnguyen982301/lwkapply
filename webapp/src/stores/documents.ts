@@ -125,11 +125,8 @@ export const useDocumentsStore = defineStore('documents', {
      * Isolated: returns matching documents directly, without touching
      * `items`/`page`/`search`/`fileType`. Used by
      * components/ai/ResumeDocumentPicker.vue for a live debounced search
-     * (default pageSize=10 - autocomplete suggestions, not a real listing)
-     * and by the AI Tools views to build a document_id -> file_name label
-     * lookup (a larger pageSize, since they want every resume the user
-     * has, not just top matches). Reusing fetchDocuments() for either
-     * would clobber whatever the actual Document Library view has set,
+     * (default pageSize=10 - autocomplete suggestions, not a real listing).
+     * Reusing fetchDocuments() would clobber whatever the actual Document Library view has set,
      * since both are reachable in the same session without a full reload.
      */
     async searchDocuments(

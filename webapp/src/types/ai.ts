@@ -57,6 +57,13 @@ export interface ResumeAnalysisCreatePayload {
   document_id: string
 }
 
+// Mirrors ResumeAnalysisUpdate - analysis_name is the only client-editable
+// field (mirrors DocumentUpdatePayload's file_type, the same
+// single-editable-field shape).
+export interface ResumeAnalysisUpdatePayload {
+  analysis_name: string
+}
+
 // Mirrors ResumeAnalysisRead. `parsed_data` is typed as ParsedResume|null
 // rather than a loose object - it's exactly that shape once status is
 // 'completed' (see ParsedResumeDisplay.vue, the one place this gets
@@ -73,6 +80,14 @@ export interface ResumeAnalysis {
    * created_at, since parsing is async) - null otherwise, including on a
    * failed run. */
   completed_at: string | null
+  /** Auto-generated (file name + completion timestamp) once status
+   * transitions to 'completed', null otherwise - same lifecycle as
+   * completed_at. Editable afterwards via PATCH /ai/resume-analyses/{id}. */
+  analysis_name: string | null
+  /** The source document's file_name, joined in server-side - always
+   * present (document_id is a required FK). Lets the UI render a label
+   * without a separate Documents fetch. */
+  document_file_name: string
 }
 
 export interface ResumeAnalysisListResponse {
@@ -84,6 +99,8 @@ export interface ResumeAnalysisListResponse {
 
 export interface ResumeAnalysisListParams {
   document_id?: string
+  status?: AIJobStatus
+  search?: string
   page?: number
   page_size?: number
 }
@@ -118,6 +135,14 @@ export interface AtsScore {
   error_message: string | null
   created_at: string
   updated_at: string
+  /** Set only once status transitions to 'completed' (distinct from
+   * created_at, since scoring is async) - null otherwise, including on a
+   * failed run. */
+  scored_at: string | null
+  /** The underlying resume document's file_name, joined in server-side
+   * (via resume_analysis.document) - always present. Same rationale as
+   * ResumeAnalysis.document_file_name. */
+  document_file_name: string
 }
 
 export interface AtsScoreListResponse {
