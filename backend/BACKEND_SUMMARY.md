@@ -729,6 +729,57 @@ would care about. `ResumeAnalysis.completed_at` is set only when
 — stays `NULL` on a failed run, distinct from `created_at` since parsing
 is async and the two can be seconds or minutes apart.
 
+### `analysis_name`, `scored_at`, and server-side `document_file_name` joins (added after initial launch)
+
+Three small follow-up additions, all still within this same AI Features pass:
+
+- **`ResumeAnalysis.analysis_name`** (nullable `String(255)`) — auto-generated
+  by `app/tasks/ai.py::_generate_analysis_name()` in the same commit as the
+  `COMPLETED` transition: a slugified source file name + the completion
+  timestamp (`YYYYMMDD_HHMMSS`) + a 6-char random hex suffix, e.g.
+  `resume_20260817_143205_a1b2c3`. The random suffix exists so two analyses
+  of the *same* file completing in the same second still get distinct names —
+  deliberately **not** DB-uniqueness-enforced, since the field is also
+  user-editable afterward (`PATCH /ai/resume-analyses/{id}`,
+  `ResumeAnalysisUpdate` — the only editable field) and a unique constraint
+  would fight that. Stays `NULL` on a failed run, same lifecycle as
+  `completed_at`.
+- **`AtsScore.scored_at`** — identical shape/reasoning to
+  `ResumeAnalysis.completed_at`, set by `score_ats_task` in the same commit
+  as its own `COMPLETED` transition.
+- **`document_file_name` computed properties** (`ResumeAnalysis.document_file_name`;
+  `AtsScore.document_file_name`, one hop further via `resume_analysis.document`;
+  `AtsScore.analysis_name`, one hop via `resume_analysis.analysis_name`) —
+  plain Python `@property`s, not DB columns, serialized into
+  `ResumeAnalysisRead`/`AtsScoreRead` via Pydantic's `from_attributes=True`
+  (which happily resolves a property through `getattr`, same as any other
+  attribute). These exist specifically to remove a frontend-only join that
+  used to live in `ResumeAnalysesView.vue`/`AtsScoresView.vue` (fetch up to
+  100 documents/analyses client-side, build a lookup map) — see
+  WEBAPP_SUMMARY.md's "AI Tools" section. That join silently mislabeled
+  anything past the 100-item cap; joining server-side removes both the cap
+  and the extra round trips. `AtsScore.analysis_name` raises `RuntimeError`
+  rather than returning `None` if the underlying
+  `resume_analysis.analysis_name` is somehow `NULL` — should be genuinely
+  impossible, since `create_ats_score` requires
+  `resume_analysis.status == COMPLETED`, which is set in the same commit as
+  `analysis_name`. List/get endpoints eager-load the relevant relationship
+  chain with `joinedload(...)` (a many-to-one join, so no row-multiplication
+  risk the way `joinedload` on a one-to-many collection would carry) —
+  without it, serializing a 100-row list would issue one extra lazy-load
+  query per row per property.
+- **`GET /ai/resume-analyses` gained `status`/`search` query params** —
+  `status` (aliased internally to `status_filter` to avoid shadowing the
+  `fastapi.status` module already imported in this file, same fix
+  `applications.py::list_applications` already uses) filters by exact
+  `AIJobStatus`; `search` does an `ilike` match against `analysis_name`.
+  Added specifically to replace `NewAtsScoreDialog.vue`'s resume picker,
+  which used to fetch the single most recent page (`page_size=100`, the
+  backend's max) and filter to `status="completed"` client-side — a user
+  with more than 100 completed analyses could never find the rest. The
+  picker is now a live-searched `AutoComplete` hitting these two params
+  directly (`status=completed&search=...`).
+
 ### Job description sourcing — pasted description or pasted URL, no `Application` link
 
 **Superseded design, worth knowing the history of.** This feature
