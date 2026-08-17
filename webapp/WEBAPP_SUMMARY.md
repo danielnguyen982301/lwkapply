@@ -45,7 +45,18 @@ frontend.
   (`ApplicationStatusTag`), delete via `ConfirmDialog`
 - **Details / New** (`ApplicationFormView.vue`): one component, two routes
   (`application-new`, `application-detail`); PrimeVue form controls with
-  client-side validation; create redirects to detail on success
+  client-side validation; create redirects to detail on success. The
+  page's `<h1>` is the `application_name` field itself — an editable
+  text input styled to read as a heading (no visible border by default;
+  PrimeVue's own `.p-inputtext` border/shadow needed `!`-important
+  Tailwind overrides to actually disappear, since its base styles beat
+  plain utility classes), placeholder falling back to `company` (then
+  "Edit Application"/"New Application") when blank. A small pencil icon
+  next to it, wrapped in a native `<label for="application_name">` (so
+  clicking it focuses the input via the browser's own label/input
+  association, no click handler needed) plus a `v-tooltip` ("Edit
+  application name"), signals that it's editable rather than static text
+  — the field isn't otherwise present anywhere else in the form
 - **Kanban board** (`ApplicationBoardView.vue`): columns per status,
   drag-and-drop moves via `vue-draggable-plus`, optimistic UI with
   server sync; keyboard/screen-reader path via per-card status `Select`
@@ -102,11 +113,54 @@ instead. This bit `LoginView.spec.ts` directly during the migration.
 ### PrimeVue usage
 
 Configured in `src/main.ts` (Aura theme, `ConfirmationService`,
-`primeicons`). Global `ConfirmDialog` lives in `App.vue`. Components used
+`primeicons`, and the `Tooltip` directive registered globally as
+`v-tooltip`). Global `ConfirmDialog` lives in `App.vue`. Components used
 across the app include `Button`, `InputText`, `Password`, `Select`,
 `DataTable`, `Column`, `Paginator`, `Tag`, `Badge`, `Card`, `Message`,
 `ProgressSpinner`, `TabMenu`, `DatePicker`, `InputNumber`, `Textarea`,
 `IconField`, `InputIcon`, `Dialog`, and `ConfirmDialog`.
+
+**`v-tooltip`, not the native `title` attribute**, on every icon-only
+action button app-wide — native `title` has a fixed, unstyleable ~1s
+OS-level show delay that makes an icon-only control feel unresponsive on
+hover. `src/lib/tooltip.ts`'s `tooltip(value)` helper returns `{ value,
+showDelay: 150 }`, so every usage (`v-tooltip.bottom="tooltip('Edit
+contact')"`) gets the same fast, consistent delay instead of each call
+site hand-rolling its own options object. Plain text still uses native
+`title` where it's genuinely just "show the full value of this truncated
+cell on hover," not a primary interactive affordance — see
+`TruncatedText.vue` below.
+
+**`components/common/TruncatedText.vue`** — single-line ellipsis
+truncation with an explicit `max-width` and a `title` fallback showing
+the full value on hover. Exists because a bare Tailwind `truncate` class
+does nothing by itself inside a `DataTable` cell: the `<td>` grows to fit
+its content in an auto-layout table, so truncation needs a hard width
+constraint on the inner element, not just `overflow-hidden`. Used across
+every list/directory table's free-text columns (`ApplicationListView.vue`,
+`ContactDirectoryView.vue`, `InterviewDirectoryView.vue`,
+`DocumentDirectoryView.vue`, the AI Tools tables, and the AutoComplete
+picker/dialog suggestion lists) — company/position/application_name/
+file_name/location/title, anything that can't be trusted to fit.
+
+**`src/lib/row-click.ts`**'s `useApplicationRowClick<T>(getApplicationId)`
+— a shared composable returning a `handleRowClick` handler for
+`DataTable`'s `@row-click`: skips clicks that originated on an
+already-interactive element inside the row (a link, a button — checked
+via `event.originalEvent.target.closest('a, button')`), otherwise
+navigates to `application-detail`. Used by `ApplicationListView.vue`
+(`row => row.id`), `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`
+(`row => row.application.id`) so clicking anywhere in a row opens the
+application, not just its Company-column link.
+
+**`src/lib/date-utils.ts`**'s `formatDate`/`formatDateTime` — two shared
+`Intl.DateTimeFormat` instances (date-only `'medium'`; date+time
+`'medium'`/`'short'`), replacing what used to be eight separately
+hand-constructed formatter instances scattered across pickers, dialogs,
+and directory views. `formatDateTime` is used wherever two rows could
+otherwise share a date-only label (a resume re-uploaded/re-analyzed
+same-day, two documents with the same file name) and the time is what
+actually tells them apart.
 
 ### Contacts
 
@@ -121,8 +175,12 @@ single application (CRUD), one a read-only cross-application listing:
   application's contact list at a time, keyed by `applicationId` so a
   slow response can't clobber the panel after navigating to a different
   application; `reset()` is called on unmount for the same reason. Add/edit
-  via a PrimeVue `Dialog` (name required, client-side email-format check,
-  title, LinkedIn URL); delete via the existing `ConfirmDialog` pattern.
+  via `components/contacts/ContactFormDialog.vue` (name required,
+  client-side email-format check, title, LinkedIn URL) — one dialog for
+  both, keyed off a `contact: Contact | null` prop (`null` = add mode);
+  `createContact()`/`updateContact()` already patch the store's own
+  `items` array on success, so the panel needs no follow-up sync, no
+  emit from the dialog. Delete via the existing `ConfirmDialog` pattern.
 - **Directory view** (`ContactDirectoryView.vue`, route `/contacts`, the
   "Contacts" nav item in `AppLayout.vue` — no longer disabled): every
   contact across every application the user owns, with the parent
@@ -151,12 +209,16 @@ cross-application listing:
   backend endpoint IS paginated (see BACKEND_SUMMARY.md), so the store
   also tracks `page`/`pageSize`/`total` like the Applications store, and
   the panel shows a `Paginator` once there's more than one page.
-  Schedule/edit via a PrimeVue `Dialog`: type, date & time (`DatePicker`
+  Schedule/edit via `components/interviews/InterviewFormDialog.vue`
+  (same one-dialog-both-modes shape as `ContactFormDialog.vue`, keyed off
+  an `interview: Interview | null` prop): type, date & time (`DatePicker`
   with `show-time`), duration in minutes, result, and freeform feedback.
   Create and update both refetch the current page afterward rather than
   patching the item in place client-side, since the list is
   server-sorted by `scheduled_at` and a client-side guess at where a
-  new/edited row belongs could land in the wrong spot.
+  new/edited row belongs could land in the wrong spot — so, unlike
+  `ContactFormDialog.vue`, the dialog needs no emit either (the store's
+  own refetch already keeps the panel in sync).
 - **Directory view** (`InterviewDirectoryView.vue`, route `/interviews`,
   the "Interviews" nav item in `AppLayout.vue` — no longer disabled):
   every interview across every application the user owns, with the
@@ -184,46 +246,70 @@ cross-application listing:
 
 ### Documents
 
-Two separate pieces, backed by two separate stores — same split as
-Contacts and Interviews, one scoped to a single application (upload/
-update/delete), one a read-only cross-application listing:
+Reworked into a top-level document library, matching the backend's own
+decoupling (see BACKEND_SUMMARY.md's "A note on Document /
+ApplicationDocument") — a document is no longer owned by exactly one
+application, so this is no longer a CRUD-panel-vs-read-only-directory
+split like Contacts/Interviews. Instead, **two stores split by
+relationship, not by CRUD-vs-read-only**:
 
-- **Panel** (`DocumentsPanel.vue`): same location/gating as Contacts and
-  Interviews. Pinia `documents` store (`src/stores/documents.ts`) — same
-  scoping pattern, paginated like Interviews.
-- Upload dialog: plain native `<input type="file">` (not PrimeVue's
-  `FileUpload` — not currently part of this app's PrimeVue usage) plus a
-  document-type select; uploads as `multipart/form-data`. Downloading
-  fetches a short-lived presigned S3 URL from the backend per click and
-  opens it directly (`window.open`) — the API never returns a permanent
-  file URL, so nothing is cached client-side. A separate, smaller edit
-  dialog covers the one field the backend actually allows changing after
-  upload (`file_type`); delete uses the existing `ConfirmDialog` pattern.
-- **Directory view** (`DocumentDirectoryView.vue`, route `/documents`,
-  the "Documents" nav item in `AppLayout.vue` — no longer disabled):
-  every document across every application the user owns, with the
-  parent application's company/position/status shown per row and
-  linking back to `application-detail`. Read-only by design, same
-  reasoning as the Contacts/Interviews directories — the empty state and
-  copy point the user back to the relevant application to upload/edit a
-  document. Pinia `documentDirectory` store
-  (`src/stores/documentDirectory.ts`) — paginated, same
-  `DataTable`/`Paginator` skeleton as the other two directories. One
-  deliberate divergence from both: this is the only directory combining
-  Contacts' debounced `IconField`/`InputText` search (matching
-  `file_name` or company) _with_ Interviews' PrimeVue `Select` filter
-  (`file_type`), since Document has both a name-like field and an enum,
-  and the backend supports filtering on both at once. Table columns show
-  file name, type as a `Tag` (`documentTypeSeverity()`), company,
-  position, application status, and upload date.
+- **`stores/documents.ts`** — the user's whole document library:
+  paginated list (search by `file_name`, filter by `file_type`), upload,
+  update (`file_type` only), download (presigned R2 URL, minted per
+  click and opened directly via `window.open` — the API never returns a
+  permanent file URL), and permanent delete. Used by
+  `DocumentDirectoryView.vue` (route `/documents`, the "Documents" nav
+  item — now the primary place to manage the library, not a read-only
+  view) and, for search/upload/download, by `DocumentsPanel.vue` too.
+- **`stores/applicationDocuments.ts`** — one application's *attached*
+  documents: list, attach (`POST`, picks an existing library document by
+  id), detach (`DELETE`, removes the link only — never deletes the
+  document). Used by `DocumentsPanel.vue` (`components/applications/`),
+  rendered inside `ApplicationFormView.vue` same as Contacts/Interviews.
+  `confirmDetach()`'s copy is explicit that this doesn't delete the
+  document ("... stays in your document library").
+- **Three shared dialog components** (`components/documents/`), used by
+  both `DocumentsPanel.vue` and `DocumentDirectoryView.vue`:
+  - `DocumentUploadDialog.vue` — uploads straight to the library
+    (`useDocumentsStore`), regardless of which view opened it. Emits
+    `uploaded` with the created `Document`; closes itself immediately on
+    success. `DocumentsPanel.vue`'s extra step — attaching the new
+    document to the current application — is deliberately **not** this
+    component's concern: the panel does that as a follow-up call in its
+    `uploaded` handler, after the dialog has already closed, surfacing
+    any attach failure via its own `attachError` message rather than
+    inside the (by then closed) dialog
+  - `DocumentEditDialog.vue` — edits `file_type`, always through the
+    library store even when opened from the application-scoped panel
+    (`file_type` is a property of the document, not of any one
+    application it's attached to). `DocumentsPanel.vue` patches its own
+    `applicationDocuments.items` array on the `updated` emit, since
+    that's a different store's array than the one the dialog itself
+    updated
+  - `DocumentAttachDialog.vue` — only used by `DocumentsPanel.vue` today
+    (pulled out alongside the other two anyway, to keep the panel's
+    template down to just the list it owns). `AutoComplete` search
+    against the library (already-attached documents filtered out of the
+    suggestions client-side, since attaching one twice would just `409`);
+    suggestion rows show file name (`TruncatedText`) and upload date+time
+    (`formatDateTime` — two documents can share a file name, e.g.
+    "resume.pdf" re-uploaded after edits, so the timestamp is what tells
+    them apart)
 - `src/types/document.ts` mirrors `DocumentRead`/`DocumentUpdate`/the
-  presigned-download response, plus `DocumentApplicationSummary` /
-  `DocumentWithApplication` (directory, adds the embedded `application`
-  summary) and `DocumentDirectoryParams`. `src/lib/document-ui.ts`
-  mirrors `interview-ui.ts`'s labels/options/severity convention, plus
-  `documentTypeFilterOptions()` (mirrors
-  `interviewResultFilterOptions()`'s "All types" / `null`-option
-  convention).
+  presigned-download response — no more `application_id` anywhere on
+  `Document`, no more `DocumentApplicationSummary`/`DocumentWithApplication`
+  (a document can have zero, one, or several parent applications now, so
+  there's no single one left to embed). New
+  `ApplicationDocumentCreatePayload` for the attach call.
+  `src/lib/document-ui.ts` unchanged (labels/options/severity,
+  `documentTypeFilterOptions()`).
+
+Table columns on `DocumentDirectoryView.vue`: file name (`TruncatedText`),
+type as a `Tag`, and uploaded date+time (`formatDateTime` — was date-only
+before this pass, changed to match the pickers/attach dialog's
+same-file-name-distinguishing reasoning above). No more company/position/
+status columns — those only made sense when a document had exactly one
+parent application.
 
 ### Analytics
 
@@ -298,36 +384,93 @@ matching every other feature's "one store per resource" convention.
   "don't leak a background operation into a screen the user has left"
   reasoning `stores/documents.ts`'s `reset()`-on-unmount already
   established, just applied to an interval instead of request state.
+- **`AtsScore` has no application link at all** (see
+  BACKEND_SUMMARY.md's "A note on Document / ApplicationDocument") — the
+  create payload takes `job_url` directly instead of an `application_id`
+  for the backend to resolve later. `NewAtsScoreDialog.vue`'s job-
+  description-source toggle has three options, not two: "Use a tracked
+  application" (`ApplicationPicker.vue` picks an `Application`, and the
+  view reads `selectedApplication.job_url` client-side into the payload —
+  a client-side warning shows if the picked application has no
+  `job_url`), "Paste a job URL" (a plain `InputText`, sent as `job_url`
+  directly, no application involved), or "Paste a job description".
+- **Create/detail dialogs extracted into their own components**
+  (`components/ai/`): `NewResumeAnalysisDialog.vue`/
+  `ResumeAnalysisDetailDialog.vue` (out of `ResumeAnalysesView.vue`) and
+  `NewAtsScoreDialog.vue`/`AtsScoreDetailDialog.vue` (out of
+  `AtsScoresView.vue`). Both detail dialogs read their store's `current`
+  directly (set by the parent right before opening, and reassigned by
+  `store.create()` on a fresh create or a failed-score retry) rather than
+  taking the record as a prop — a prop would need the parent to re-sync
+  it on every retry; reading the store directly means it doesn't have to.
+  Both own their own polling start/stop, keyed off their `visible` model.
 - **New reusable components** (`components/ai/`): `ResumeDocumentPicker.vue`
   / `ApplicationPicker.vue` (both a `defineModel`-based PrimeVue
   `AutoComplete` — first use of that component in this codebase —
   debounced search, mirroring `DocumentDirectoryView.vue`'s 300ms
   debounce), `ParsedResumeDisplay.vue` / `AtsScoreDisplay.vue`
   (read-only result renderers), `AiToolsTabs.vue`.
+  - `ResumeDocumentPicker.vue`'s suggestions show upload date+time
+    (`formatDateTime`) next to the (`TruncatedText`) file name — two
+    resumes can share a file name (a re-upload after edits), so the
+    timestamp is what actually tells them apart.
+  - `ApplicationPicker.vue`'s suggestions show `application_name` (when
+    set, truncated) and `applied_date` alongside company/position, plus
+    the existing "Has job URL"/"No job URL" tag.
+  - `AtsScoreDisplay.vue` shows `job_url` (when the score was sourced
+    from one) instead of the old `applicationSummary` prop — there's no
+    application to summarize from any more.
 - **Isolated search methods, not the existing directory stores' mutating
   fetches.** `ResumeDocumentPicker`/`ApplicationPicker` need live search
   against `documents`/`applications`, but calling
-  `documentDirectory.fetchDocuments()`/`applications.fetchApplications()`
-  directly would clobber the Documents/Applications List views' own
-  `items`/`page`/`filters` state, since both are reachable in the same
-  session without a full reload. Fixed by adding
-  `documentDirectory.searchResumeDocuments(query, pageSize?)` and
+  `documents.fetchDocuments()`/`applications.fetchApplications()`
+  directly would clobber the Documents Library/Applications List views'
+  own `items`/`page`/`filters` state, since both are reachable in the
+  same session without a full reload. Fixed by
+  `documents.searchDocuments(query, fileType?, pageSize?)` and
   `applications.searchApplications(query)` — small isolated methods that
   return data directly without touching shared list state. Same
   reasoning extends to `resumeAnalyses.fetchLatestForDocument()`/
-  `fetchCompletedForPicker()` and `atsScores.fetchLatestForApplication()`.
-- **`ResumeAnalysisModal.vue`**: opened from a new per-row action on
+  `fetchCompletedForPicker()` and
+  `atsScores.fetchLatestForResumeAnalysis()` (the latter renamed from
+  `fetchLatestForApplication()` now that a score is looked up by
+  `resume_analysis_id` alone, no `application_id` to also filter by —
+  and simplified in the process: the backend's `GET /ai/ats-scores` now
+  filters by `resume_analysis_id` directly, so the store no longer needs
+  its own client-side `.find()` over a larger page the way the old
+  application-scoped version did).
+- **`ResumeAnalysisModal.vue`**: opened from a per-row action on
   `components/applications/DocumentsPanel.vue` (icon-only button, resume-
   type documents only) — lets a user view/start an analysis and score it
   against the current application directly from the Documents panel,
-  without switching to the AI Tools tab and hunting for which application
-  a resume belongs to. Shows only the *latest* analysis/score for
-  `(documentId, applicationId)`, not full history (that's the AI Tools
-  tab's job). Reuses `resumeAnalyses`/`atsScores`' `current`/polling state
-  directly rather than local component state — safe because this modal,
+  without switching to the AI Tools tab. Takes a `jobUrl: string | null`
+  prop (the current application's `job_url`, already loaded by the
+  parent `ApplicationFormView.vue`) rather than an `applicationId` — the
+  score itself no longer references any application, so there's nothing
+  to derive server-side. Shows only the *latest* analysis/score for the
+  document, not full history (that's the AI Tools tab's job). Reuses
+  `resumeAnalyses`/`atsScores`' `current`/polling state directly rather
+  than local component state — safe because this modal,
   `ResumeAnalysesView`, and `AtsScoresView` are never mounted at the same
   time (different routes, Vue Router unmounts one before mounting
   another).
+  - **Can re-score even when a completed score already exists** — a
+    "Score again" toggle reveals the same scoring form below the
+    existing score, without hiding it until the new attempt actually
+    completes. This matters specifically because a score has no
+    application link any more: the *latest* score for a resume could
+    just as easily be one run from `AtsScoresView.vue` against a
+    completely different application's job description, so "there's
+    already a score" no longer means "there's nothing useful left to do
+    here." A `showRescoreForm` ref plus a `showScoreForm` computed
+    (`!current || showRescoreForm`) drive this; a watcher on the score's
+    `status` collapses the form back down once a rescore actually
+    completes. Fixed two computeds (`atsScoreErrorMessage`/
+    `showAtsPasteFallback`) that used to gate on `!atsScores.current` —
+    during a rescore `current` still holds the *previous* completed
+    score while the new attempt is in flight/failing, so that guard
+    would have silently swallowed a real rescore error instead of
+    showing it.
 - **Cross-link**: a completed analysis's detail view has a "Score against
   a job" button that navigates to `{ name: 'ats-scores', query:
   { resume_analysis_id } }`; `AtsScoresView.vue` reads that query param on
@@ -343,10 +486,19 @@ matching every other feature's "one store per resource" convention.
   `DocumentsPanel.vue` upload-dialog convention of a `Message` at the top
   of the form — the modal's inline buttons just didn't have an
   equivalent form to attach one to.
-- Job-description length hint (50–20000 chars) on `AtsScoresView.vue`'s
-  paste `Textarea` is a client-side hint only — the server is the real
-  validator, same "hint, not a hard block" approach as everywhere else
-  a backend constraint is surfaced client-side in this app.
+- Job-description length hint (50–20000 chars) on the paste `Textarea`
+  (`NewAtsScoreDialog.vue`, `AtsScoreDetailDialog.vue`'s retry form,
+  `ResumeAnalysisModal.vue`'s paste fallback) is a client-side hint only
+  — the server is the real validator, same "hint, not a hard block"
+  approach as everywhere else a backend constraint is surfaced
+  client-side in this app.
+- Resume Analyses table gained an "Analyzed At" column
+  (`formatDateTime(data.completed_at)`, showing "—" while still
+  pending/failed) alongside the existing "Created" column — `completed_at`
+  is the field that actually distinguishes re-runs of the same resume.
+  `NewAtsScoreDialog.vue`'s resume `Select` shows the same "Analyzed at"
+  timestamp next to each (`TruncatedText`) resume label, for the same
+  reason.
 
 ## What's deliberately not here yet
 
@@ -410,11 +562,17 @@ Beyond the pure-function `api.spec.ts` smoke test:
 **Deliberately not tested yet**: `DashboardView`, `NotFoundView`,
 `AppLayout`/`AuthLayout` (minimal placeholder/shell markup), all
 Applications views/stores, the Contacts UI (`ContactsPanel.vue`,
-`ContactDirectoryView.vue`, `stores/contacts.ts`,
-`stores/contactDirectory.ts`), and the Interviews/Documents UI
-(`InterviewsPanel.vue`, `InterviewDirectoryView.vue`, `DocumentsPanel.vue`,
-`DocumentDirectoryView.vue`, `stores/interviews.ts`,
-`stores/interviewDirectory.ts`, `stores/documents.ts`,
-`stores/documentDirectory.ts`) — worth adding next as the UI stabilises.
+`ContactFormDialog.vue`, `ContactDirectoryView.vue`, `stores/contacts.ts`,
+`stores/contactDirectory.ts`), the Interviews UI (`InterviewsPanel.vue`,
+`InterviewFormDialog.vue`, `InterviewDirectoryView.vue`,
+`stores/interviews.ts`, `stores/interviewDirectory.ts`), the Documents UI
+(`DocumentsPanel.vue`, `DocumentDirectoryView.vue`, the three
+`components/documents/*Dialog.vue`, `stores/documents.ts`,
+`stores/applicationDocuments.ts`), and the AI Tools UI (all of
+`components/ai/`, `stores/resumeAnalyses.ts`, `stores/atsScores.ts`) —
+worth adding next as the UI stabilises. Same gap applies to the newer
+shared utilities (`lib/tooltip.ts`, `lib/row-click.ts`, the
+`formatDate`/`formatDateTime` additions to `lib/date-utils.ts`,
+`components/common/TruncatedText.vue`).
 
 New devDependency: `@pinia/testing` (store stubbing for component tests).
