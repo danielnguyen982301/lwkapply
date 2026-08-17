@@ -2,17 +2,21 @@
 
 Flutter + Riverpod + go_router + Dio, implementing Phase 6 (Mobile
 Application): project scaffold, auth, and the Applications feature
-(list/create/edit/delete). Contacts, Interviews, and Documents are
-implemented twice over, same as on web: nested inside
-`ApplicationFormScreen`'s own 4-tab layout (Details / Contacts /
-Interviews / Documents) for per-application CRUD — see "Contacts,
-Interviews, and Documents" below — and as read-only cross-application
-directory screens (mirroring `ContactDirectoryView.vue`/
+(list/create/edit/delete, including an optional `applicationName`
+label). Contacts, Interviews, and Documents are implemented twice over,
+same as on web: nested inside `ApplicationFormScreen`'s own 4-tab layout
+(Details / Contacts / Interviews / Documents) for per-application
+CRUD — see "Contacts, Interviews, and Documents" below — and as
+cross-application directory screens (mirroring `ContactDirectoryView.vue`/
 `InterviewDirectoryView.vue`/`DocumentDirectoryView.vue` on web) — see
-"Cross-application directory screens" below. The app also registers for
-and displays push notifications for interview reminders (Android only —
-see "Push notifications" below) and reports the device's timezone to the
-backend (see "Timezone reporting" below).
+"Cross-application directory screens" below. Contacts'/Interviews' stay
+read-only; Documents' is now the primary place to manage the whole
+document library, since `Document` became a top-level, user-owned
+resource no longer nested under a single application (see the Documents
+bullets in both sections). The app also registers for and displays push
+notifications for interview reminders (Android only — see "Push
+notifications" below) and reports the device's timezone to the backend
+(see "Timezone reporting" below).
 
 The bottom nav shrank from 4 tabs to 2 (Applications + a card-grid
 "Home" hub) to make room for Analytics and AI Tools without crowding
@@ -22,9 +26,13 @@ hosting the logout action, moved off Applications' AppBar) — see
 "Settings screen" below. Analytics is implemented — see "Analytics
 feature" below.
 
-**As of this pass**: AI Tools (Resume Parser + ATS Score) is
-implemented — the backend and web UI already existed; this is the
-mobile client for both. See "AI Tools feature" below.
+AI Tools (Resume Parser + ATS Score) is implemented — the backend and
+web UI already existed; this is the mobile client for both, including a
+later pass that caught it up to a `Document`-decoupling + AI-Tools-
+polish rework that had already landed on the backend/web (`analysis_name`,
+`scored_at`, server-side name joins, attach/detach documents, a
+search-based resume-analysis picker, and cross-links between the score
+and analysis detail screens). See "AI Tools feature" below.
 
 Package name: `lwkapply_mobile`.
 
@@ -275,6 +283,12 @@ components. Same `data`/`domain`/`presentation` split as every other
 feature, but two genuinely new pieces of infrastructure this codebase
 didn't have before: polling and a remote-search picker.
 
+This feature (and Documents, below) went through a second, later pass
+catching mobile up to a `Document`-decoupling + AI-Tools-polish rework
+that had already landed on the backend/web (see CHANGELOG.md v0.11.0's
+"AI Tools follow-up" entry) — the bullets below describe the *current*
+shape directly, not the first-pass-then-patched history.
+
 - **One screen with a `TabBar`, not two routes joined by a shared tab
   widget.** Web's "AI Tools" nav item pairs two routes
   (`/resume-analyses`/`/ats-scores`) via `ViewTabs.vue`'s List/Board
@@ -306,21 +320,35 @@ didn't have before: polling and a remote-search picker.
   `PollingTimer` automatically when its detail screen is popped — this
   app's equivalent of web's `onUnmounted`-calls-`stopPolling()`
   convention.
-- **`resume_document_picker.dart`/`application_picker.dart`**: no prior
-  art anywhere in this app (or on web, where the equivalent was also
-  new) for a "remote search picker" — a plain debounced (350ms,
-  matching the existing constant) `TextField` + results list below it,
-  not Flutter's built-in `Autocomplete<T>` (its async `optionsBuilder`
-  integration was fiddlier to get predictably right than a small
-  purpose-built widget). Both call their target API class
-  (`DocumentDirectoryApi`/`ApplicationsApi`) directly rather than
-  through `DocumentDirectoryController`/`ApplicationsListController` —
-  and unlike web, this needed **no new isolated search method**: those
-  API classes are already stateless, so calling `.list(search: ...)`
-  directly from a picker can never disturb the real Documents/
-  Applications list screens' own state the way reusing a Pinia store's
-  paginated fetch action would have. A genuine architectural difference
-  worth remembering, not an oversight.
+- **No more client-side label joins.** `ResumeAnalysis`/`AtsScore` now
+  carry `analysisName`/`documentFileName` (and `AtsScore.analysisName`)
+  straight off the wire — joined server-side (see
+  BACKEND_SUMMARY.md's "`analysis_name`, `scored_at`, and server-side
+  `document_file_name` joins"). `resume_analyses_tab.dart`/
+  `ats_scores_tab.dart` just read the fields directly; the
+  fetch-every-document/application-and-look-up-by-id join both tabs
+  used to build client-side is gone.
+- **Remote-search pickers** — `resume_document_picker.dart`,
+  `application_picker.dart`, and `resume_analysis_picker.dart` (added
+  once `GET /ai/resume-analyses` gained `status`/`search` params,
+  replacing `new_ats_score_sheet.dart`'s old full-preload-then-filter
+  bottom sheet). All three follow the same plain debounced (350ms)
+  `TextField` + results-list-below shape — not Flutter's built-in
+  `Autocomplete<T>` (its async `optionsBuilder` integration was fiddlier
+  to get predictably right than a small purpose-built widget) — and call
+  their target API class directly (`DocumentDirectoryApi`/
+  `ApplicationsApi`/`ResumeAnalysesApi.searchCompletedForPicker`) rather
+  than through a list controller, so a picker search can never disturb
+  the real Documents/Applications/Resume-Analyses list screens' own
+  state the way reusing a Riverpod list controller's paginated fetch
+  would. `documents/presentation/document_attach_sheet.dart` (see
+  Documents below) is a fourth picker in the same shape, just scoped to
+  documents not yet attached to the current application.
+  - **All four also search on focus**, not just on keystroke — each
+    owns a `FocusNode` and fires the same debounced search the instant
+    the field gains focus (empty query = first page of results), so
+    tapping into an empty search field shows something immediately
+    instead of an empty list until the user starts typing.
 - **`new_ats_score_sheet.dart`**: a `SegmentedButton` toggles between
   "Tracked application" (`ApplicationPicker`) and "Paste a job
   description" (a plain multiline `TextField`, 50–20000 char hint,
@@ -329,43 +357,60 @@ didn't have before: polling and a remote-search picker.
   of a retry path. Also accepts an optional `initialAnalysis` (used by
   `ResumeAnalysisDetailScreen`'s "Score against a job" button), which
   skips the resume-picker step entirely.
-- **The completed-resume-analysis picker inside `new_ats_score_sheet.dart`
-  and the label lookups in `resume_analyses_tab.dart`/`ats_scores_tab.dart`**
-  all solve the same problem: `ResumeAnalysisRead`/`AtsScoreRead` carry
-  no human-readable file name, so each fetches the user's resume
-  documents (and, for scores, applications) once via the existing
-  directory/list APIs and joins client-side — same fix, applied
-  independently at each call site rather than factored into shared
-  infrastructure, since each needed a slightly different shape (a
-  bottom-sheet list vs. a plain `Map` lookup).
-- **`ResumeAnalysisDetailScreen`'s existing-score lookup**: only wired
-  up when reached via `DocumentsPanel`'s "View Analysis" row action,
-  which threads its `applicationId` through as a `?applicationId=`
-  query param (the one entry point into this screen that actually has
-  an application in context — `AiToolsScreen`'s tab/create flow has
-  none, since a resume analysis isn't owned by any single application).
-  When present, the screen calls `AtsScoresApi.latestForApplication`
-  and shows the existing score (with a "Score again" fallback) instead
-  of always offering a blank "Score against a job" button as if nothing
-  had ever been scored.
-- **`DocumentsPanel`'s "View Analysis" row action** (resume documents
-  only) fetches the latest `ResumeAnalysis` for that document
-  (`latestForDocument`, a page-size-1 trick) and pushes
-  `ResumeAnalysisDetailScreen` — reusing the exact same screen/
-  controller `AiToolsScreen`'s tab uses, so there's no second
-  implementation of the polling/display logic. If no analysis exists
-  yet, it does **not** silently call `create()` — that hits a
-  rate-limited AI call, so it shows a confirm dialog ("No analysis yet
-  — analyze now?") first, mirroring web's `ResumeAnalysisModal.vue`'s
-  explicit "Analyze now" button. This was a bug caught after the first
-  pass shipped (see CHANGELOG.md v0.11.0): the initial version called
-  `create()` automatically whenever `latestForDocument` returned
-  nothing, which meant one tap on a never-analyzed resume silently
-  spent one of the user's ten daily free-tier calls with no
-  confirmation. Note this only guards the *no-row-at-all* case — a
-  `pending`/`processing`/`failed` analysis is still non-null and
-  navigates straight through without a new `create()` call, same as
-  intended.
+- **`analysis_name_edit_sheet.dart`**: single-field rename bottom sheet
+  for `ResumeAnalysis.analysisName` (`PATCH /ai/resume-analyses/{id}`),
+  same shape as `document_edit_sheet.dart`. Wired up only on
+  `resume_analyses_tab.dart`'s row (a pencil `IconButton`) — deliberately
+  **not** duplicated onto `resume_analysis_detail_screen.dart`, which
+  only ever displays the name read-only, mirroring web's own
+  one-edit-surface decision (see WEBAPP_SUMMARY.md).
+- **"Latest" framing via `isLatest`** — `ResumeAnalysisDetailScreen`
+  takes an optional `isLatest` param (`?isLatest=true` query param on
+  `/resume-analyses/:id`), set only by `viewResumeAnalysisAction` below.
+  When true: shows a "Latest" chip plus Analyzed/Scored timestamps, and
+  looks up/offers the existing `AtsScore` for that analysis
+  automatically instead of always presenting a blank "Score against a
+  job" button. `AiToolsScreen`'s plain history-list tab and "New
+  Analysis" create flow leave it `false` — a specific row tap there
+  isn't necessarily "the latest" in any meaningful sense.
+  `AtsScoreDetailScreen` has the mirror-image flag, `showAnalysisLink`
+  (see below), for the same "is this a from-scratch entry point or a
+  drill-down from somewhere that already had the context" distinction.
+- **`view_resume_analysis_action.dart`**: the shared "find the latest
+  analysis for this document, or confirm-and-create one, then navigate
+  with `isLatest: true`" flow, factored out so `DocumentsPanel`'s
+  application-scoped "View Analysis" row action and
+  `DocumentDirectoryScreen`'s library-scoped "View AI analysis" row
+  action (see Documents below) share one implementation instead of
+  drifting apart — `AtsScore` has no application link at all any more
+  (see AtsScore's own doc comment), so the two entry points behave
+  identically here; there's nothing left that would make them diverge.
+  Fetches-or-creates only: `create()` hits a rate-limited AI call, so it
+  never fires just because a row action was tapped, only after an
+  explicit "Analyze now" confirmation (a bug caught and fixed in an
+  earlier pass — see CHANGELOG.md v0.11.0 — where the original version
+  called `create()` automatically whenever no analysis existed yet).
+- **Score ↔ analysis cross-links, each with a real touch target.**
+  `resume_analysis_detail_screen.dart` has a "View score" `Card`/
+  `ListTile` row (leading score-circle or icon, chevron trailing) when a
+  score exists; `ats_score_detail_screen.dart` has the mirror-image
+  "View resume analysis" row (leading `Icons.description_outlined`,
+  analysis name as title, document file name as subtitle, chevron
+  trailing) — same `Card`/`ListTile` shape both directions, not a small
+  inline text link. The resume-analysis→score row always shows; the
+  score→analysis row is gated by `showAnalysisLink`
+  (`AtsScoreDetailScreen`'s own constructor param, threaded through as
+  `?showAnalysisLink=true`) — **true** only when reached directly from
+  `AtsScoresTab`'s card tap or `AiToolsScreen`'s "New Score" flow (the
+  user hasn't necessarily seen the underlying analysis yet there),
+  **false** when reached via `resume_analysis_detail_screen.dart`'s own
+  "Score against a job"/"View score" (which is also how
+  `DocumentsPanel`'s/`DocumentDirectoryScreen`'s "View AI analysis"
+  action lands here) — a link back to a screen the user just came from
+  would be redundant. `AtsScoresTab`'s own card shows the analysis name
+  as plain, non-interactive text — it isn't its own tap target; tapping
+  anywhere on the card already opens `AtsScoreDetailScreen`, where the
+  properly-sized row lives instead.
 - **Result display**: `parsed_resume_card.dart`/`ats_score_result_card.dart`
   mirror `ParsedResumeDisplay.vue`/`AtsScoreDisplay.vue` field-for-field
   (skills/keywords as `Chip`s, work experience/education lists, the
@@ -405,6 +450,17 @@ the list instead of patching the edited item in place (its position may
 have changed) — same trap the webapp's Interviews/Documents panels hit
 in v0.5.0. A delete removes the item locally instead, since that has no
 ordering ambiguity.
+
+`Application`/`ApplicationDraft` also carry `applicationName` — an
+optional, user-chosen label distinguishing applications that share the
+same company/position (e.g. a re-apply after rejection), same field/
+reasoning as web's (see CHANGELOG.md v0.11.0). Editable via a
+`FormBuilderTextField` on `application_form_screen.dart`'s Details tab,
+shown in `applications_list_screen.dart`'s cards, and in
+`application_picker.dart`'s results (see AI Tools above) — plus each
+directory screen's own `ApplicationSummary` (Contacts'/Interviews',
+below), since those are deliberately separate, non-shared classes that
+each needed the field added individually.
 
 ### Contacts, Interviews, and Documents (`lib/features/{contacts,interviews,documents}/`)
 
@@ -446,28 +502,55 @@ touching any of them:
   `showTimePicker` call chained on for the time component — no new
   date-picker package pulled in for this one field.
   `interview_formatting.dart` formats the result for display.
-- **Documents** — also paginated infinite-scroll, but _unlike_
-  Interviews, `DocumentsListController` patches state locally for every
-  mutation (`prepend` on upload, `replaceById` on a file-type edit,
-  `removeById` on delete) — the nested list orders by
-  `created_at DESC` and only `file_type` is ever editable after upload,
-  so neither action can actually change an item's sort position the
-  way editing an interview's `scheduled_at` can; a full refresh would
-  just be a slower way to reach the same state. Upload
-  (`DocumentUploadSheet`) is the one Create call anywhere in this app
-  that sends `multipart/form-data` instead of a JSON body — the
-  backend takes `file: UploadFile = File(...)` +
-  `file_type: DocumentType = Form(...)`, so `DocumentsApi.upload` builds
-  a `dio` `FormData` with a `MultipartFile` rather than calling
-  `draft.toJson()` the way every other resource's Create does. File
-  selection uses the new `file_picker` dependency, filtered to
-  PDF/Word client-side (same as the web upload dialog's `accept`
-  attribute — the backend's `Content-Type` check is still the real
-  enforcement point, not this filter). Download
-  (`DocumentsApi.download`) fetches a fresh short-lived presigned R2
-  URL per tap and hands it to `url_launcher` to open externally
-  (browser/PDF viewer) — no in-app download-to-storage yet, see "Not
-  yet implemented" below.
+- **Documents** — `documents_panel.dart` is **attach/detach, not
+  create/delete**: a document is a top-level, user-owned resource now
+  (`domain/document.dart` has no `applicationId` at all any more — see
+  CHANGELOG.md v0.11.0's Document-decoupling entry), so this panel no
+  longer uploads a file scoped to this application directly. Two ways a
+  document ends up attached: **"Attach existing"**
+  (`document_attach_sheet.dart`, a search picker over the whole library
+  — see AI Tools above for the shared picker shape) or **"Upload new"**
+  (`DocumentDirectoryApi.create` uploads to the library, then
+  `ApplicationDocumentsApi.attach` links it — two sequential calls where
+  there used to be one; either exception propagates rather than a
+  partial upload-but-not-attached failure disappearing silently).
+  "Remove from this application" only detaches the link
+  (`ApplicationDocumentsApi.detach`) — the document itself, and any of
+  its other applications' attachments, are untouched; the confirm
+  dialog says so explicitly. `documents_list_controller.dart` still
+  patches state locally for every mutation (`prepend`/`replaceById`/
+  `removeById`) rather than refetching, same reasoning as before
+  (`created_at DESC` ordering, and neither an attach nor a `file_type`
+  edit can change an item's position).
+  - **`DocumentDirectoryApi`** (`documents/data/`) owns the full
+    `/documents` CRUD now — `create`/`get`/`update`/`delete`/`download`,
+    not just the `list` it had before this rework. Upload
+    (`DocumentUploadSheet`, still the one Create call anywhere in this
+    app sending `multipart/form-data` — `dio`'s `FormData` +
+    `MultipartFile`, matching the backend's `file: UploadFile =
+    File(...)` + `file_type: DocumentType = Form(...)` contract, file
+    selection via `file_picker`) now targets this API instead of a
+    per-application nested route. `ApplicationDocumentsApi`
+    (`documents/data/application_documents_api.dart`, new) owns
+    `list`/`attach`/`detach` against `/applications/{id}/documents` —
+    the old `documents_api.dart`'s multipart-upload-to-an-application
+    contract no longer exists on the backend at all (deleted along with
+    `document_with_application.dart`, the domain class that used to pair
+    a `Document` with a single owning `ApplicationSummary` — there's no
+    longer a single one to embed).
+  - **`_DocumentCard` layout** (both `documents_panel.dart`'s and
+    `document_directory_screen.dart`'s): file name gets a full-width
+    line (up to 2 lines) followed by the type chip and "Uploaded
+    {date, time}" each on their own line — not a `ListTile`
+    title/subtitle squeezed against a trailing `Row` of 3-4
+    `IconButton`s, which left too little width for either the name or
+    the timestamp to actually show. The row actions (Download, View
+    Analysis, Edit type, Remove/Delete) collapse into a single
+    `PopupMenuButton` overflow menu instead.
+  - Download (`DocumentDirectoryApi.download`) fetches a fresh
+    short-lived presigned R2 URL per tap and hands it to `url_launcher`
+    to open externally (browser/PDF viewer) — no in-app
+    download-to-storage yet, see "Not yet implemented" below.
 
 **Enum conventions**: `InterviewType`, `InterviewResult`, and
 `DocumentType` all follow `ApplicationStatus`'s existing
@@ -490,34 +573,47 @@ The bottom-nav Interviews/Contacts/Documents tabs (previously
 `ComingSoonScreen`), mirroring
 `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
 `DocumentDirectoryView.vue` — a different thing from the nested,
-per-application panels above, and read-only for the same reason those
-web views are: uploads/edits/deletes still only happen from within the
-owning application, reached via `context.push('/applications/{id}/edit')`
-on any row (the existing `application-edit` route).
+per-application panels above. Contacts and Interviews are still
+read-only for the reason those web views are: uploads/edits/deletes
+still only happen from within the owning application, reached via
+`context.push('/applications/{id}/edit')` on any row (the existing
+`application-edit` route). **Documents is the one exception** — since
+`Document` became a top-level, user-owned resource (see the Documents
+bullet above), `document_directory_screen.dart` is now the primary
+place to manage the *whole* library (upload/edit/download/delete/view
+AI analysis), matching `DocumentDirectoryView.vue`'s own rework; each
+row no longer points back to "the" owning application, since a document
+can belong to zero, one, or several now.
 
 Each of the three follows one consistent shape, added alongside (not
-replacing) each feature's existing nested files:
+replacing) each feature's existing nested files — Contacts/Interviews
+still fit it exactly; Documents has diverged since (noted inline):
 
-- **`domain/*_with_application.dart`** — composes the existing
-  per-application model (`Contact`/`Interview`/`Document`) with a new
-  `ApplicationSummary` (id/company/position/status), rather than
+- **`domain/*_with_application.dart`** (Contacts/Interviews only —
+  Documents' equivalent, `document_with_application.dart`, was deleted
+  once `Document` stopped having a single owning application to embed)
+  — composes the existing per-application model
+  (`Contact`/`Interview`) with a new `ApplicationSummary`
+  (id/company/position/`applicationName`/status), rather than
   duplicating its fields. Each feature declares its own
   `ApplicationSummary`, not a shared one — mirrors the backend's own
   precedent of each directory schema owning its copy (see
   BACKEND_SUMMARY.md); a future screen needing two directories' types
   at once would need a prefixed import.
-- **`data/*_directory_api.dart`** — calls the flat `GET
-/contacts`/`/interviews`/`/documents` endpoint and reuses the nested
-  feature's existing exception type (`ContactsException`/
-  `InterviewsException`/`DocumentsException`) rather than declaring a
-  new one.
+- **`data/*_directory_api.dart`** — Contacts'/Interviews' call the flat
+  `GET /contacts`/`/interviews` endpoint and reuse the nested feature's
+  existing exception type (`ContactsException`/`InterviewsException`).
+  Documents' (`DocumentDirectoryApi`) is no longer just this shape — see
+  the Documents bullet above for its full CRUD.
 - **`presentation/*_directory_state.dart` + `*_directory_controller.dart`**
   — the same fetch/append infinite-scroll split
   `InterviewsListController` established, but as a plain (non-`.family`)
   `StateNotifierProvider`, since each is one global, cross-application
-  list rather than something scoped per application. Read-only: no
-  mutation methods, unlike `DocumentsListController`'s
-  `prepend`/`replaceById`/`removeById`.
+  list rather than something scoped per application. Contacts'/
+  Interviews' stay read-only (no mutation methods). Documents'
+  (`document_directory_controller.dart`) gained the same
+  `prepend`/`replaceById`/`removeById` shape `DocumentsListController`
+  already had, once the screen itself stopped being read-only.
 - **`presentation/*_directory_screen.dart`** — built from
   `ApplicationsListScreen`'s scroll/empty-state/footer conventions, with
   a filter UI that differs per resource since the backend's own filter
@@ -530,18 +626,27 @@ replacing) each feature's existing nested files:
     search, since `Interview` has no name-like field. Cards reuse
     `interview_formatting.dart`'s `formatDateTime` and duplicate
     `InterviewsPanel`'s private `_ResultChip` color logic.
-  - **Documents** — the one directory with two filters at once: the
-    Contacts-style debounced search (file name or company) _and_ the
-    Interviews-style `file_type` filter sheet, clearing independently,
-    plus a combined "Clear filters" action mirroring
-    `DocumentDirectoryView.vue`'s `clearFilters()`. No download
-    shortcut on the row — deliberately matches the web view's
-    read-only contract as-is. Cards reuse
-    `application_formatting.dart`'s `formatDate` and duplicate
-    `DocumentsPanel`'s private `_TypeChip` color logic.
+  - **Documents** — combines a debounced search (`file_name` only now —
+    no more company match, since there's no single parent application
+    to search on) with a `file_type` filter sheet, clearing
+    independently, plus a combined "Clear filters" action. **No longer
+    read-only**: an "Upload document" FAB (reuses
+    `document_upload_sheet.dart` unmodified — its `onSubmit` already
+    took a bare `Document`, no `applicationId`), and each row's overflow
+    menu offers Download/View AI analysis (resume documents only, via
+    `view_resume_analysis_action.dart` — see AI Tools above)/Edit type/
+    Delete. Delete here is a real, permanent, cross-application delete
+    (confirm dialog says so explicitly) — distinct from
+    `DocumentsPanel`'s detach-only "Remove from this application". No
+    row `onTap` to an owning application any more — there isn't
+    necessarily one. Cards reuse `document_formatting.dart`'s
+    `formatDateTime` and the same `_DocumentCard`/`_TypeChip` shape
+    `documents_panel.dart` uses (each still a private duplicate, not a
+    shared widget).
 
   Every screen also renders an `_StatusChip` for the embedded
-  application status, styled via `ApplicationStatus`'s own
+  application status (Contacts/Interviews only, Documents has none any
+  more), styled via `ApplicationStatus`'s own
   `backgroundColor(context)`/`foregroundColor(context)` extension —
   duplicated per file (each is private), same reasoning as the
   result/type chips above.
@@ -919,21 +1024,32 @@ mobile/
                                        # polling_timer.dart (Timer.periodic wrapper,
                                        # first usage in mobile/lib/)
         domain/                      # ai_job_status.dart, parsed_resume.dart,
-                                       # ats_score_result.dart, resume_analysis.dart,
-                                       # ats_score.dart - mirror backend/app/schemas/ai.py
+                                       # ats_score_result.dart, resume_analysis.dart
+                                       # (analysisName/documentFileName/completedAt),
+                                       # ats_score.dart (scoredAt/documentFileName/
+                                       # analysisName) - mirror backend/app/schemas/ai.py
         presentation/                 # ai_tools_screen.dart (TabBar host, FAB),
-                                       # resume_analyses_tab.dart/ats_scores_tab.dart,
+                                       # resume_analyses_tab.dart/ats_scores_tab.dart
+                                       # (no more client-side label joins),
+                                       # ai_formatting.dart (formatDateTime),
                                        # new_analysis_sheet.dart/new_ats_score_sheet.dart
                                        # (create bottom sheets), resume_document_picker.dart/
-                                       # application_picker.dart (debounced remote search,
+                                       # application_picker.dart/resume_analysis_picker.dart
+                                       # (debounced + search-on-focus remote pickers,
                                        # call the stateless API classes directly - no
                                        # isolated search method needed, unlike web),
+                                       # analysis_name_edit_sheet.dart (rename, wired only
+                                       # on resume_analyses_tab.dart's row),
+                                       # view_resume_analysis_action.dart (shared find-or-
+                                       # create-then-navigate-isLatest flow, used by both
+                                       # DocumentsPanel and DocumentDirectoryScreen),
                                        # resume_analysis_detail_controller.dart/
                                        # ats_score_detail_controller.dart (.family, fetch-
                                        # and-poll only - create() lives in the screens),
-                                       # resume_analysis_detail_screen.dart/
-                                       # ats_score_detail_screen.dart, parsed_resume_card.dart/
-                                       # ats_score_result_card.dart, ai_job_status_style.dart
+                                       # resume_analysis_detail_screen.dart (isLatest param)/
+                                       # ats_score_detail_screen.dart (showAnalysisLink param),
+                                       # parsed_resume_card.dart/ats_score_result_card.dart,
+                                       # ai_job_status_style.dart
       applications/
         data/applications_api.dart
         domain/                      # application.dart, application_draft.dart
@@ -963,20 +1079,32 @@ mobile/
                                        # interview_directory_state/controller.dart,
                                        # interview_directory_screen.dart (bottom-nav tab)
       documents/
-        data/                        # documents_api.dart (upload() sends multipart
-                                       # FormData, not JSON), document_directory_api.dart
-                                       # (GET /documents, search + file_type)
+        data/                        # document_directory_api.dart (full /documents CRUD -
+                                       # create/get/update/delete/download/list, upload sends
+                                       # multipart FormData not JSON), application_documents_api.dart
+                                       # (list/attach/detach against /applications/{id}/documents,
+                                       # JSON {document_id} body - replaces the old, now-deleted
+                                       # documents_api.dart's broken multipart-upload contract)
         domain/                      # document.dart (DocumentType enum,
-                                       # DocumentDownloadResponse), no *_draft.dart —
-                                       # upload/update take params directly;
-                                       # document_with_application.dart (+ ApplicationSummary)
+                                       # DocumentDownloadResponse, no applicationId any more -
+                                       # a document has zero/one/many owning applications),
+                                       # no *_draft.dart — upload/update take params directly.
+                                       # document_with_application.dart deleted (no single
+                                       # owning application left to embed)
         presentation/                 # documents_list_state/controller.dart
                                        # (infinite scroll, local prepend/replaceById/
                                        # removeById instead of refresh()),
-                                       # documents_panel.dart (nested tab content),
+                                       # documents_panel.dart (attach/detach, not
+                                       # create/delete - see Documents section above),
+                                       # document_attach_sheet.dart (search picker over
+                                       # the library, filters already-attached ids),
+                                       # document_formatting.dart (formatDateTime),
                                        # document_upload_sheet.dart, document_edit_sheet.dart,
-                                       # document_directory_state/controller.dart,
-                                       # document_directory_screen.dart (bottom-nav tab)
+                                       # document_directory_state/controller.dart (gained
+                                       # prepend/replaceById/removeById - no longer read-only),
+                                       # document_directory_screen.dart (bottom-nav tab -
+                                       # now the primary library management screen: upload
+                                       # FAB, per-row overflow menu)
   pubspec.yaml
   analysis_options.yaml
   .env.example                    # committed template; .env.development/.env.production gitignored
