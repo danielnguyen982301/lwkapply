@@ -147,6 +147,8 @@ class TestCreateResumeAnalysis:
         body = response.json()
         assert body["status"] == "pending"
         assert body["document_id"] == str(document.id)
+        assert body["analysis_name"] is None
+        assert body["document_file_name"] == document.file_name
         no_real_celery_dispatch["parse_resume_task"].delay.assert_called_once_with(
             body["id"]
         )
@@ -206,7 +208,9 @@ class TestCreateResumeAnalysis:
         )
 
         assert response.status_code == 202
-        assert response.json()["id"] == str(existing.id)
+        body = response.json()
+        assert body["id"] == str(existing.id)
+        assert body["document_file_name"] == document.file_name
         no_real_celery_dispatch["parse_resume_task"].delay.assert_not_called()
 
 
@@ -233,7 +237,9 @@ class TestGetAndListResumeAnalyses:
             f"{RESUME_ANALYSES_URL}/{analysis.id}", headers=auth_headers(user)
         )
         assert response.status_code == 200
-        assert response.json()["id"] == str(analysis.id)
+        body = response.json()
+        assert body["id"] == str(analysis.id)
+        assert body["document_file_name"] == document.file_name
 
     def test_list_only_returns_own_analyses(
         self, client, db_session, make_user, auth_headers
@@ -249,6 +255,78 @@ class TestGetAndListResumeAnalyses:
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 1
+        assert body["items"][0]["document_file_name"] == document.file_name
+
+    def test_list_filters_by_status(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        document = _make_document(db_session, user)
+        completed = _make_resume_analysis(
+            db_session, user, document, status=AIJobStatus.COMPLETED
+        )
+        _make_resume_analysis(db_session, user, document, status=AIJobStatus.PENDING)
+
+        response = client.get(
+            RESUME_ANALYSES_URL,
+            params={"status": "completed"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == str(completed.id)
+
+    def test_list_filters_by_search_on_analysis_name(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        document = _make_document(db_session, user)
+        matching = _make_resume_analysis(
+            db_session,
+            user,
+            document,
+            status=AIJobStatus.COMPLETED,
+            analysis_name="john_doe_resume_20260101_000000_abcdef",
+        )
+        _make_resume_analysis(
+            db_session,
+            user,
+            document,
+            status=AIJobStatus.COMPLETED,
+            analysis_name="cover_letter_20260101_000000_ghijkl",
+        )
+
+        response = client.get(
+            RESUME_ANALYSES_URL,
+            params={"search": "john_doe"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == str(matching.id)
+
+    def test_list_search_is_case_insensitive(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        document = _make_document(db_session, user)
+        matching = _make_resume_analysis(
+            db_session,
+            user,
+            document,
+            status=AIJobStatus.COMPLETED,
+            analysis_name="john_doe_resume_20260101_000000_abcdef",
+        )
+
+        response = client.get(
+            RESUME_ANALYSES_URL,
+            params={"search": "JOHN_DOE"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == str(matching.id)
 
 
 class TestCreateAtsScore:
@@ -295,6 +373,8 @@ class TestCreateAtsScore:
         assert body["status"] == "pending"
         assert body["job_description_source"] == "pasted"
         assert body["job_url"] is None
+        assert body["scored_at"] is None
+        assert body["document_file_name"] == document.file_name
         no_real_celery_dispatch["score_ats_task"].delay.assert_called_once_with(
             body["id"]
         )
@@ -430,6 +510,102 @@ class TestCreateAtsScore:
         assert response.status_code == 422
 
 
+class TestUpdateResumeAnalysis:
+    def test_requires_authentication(self, client, db_session, make_user):
+        user = make_user()
+        document = _make_document(db_session, user)
+        analysis = _make_resume_analysis(db_session, user, document)
+
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{analysis.id}",
+            json={"analysis_name": "renamed"},
+        )
+        assert response.status_code == 401
+
+    def test_requires_ownership(self, client, db_session, make_user, auth_headers):
+        owner = make_user()
+        other_user = make_user()
+        document = _make_document(db_session, owner)
+        analysis = _make_resume_analysis(db_session, owner, document)
+
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{analysis.id}",
+            json={"analysis_name": "renamed"},
+            headers=auth_headers(other_user),
+        )
+        assert response.status_code == 404
+
+    def test_404_for_nonexistent_analysis(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{uuid.uuid4()}",
+            json={"analysis_name": "renamed"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 404
+
+    def test_updates_analysis_name(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        document = _make_document(db_session, user)
+        analysis = _make_resume_analysis(
+            db_session,
+            user,
+            document,
+            status=AIJobStatus.COMPLETED,
+            analysis_name="resume_20260101_000000_abcdef",
+        )
+
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{analysis.id}",
+            json={"analysis_name": "my_final_resume"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["analysis_name"] == "my_final_resume"
+        db_session.refresh(analysis)
+        assert analysis.analysis_name == "my_final_resume"
+
+    def test_omitted_analysis_name_leaves_existing_value_untouched(
+        self, client, db_session, make_user, auth_headers
+    ):
+        # exclude_unset=True means a PATCH body without analysis_name at
+        # all shouldn't null it out - same contract as documents.py's
+        # update_document.
+        user = make_user()
+        document = _make_document(db_session, user)
+        analysis = _make_resume_analysis(
+            db_session,
+            user,
+            document,
+            status=AIJobStatus.COMPLETED,
+            analysis_name="resume_20260101_000000_abcdef",
+        )
+
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{analysis.id}",
+            json={},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["analysis_name"] == "resume_20260101_000000_abcdef"
+
+    def test_rejects_analysis_name_over_max_length(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        document = _make_document(db_session, user)
+        analysis = _make_resume_analysis(db_session, user, document)
+
+        response = client.patch(
+            f"{RESUME_ANALYSES_URL}/{analysis.id}",
+            json={"analysis_name": "x" * 256},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+
+
 class TestGetAndListAtsScores:
     def test_get_requires_ownership(self, client, db_session, make_user, auth_headers):
         owner = make_user()
@@ -446,6 +622,24 @@ class TestGetAndListAtsScores:
             f"{ATS_SCORES_URL}/{ats_score.id}", headers=auth_headers(other_user)
         )
         assert response.status_code == 404
+
+    def test_get_returns_owned_score(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        document = _make_document(db_session, user)
+        analysis = _make_resume_analysis(
+            db_session, user, document, status=AIJobStatus.COMPLETED
+        )
+        ats_score = _make_ats_score(
+            db_session, user, analysis, job_description="x" * 60
+        )
+
+        response = client.get(
+            f"{ATS_SCORES_URL}/{ats_score.id}", headers=auth_headers(user)
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == str(ats_score.id)
+        assert body["document_file_name"] == document.file_name
 
     def test_list_filters_by_resume_analysis_id(
         self, client, db_session, make_user, auth_headers
@@ -471,6 +665,7 @@ class TestGetAndListAtsScores:
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["resume_analysis_id"] == str(analysis_a.id)
+        assert body["items"][0]["document_file_name"] == document_a.file_name
 
 
 class TestAiRateLimiting:

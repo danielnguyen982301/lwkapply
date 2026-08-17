@@ -28,7 +28,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user
 from app.core.config import settings
@@ -44,6 +44,7 @@ from app.schemas.ai import (
     ResumeAnalysisCreate,
     ResumeAnalysisListResponse,
     ResumeAnalysisRead,
+    ResumeAnalysisUpdate,
 )
 from app.services.ai.client import is_ai_configured
 from app.services.rate_limit import (
@@ -108,7 +109,9 @@ def _get_owned_resume_analysis(
 ) -> ResumeAnalysis:
     analysis = (
         db.execute(
-            select(ResumeAnalysis).where(
+            select(ResumeAnalysis)
+            .options(joinedload(ResumeAnalysis.document))
+            .where(
                 ResumeAnalysis.id == resume_analysis_id,
                 ResumeAnalysis.user_id == user.id,
             )
@@ -126,9 +129,11 @@ def _get_owned_resume_analysis(
 def _get_owned_ats_score(db: Session, ats_score_id: uuid.UUID, user: User) -> AtsScore:
     ats_score = (
         db.execute(
-            select(AtsScore).where(
-                AtsScore.id == ats_score_id, AtsScore.user_id == user.id
+            select(AtsScore)
+            .options(
+                joinedload(AtsScore.resume_analysis).joinedload(ResumeAnalysis.document)
             )
+            .where(AtsScore.id == ats_score_id, AtsScore.user_id == user.id)
         )
         .scalars()
         .first()
@@ -165,7 +170,9 @@ def create_resume_analysis(
     # document rather than dispatching a duplicate Gemini call.
     existing = (
         db.execute(
-            select(ResumeAnalysis).where(
+            select(ResumeAnalysis)
+            .options(joinedload(ResumeAnalysis.document))
+            .where(
                 ResumeAnalysis.document_id == document.id,
                 ResumeAnalysis.status.in_(
                     [AIJobStatus.PENDING, AIJobStatus.PROCESSING]
@@ -198,17 +205,50 @@ def get_resume_analysis(
     return _get_owned_resume_analysis(db, resume_analysis_id, current_user)
 
 
+@router.patch(
+    "/resume-analyses/{resume_analysis_id}", response_model=ResumeAnalysisRead
+)
+def update_resume_analysis(
+    resume_analysis_id: uuid.UUID,
+    payload: ResumeAnalysisUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    analysis = _get_owned_resume_analysis(db, resume_analysis_id, current_user)
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(analysis, field, value)
+
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+    return analysis
+
+
 @router.get("/resume-analyses", response_model=ResumeAnalysisListResponse)
 def list_resume_analyses(
     document_id: uuid.UUID | None = None,
+    # status_filter, not status - `status` would shadow the fastapi.status
+    # module imported above (same reasoning as applications.py's
+    # list_applications).
+    status_filter: AIJobStatus | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None, description="Search analysis_name"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stmt = select(ResumeAnalysis).where(ResumeAnalysis.user_id == current_user.id)
+    stmt = (
+        select(ResumeAnalysis)
+        .options(joinedload(ResumeAnalysis.document))
+        .where(ResumeAnalysis.user_id == current_user.id)
+    )
     if document_id:
         stmt = stmt.where(ResumeAnalysis.document_id == document_id)
+    if status_filter:
+        stmt = stmt.where(ResumeAnalysis.status == status_filter)
+    if search:
+        stmt = stmt.where(ResumeAnalysis.analysis_name.ilike(f"%{search}%"))
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
@@ -293,7 +333,13 @@ def list_ats_scores(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stmt = select(AtsScore).where(AtsScore.user_id == current_user.id)
+    stmt = (
+        select(AtsScore)
+        .options(
+            joinedload(AtsScore.resume_analysis).joinedload(ResumeAnalysis.document)
+        )
+        .where(AtsScore.user_id == current_user.id)
+    )
     if resume_analysis_id:
         stmt = stmt.where(AtsScore.resume_analysis_id == resume_analysis_id)
 

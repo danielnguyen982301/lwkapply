@@ -13,8 +13,10 @@ forever without at least a `failed` stamp attempt.
 """
 
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 
 from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
@@ -40,6 +42,18 @@ class JobDescriptionUnavailableError(Exception):
     with job_description pasted directly. Reuses the existing
     failed/error_message convention rather than a new API shape for this
     fallback signal."""
+
+
+def _generate_analysis_name(file_name: str, completed_at: datetime) -> str:
+    """file_name + completion timestamp + a short random suffix, e.g.
+    "resume_20260817_143205_a1b2c3" - unique-by-construction (not a DB
+    constraint - see ResumeAnalysis.analysis_name) so two analyses of the
+    same file completing in the same second still get distinct names.
+    User-editable afterwards, so this is only ever the initial value.
+    """
+    stem = PurePosixPath(file_name).stem or "resume"
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", stem).strip("_").lower() or "resume"
+    return f"{slug}_{completed_at.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
 
 @celery_app.task(name="app.tasks.ai.parse_resume_task")
@@ -71,10 +85,14 @@ def parse_resume_task(resume_analysis_id: str) -> None:
             text = extract_text(file_bytes, document.file_name)
             parsed = parse_resume(text)
 
+            completed_at = datetime.now(timezone.utc)
             analysis.raw_text = text
             analysis.parsed_data = parsed.model_dump()
             analysis.status = AIJobStatus.COMPLETED
-            analysis.completed_at = datetime.now(timezone.utc)
+            analysis.completed_at = completed_at
+            analysis.analysis_name = _generate_analysis_name(
+                document.file_name, completed_at
+            )
         except UnsupportedResumeFormatError as exc:
             analysis.status = AIJobStatus.FAILED
             analysis.error_message = str(exc)
@@ -138,6 +156,7 @@ def score_ats_task(ats_score_id: str) -> None:
             ats_score.score = result.score
             ats_score.feedback = result.model_dump()
             ats_score.status = AIJobStatus.COMPLETED
+            ats_score.scored_at = datetime.now(timezone.utc)
         except JobDescriptionUnavailableError as exc:
             ats_score.status = AIJobStatus.FAILED
             ats_score.error_message = str(exc)

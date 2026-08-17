@@ -78,6 +78,13 @@ class ResumeAnalysisCreate(BaseModel):
     document_id: uuid.UUID
 
 
+class ResumeAnalysisUpdate(BaseModel):
+    # Only field a caller may edit post-creation - see
+    # ResumeAnalysis.analysis_name's model docstring for why this is
+    # user-editable and not DB-uniqueness-enforced.
+    analysis_name: str | None = Field(default=None, max_length=255)
+
+
 class ResumeAnalysisRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +96,11 @@ class ResumeAnalysisRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
+    analysis_name: str | None = None
+    # ResumeAnalysis.document_file_name - see that property's docstring.
+    # Always present (document_id is a required FK), spares the caller a
+    # separate Documents fetch just to render a label.
+    document_file_name: str
 
 
 class ResumeAnalysisListResponse(BaseModel):
@@ -126,6 +138,10 @@ class AtsScoreRead(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
+    scored_at: datetime | None = None
+    # AtsScore.document_file_name - see that property's docstring. Always
+    # present, same reasoning as ResumeAnalysisRead.document_file_name.
+    document_file_name: str
 
 
 class AtsScoreListResponse(BaseModel):
