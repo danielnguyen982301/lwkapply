@@ -12,8 +12,15 @@
 │   │   ├── script.py.mako
 │   │   └── versions
 │   │       ├── 06abe39a184c_resume_analyses_and_ats_scores.py
+│   │       ├── 2aa540c856bd_documents_drop_application_id.py
 │   │       ├── 37f704e60528_first_migration.py
+│   │       ├── 4abd98ce29e4_documents_add_user_id.py
+│   │       ├── 5bd2ff18bf39_ats_scores_add_job_url.py
 │   │       ├── 873b7c6fdc36_device_tokens.py
+│   │       ├── 8c175054e5e6_applications_add_application_name.py
+│   │       ├── aa3bea687a29_application_documents_table.py
+│   │       ├── cab6d85713f0_ats_scores_drop_application_id.py
+│   │       ├── d40a14bebe2a_resume_analyses_add_completed_at.py
 │   │       ├── d65db92902b9_interview_reminders_and_user_timezone.py
 │   │       └── eca96043348e_application_status_history.py
 │   ├── alembic.ini
@@ -28,6 +35,7 @@
 │   │   │       │   ├── __init__.py
 │   │   │       │   ├── ai.py
 │   │   │       │   ├── analytics.py
+│   │   │       │   ├── application_documents.py
 │   │   │       │   ├── applications.py
 │   │   │       │   ├── auth.py
 │   │   │       │   ├── contacts.py
@@ -49,6 +57,7 @@
 │   │   ├── models
 │   │   │   ├── __init__.py
 │   │   │   ├── application.py
+│   │   │   ├── application_document.py
 │   │   │   ├── application_status_history.py
 │   │   │   ├── ats_score.py
 │   │   │   ├── contact.py
@@ -104,6 +113,7 @@
 │       ├── test_ai_schemas.py
 │       ├── test_ai_tasks.py
 │       ├── test_analytics_endpoints.py
+│       ├── test_application_documents_endpoints.py
 │       ├── test_application_schema.py
 │       ├── test_application_status_history.py
 │       ├── test_applications_endpoints.py
@@ -112,7 +122,6 @@
 │       ├── test_contacts_directory.py
 │       ├── test_contacts_endpoints.py
 │       ├── test_document_schema.py
-│       ├── test_documents_directory.py
 │       ├── test_documents_endpoints.py
 │       ├── test_interview_schema.py
 │       ├── test_interviews_directory.py
@@ -391,8 +400,12 @@
     │   │   ├── ai
     │   │   │   ├── AiToolsTabs.vue
     │   │   │   ├── ApplicationPicker.vue
+    │   │   │   ├── AtsScoreDetailDialog.vue
     │   │   │   ├── AtsScoreDisplay.vue
+    │   │   │   ├── NewAtsScoreDialog.vue
+    │   │   │   ├── NewResumeAnalysisDialog.vue
     │   │   │   ├── ParsedResumeDisplay.vue
+    │   │   │   ├── ResumeAnalysisDetailDialog.vue
     │   │   │   ├── ResumeAnalysisModal.vue
     │   │   │   └── ResumeDocumentPicker.vue
     │   │   ├── analytics
@@ -404,13 +417,23 @@
     │   │   │   ├── DocumentsPanel.vue
     │   │   │   ├── InterviewsPanel.vue
     │   │   │   └── ViewTabs.vue
-    │   │   └── custom_form_fields
-    │   │       ├── CustomDatePicker.vue
-    │   │       ├── CustomInputNumber.vue
-    │   │       ├── CustomInputText.vue
-    │   │       ├── CustomPassword.vue
-    │   │       ├── CustomSelect.vue
-    │   │       └── CustomTextarea.vue
+    │   │   ├── common
+    │   │   │   └── TruncatedText.vue
+    │   │   ├── contacts
+    │   │   │   └── ContactFormDialog.vue
+    │   │   ├── custom_form_fields
+    │   │   │   ├── CustomDatePicker.vue
+    │   │   │   ├── CustomInputNumber.vue
+    │   │   │   ├── CustomInputText.vue
+    │   │   │   ├── CustomPassword.vue
+    │   │   │   ├── CustomSelect.vue
+    │   │   │   └── CustomTextarea.vue
+    │   │   ├── documents
+    │   │   │   ├── DocumentAttachDialog.vue
+    │   │   │   ├── DocumentEditDialog.vue
+    │   │   │   └── DocumentUploadDialog.vue
+    │   │   └── interviews
+    │   │       └── InterviewFormDialog.vue
     │   ├── layouts
     │   │   ├── AppLayout.vue
     │   │   └── AuthLayout.vue
@@ -424,7 +447,9 @@
     │   │   ├── date-utils.ts
     │   │   ├── document-ui.ts
     │   │   ├── interview-ui.ts
-    │   │   └── timezone.ts
+    │   │   ├── row-click.ts
+    │   │   ├── timezone.ts
+    │   │   └── tooltip.ts
     │   ├── main.ts
     │   ├── router
     │   │   ├── __tests__
@@ -432,12 +457,12 @@
     │   │   └── index.ts
     │   ├── stores
     │   │   ├── analytics.ts
+    │   │   ├── applicationDocuments.ts
     │   │   ├── applications.ts
     │   │   ├── atsScores.ts
     │   │   ├── auth.ts
     │   │   ├── contactDirectory.ts
     │   │   ├── contacts.ts
-    │   │   ├── documentDirectory.ts
     │   │   ├── documents.ts
     │   │   ├── interviewDirectory.ts
     │   │   ├── interviews.ts
@@ -483,4 +508,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-126 directories, 358 files
+130 directories, 379 files
