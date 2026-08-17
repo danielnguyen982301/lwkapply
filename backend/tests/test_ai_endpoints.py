@@ -44,6 +44,15 @@ def _make_document(db_session, user, **overrides):
 
 def _make_resume_analysis(db_session, user, document, **overrides):
     defaults = {"user_id": user.id, "document_id": document.id}
+    # Mirrors the real invariant (app/tasks/ai.py::parse_resume_task sets
+    # analysis_name in the same commit as status=COMPLETED) - a completed
+    # analysis with no analysis_name would trip AtsScore.analysis_name's
+    # RuntimeError guard the moment a test scores against it.
+    if (
+        overrides.get("status") == AIJobStatus.COMPLETED
+        and "analysis_name" not in overrides
+    ):
+        defaults["analysis_name"] = f"{document.file_name}_test_analysis"
     defaults.update(overrides)
     analysis = ResumeAnalysis(**defaults)
     db_session.add(analysis)
@@ -375,6 +384,7 @@ class TestCreateAtsScore:
         assert body["job_url"] is None
         assert body["scored_at"] is None
         assert body["document_file_name"] == document.file_name
+        assert body["analysis_name"] == analysis.analysis_name
         no_real_celery_dispatch["score_ats_task"].delay.assert_called_once_with(
             body["id"]
         )
@@ -640,6 +650,7 @@ class TestGetAndListAtsScores:
         body = response.json()
         assert body["id"] == str(ats_score.id)
         assert body["document_file_name"] == document.file_name
+        assert body["analysis_name"] == analysis.analysis_name
 
     def test_list_filters_by_resume_analysis_id(
         self, client, db_session, make_user, auth_headers
@@ -665,6 +676,7 @@ class TestGetAndListAtsScores:
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["resume_analysis_id"] == str(analysis_a.id)
+        assert body["items"][0]["analysis_name"] == analysis_a.analysis_name
         assert body["items"][0]["document_file_name"] == document_a.file_name
 
 
