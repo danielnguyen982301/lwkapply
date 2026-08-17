@@ -108,3 +108,22 @@ class AtsScore(Base, UUIDMixin, TimestampMixin):
         resume_analysis.document (see app/api/v1/endpoints/ai.py's
         joinedload chain) to avoid two lazy-load queries per row."""
         return self.resume_analysis.document.file_name
+
+    @property
+    def analysis_name(self) -> str:
+        """resume_analysis.analysis_name - always resolvable despite being
+        nullable on ResumeAnalysis itself: an AtsScore can only ever be
+        created against a resume_analysis whose status is already
+        COMPLETED (enforced in create_ats_score), and analysis_name is set
+        in the same commit as that COMPLETED transition (app/tasks/ai.py::
+        parse_resume_task), so it's never NULL by the time an AtsScore
+        exists to reference it. Already covered by the same
+        joinedload(AtsScore.resume_analysis) list endpoints use for
+        document_file_name - no extra eager-load needed."""
+        if self.resume_analysis.analysis_name is None:
+            raise RuntimeError(
+                f"AtsScore {self.id} references ResumeAnalysis "
+                f"{self.resume_analysis_id} with a NULL analysis_name - "
+                "should be impossible, since scoring requires status=completed."
+            )
+        return self.resume_analysis.analysis_name
