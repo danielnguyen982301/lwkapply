@@ -17,6 +17,7 @@ import { useDocumentsStore } from '@/stores/documents'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue'
 import DocumentEditDialog from '@/components/documents/DocumentEditDialog.vue'
+import DocumentAnalysisModal from '@/components/ai/DocumentAnalysisModal.vue'
 import {
   DOCUMENT_TYPE_LABELS,
   documentTypeFilterOptions,
@@ -99,6 +100,19 @@ const editingDocument = ref<Document | null>(null)
 function openEditDialog(doc: Document) {
   editingDocument.value = doc
   editDialogVisible.value = true
+}
+
+// --- AI analysis modal ---------------------------------------------------
+// Same trigger as components/applications/DocumentsPanel.vue's own
+// "View AI analysis" button - see components/ai/DocumentAnalysisModal.vue
+// for why this is a separate component rather than reusing
+// ResumeAnalysisModal.vue directly (no single application/job_url here).
+const analysisModalVisible = ref(false)
+const analysisModalDocumentId = ref<string | null>(null)
+
+function openAnalysisModal(doc: Document) {
+  analysisModalDocumentId.value = doc.id
+  analysisModalVisible.value = true
 }
 
 // --- Delete / download -------------------------------------------------
@@ -237,9 +251,18 @@ function handleDownload(doc: Document) {
             {{ formatUploadedAt(data.created_at) }}
           </template>
         </Column>
-        <Column header="" style="width: 8rem">
+        <Column header="" style="width: 11rem">
           <template #body="{ data }: { data: Document }">
             <div class="flex justify-end gap-1">
+              <Button
+                v-if="data.file_type === 'resume'"
+                v-tooltip.bottom="tooltip('View AI analysis')"
+                icon="pi pi-sparkles"
+                aria-label="View AI analysis"
+                link
+                size="small"
+                @click="openAnalysisModal(data)"
+              />
               <Button
                 v-tooltip.bottom="tooltip('Download document')"
                 icon="pi pi-download"
@@ -286,4 +309,10 @@ function handleDownload(doc: Document) {
   <DocumentUploadDialog v-model:visible="uploadDialogVisible" />
 
   <DocumentEditDialog v-model:visible="editDialogVisible" :document="editingDocument" />
+
+  <DocumentAnalysisModal
+    v-if="analysisModalDocumentId"
+    v-model:visible="analysisModalVisible"
+    :document-id="analysisModalDocumentId"
+  />
 </template>
