@@ -13,35 +13,11 @@ import NewResumeAnalysisDialog from '@/components/ai/NewResumeAnalysisDialog.vue
 import ResumeAnalysisDetailDialog from '@/components/ai/ResumeAnalysisDetailDialog.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
-import { useDocumentsStore } from '@/stores/documents'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity } from '@/lib/ai-ui'
 import { formatDate, formatDateTime } from '@/lib/date-utils'
 import type { ResumeAnalysis } from '@/types/ai'
-import type { Document } from '@/types/document'
 
 const store = useResumeAnalysesStore()
-const documents = useDocumentsStore()
-
-// --- friendly row labels (document_id -> file_name) ---------------------
-// ResumeAnalysisRead has no file_name, only document_id - see BACKEND_SUMMARY.md/
-// the plan for why this is a frontend-only join rather than a backend change.
-// page_size 100 (the backend's max) rather than the picker's default 10 -
-// this wants every resume the user has, not just top search matches.
-// Falls back to a date-based label for anything not found here (a document
-// since deleted, or beyond the 100-resume cap).
-const documentLabels = ref<Record<string, string>>({})
-
-async function loadDocumentLabels() {
-  const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
-  documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
-}
-
-function labelFor(analysis: ResumeAnalysis): string {
-  return (
-    documentLabels.value[analysis.document_id] ??
-    `Resume analysis · ${formatDate(analysis.created_at)}`
-  )
-}
 
 // Date + time - completed_at is the one field that actually distinguishes
 // re-runs of the same resume, so a date-only label would collapse them.
@@ -87,7 +63,6 @@ function handleRowClick(event: { data: ResumeAnalysis }) {
 
 onMounted(() => {
   loadList()
-  loadDocumentLabels()
 })
 
 onBeforeUnmount(() => {
@@ -151,7 +126,7 @@ onBeforeUnmount(() => {
         <Column header="Resume">
           <template #body="{ data }: { data: ResumeAnalysis }">
             <TruncatedText
-              :text="labelFor(data)"
+              :text="data.document_file_name"
               max-width="16rem"
               class="cursor-pointer font-medium text-ink hover:underline"
             />
