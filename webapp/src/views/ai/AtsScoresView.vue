@@ -12,8 +12,10 @@ import Tag from 'primevue/tag'
 import AiToolsTabs from '@/components/ai/AiToolsTabs.vue'
 import NewAtsScoreDialog from '@/components/ai/NewAtsScoreDialog.vue'
 import AtsScoreDetailDialog from '@/components/ai/AtsScoreDetailDialog.vue'
+import ResumeAnalysisDetailDialog from '@/components/ai/ResumeAnalysisDetailDialog.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useAtsScoresStore } from '@/stores/atsScores'
+import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, atsScoreSeverity } from '@/lib/ai-ui'
 import { formatDate } from '@/lib/date-utils'
 import type { AtsScore } from '@/types/ai'
@@ -21,6 +23,7 @@ import type { AtsScore } from '@/types/ai'
 const route = useRoute()
 const router = useRouter()
 const store = useAtsScoresStore()
+const resumeAnalysesStore = useResumeAnalysesStore()
 
 // --- list ----------------------------------------------------------------
 function loadList(page = 1) {
@@ -77,6 +80,25 @@ function handleRowClick(event: { data: AtsScore }) {
   openDetailDialog(event.data)
 }
 
+// --- resume analysis dialog (reused from ResumeAnalysesView.vue) -------
+// AtsScore only carries resume_analysis_id/document_file_name/analysis_name,
+// not the full parsed analysis - fetch it on demand rather than joining
+// server-side just for this one click-through.
+const analysisDialogVisible = ref(false)
+const loadingAnalysisId = ref<string | null>(null)
+
+async function openAnalysisDialog(score: AtsScore) {
+  loadingAnalysisId.value = score.id
+  try {
+    await resumeAnalysesStore.fetchOne(score.resume_analysis_id)
+    analysisDialogVisible.value = true
+  } catch {
+    // resumeAnalysesStore.currentError is already set; nothing else to do here
+  } finally {
+    loadingAnalysisId.value = null
+  }
+}
+
 onMounted(() => {
   loadList()
   if (typeof route.query.resume_analysis_id === 'string') openCreateDialog()
@@ -94,6 +116,7 @@ watch(
 
 onBeforeUnmount(() => {
   store.stopPolling()
+  resumeAnalysesStore.stopPolling()
 })
 </script>
 
@@ -156,7 +179,19 @@ onBeforeUnmount(() => {
         </Column>
         <Column field="analysis_name" header="Analysis used">
           <template #body="{ data }: { data: AtsScore }">
-            <TruncatedText :text="data.analysis_name" max-width="14rem" />
+            <ProgressSpinner
+              v-if="loadingAnalysisId === data.id"
+              style="width: 1rem; height: 1rem"
+              stroke-width="6"
+              aria-label="Loading analysis"
+            />
+            <TruncatedText
+              v-else
+              :text="data.analysis_name"
+              max-width="14rem"
+              class="cursor-pointer font-medium text-ink hover:underline"
+              @click.stop="openAnalysisDialog(data)"
+            />
           </template>
         </Column>
         <Column header="Status">
@@ -211,4 +246,6 @@ onBeforeUnmount(() => {
   />
 
   <AtsScoreDetailDialog v-model:visible="detailDialogVisible" @retried="loadList(store.page)" />
+
+  <ResumeAnalysisDetailDialog v-model:visible="analysisDialogVisible" />
 </template>
