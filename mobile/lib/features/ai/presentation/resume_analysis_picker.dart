@@ -3,41 +3,35 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../documents/data/document_directory_api.dart';
-import '../../documents/domain/document.dart';
-import '../../documents/presentation/document_formatting.dart';
+import '../data/resume_analyses_api.dart';
+import '../domain/resume_analysis.dart';
 
-/// Search-and-pick-one widget for choosing a resume `Document` to start
-/// a new analysis from. No prior art anywhere in this app (or on web,
-/// where the equivalent `ResumeDocumentPicker.vue` was also new) for a
-/// "remote search picker" — a plain debounced `TextField` + results
-/// list below it, not Flutter's built-in `Autocomplete<T>` (its async
-/// `optionsBuilder` integration is fiddlier to get predictably right
-/// than a small purpose-built widget for this one use).
+/// Search-and-pick-one widget for choosing a completed `ResumeAnalysis`
+/// to score — same shape as `ResumeDocumentPicker`/`ApplicationPicker`
+/// (plain debounced `TextField` + results list, calling
+/// `ResumeAnalysesApi.searchCompletedForPicker` directly rather than
+/// through a controller, so a picker's search can never disturb
+/// `AiToolsScreen`'s own list state).
 ///
-/// Calls `DocumentDirectoryApi.list` directly (350ms debounce, matching
-/// the constant already used by contact_directory_screen.dart/
-/// document_directory_screen.dart/applications_list_screen.dart) — not
-/// `DocumentDirectoryController`, which carries infinite-scroll/filter
-/// state a single-select picker doesn't need. That API class is
-/// stateless, so calling it here can never disturb the actual Documents
-/// directory screen's own state, unlike web's Pinia stores, which
-/// needed a dedicated isolated method for exactly this reason.
-class ResumeDocumentPicker extends ConsumerStatefulWidget {
-  const ResumeDocumentPicker({super.key, required this.onSelected});
+/// Replaces `NewAtsScoreSheet`'s previous "fetch up to 100 analyses,
+/// filter to completed client-side" approach — a user with more than 100
+/// completed analyses could never find the rest that way. Server-side
+/// `status=completed` + `search` (matching `analysis_name`) instead.
+class ResumeAnalysisPicker extends ConsumerStatefulWidget {
+  const ResumeAnalysisPicker({super.key, required this.onSelected});
 
-  final ValueChanged<Document> onSelected;
+  final ValueChanged<ResumeAnalysis> onSelected;
 
   @override
-  ConsumerState<ResumeDocumentPicker> createState() =>
-      _ResumeDocumentPickerState();
+  ConsumerState<ResumeAnalysisPicker> createState() =>
+      _ResumeAnalysisPickerState();
 }
 
-class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
+class _ResumeAnalysisPickerState extends ConsumerState<ResumeAnalysisPicker> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
-  List<Document> _results = [];
+  List<ResumeAnalysis> _results = [];
   bool _loading = false;
 
   @override
@@ -73,11 +67,11 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
   Future<void> _search(String query) async {
     setState(() => _loading = true);
     try {
-      final response = await ref
-          .read(documentDirectoryApiProvider)
-          .list(search: query, fileType: DocumentType.resume, pageSize: 10);
+      final results = await ref
+          .read(resumeAnalysesApiProvider)
+          .searchCompletedForPicker(query);
       if (!mounted) return;
-      setState(() => _results = response.items);
+      setState(() => _results = results);
     } catch (_) {
       if (!mounted) return;
       setState(() => _results = []);
@@ -86,13 +80,13 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
     }
   }
 
-  void _select(Document doc) {
+  void _select(ResumeAnalysis analysis) {
     setState(() {
       _results = [];
-      _controller.text = doc.fileName;
+      _controller.text = analysis.analysisName ?? analysis.documentFileName;
     });
     FocusScope.of(context).unfocus();
-    widget.onSelected(doc);
+    widget.onSelected(analysis);
   }
 
   @override
@@ -104,8 +98,8 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
           controller: _controller,
           focusNode: _focusNode,
           decoration: InputDecoration(
-            labelText: 'Resume',
-            hintText: 'Search your uploaded resumes…',
+            labelText: 'Resume analysis',
+            hintText: 'Search your completed resume analyses…',
             border: const OutlineInputBorder(),
             suffixIcon: _loading
                 ? const Padding(
@@ -133,14 +127,13 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
               padding: EdgeInsets.zero,
               itemCount: _results.length,
               itemBuilder: (context, index) {
-                final doc = _results[index];
+                final analysis = _results[index];
                 return ListTile(
                   dense: true,
-                  title: Text(doc.fileName),
-                  subtitle: Text(
-                    'Uploaded ${formatDateTime(doc.createdAt.toLocal())}',
-                  ),
-                  onTap: () => _select(doc),
+                  title:
+                      Text(analysis.analysisName ?? analysis.documentFileName),
+                  subtitle: Text(analysis.documentFileName),
+                  onTap: () => _select(analysis),
                 );
               },
             ),

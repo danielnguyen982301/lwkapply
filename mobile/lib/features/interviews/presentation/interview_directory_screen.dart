@@ -336,7 +336,10 @@ class _InterviewCard extends StatelessWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${application.company} · ${application.position}',
+                      application.applicationName != null
+                          ? '${application.company} · ${application.position} '
+                              '(${application.applicationName})'
+                          : '${application.company} · ${application.position}',
                       style: theme.textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,
                     ),

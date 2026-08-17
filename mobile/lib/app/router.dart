@@ -138,9 +138,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'resume-analysis-detail',
         builder: (context, state) => ResumeAnalysisDetailScreen(
           analysisId: state.pathParameters['id']!,
-          // Only ever set by DocumentsPanel's "View Analysis" row
-          // action — see that call site's doc comment for why.
-          applicationId: state.uri.queryParameters['applicationId'],
+          // Only ever set by viewResumeAnalysisAction (DocumentsPanel's/
+          // DocumentDirectoryScreen's "view analysis" row actions) — see
+          // that function's doc comment for why.
+          isLatest: state.uri.queryParameters['isLatest'] == 'true',
         ),
       ),
       GoRoute(

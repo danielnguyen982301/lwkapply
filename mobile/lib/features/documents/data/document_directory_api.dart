@@ -3,33 +3,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/document.dart';
-import '../domain/document_with_application.dart';
-import 'documents_api.dart' show DocumentsException;
+import 'application_documents_api.dart' show DocumentsException;
 
-/// Raw HTTP calls against the flat, top-level `GET /documents` directory
-/// endpoint (backend/app/api/v1/endpoints/documents.py::directory_router)
-/// — every document across every application the user owns, with the
-/// parent application's company/position/status embedded.
+/// Raw HTTP calls against the top-level `GET/POST /documents` +
+/// `GET/PATCH/DELETE/download /documents/{id}` library
+/// (backend/app/api/v1/endpoints/documents.py) — the user's whole
+/// document library, independent of any application.
 ///
-/// Deliberately a separate API class from `DocumentsApi`
-/// (documents_api.dart), not an extension of it — same reasoning as
-/// `ContactDirectoryApi`/`InterviewDirectoryApi` vs their nested
-/// counterparts: different endpoint (`/documents`, not
-/// `/applications/{id}/documents`), different response shape (embedded
-/// `application` summary), different lifecycle, and no upload/update/
-/// delete/download here — this is read-only, same as the other two
-/// directories (see BACKEND_SUMMARY.md's note on the documents directory
-/// endpoint).
+/// A document used to belong to exactly one application (the old
+/// `DocumentsApi`, `application_documents_api.dart` now); this is the
+/// full CRUD surface that replaced it once `Document` was decoupled into
+/// a top-level, user-owned resource (backend/BACKEND_SUMMARY.md's "A
+/// note on Document / ApplicationDocument") — upload, list, get, patch,
+/// delete, and download all live here now, not nested under an
+/// application. `ApplicationDocumentsApi` (application_documents_api.dart)
+/// is the separate, much smaller API for attaching/detaching an
+/// already-uploaded library document to/from a specific application.
 ///
-/// One divergence from both prior directory APIs: this is the only one
-/// that supports two filters at once — `search` (matches `file_name` or
-/// the parent application's `company`, like Contacts) *and* `file_type`
-/// (like Interviews' `result`), combined with AND when both are present,
-/// mirroring webapp/src/stores/documentDirectory.ts.
-///
-/// Reuses `DocumentsException` rather than declaring a new exception
-/// type: same resource, same error-shape contract, just a different
-/// route on it.
+/// Reuses `DocumentsException` from `application_documents_api.dart`
+/// rather than declaring a new type: same resource, same error-shape
+/// contract.
 class DocumentDirectoryApi {
   DocumentDirectoryApi(this._dio);
 
@@ -37,7 +30,7 @@ class DocumentDirectoryApi {
 
   /// Mirrors `GET /documents`. Pass `null`/`''` for `search` and `null`
   /// for `fileType` to clear either filter independently.
-  Future<DocumentWithApplicationListResponse> list({
+  Future<DocumentListResponse> list({
     String? search,
     DocumentType? fileType,
     int page = 1,
@@ -53,15 +46,93 @@ class DocumentDirectoryApi {
           'page_size': pageSize,
         },
       );
-      return DocumentWithApplicationListResponse.fromJson(response.data!);
+      return DocumentListResponse.fromJson(response.data!);
     } on DioException catch (e) {
       throw DocumentsException(_messageFor(e));
     }
   }
 
-  /// Same shape as DocumentsApi._messageFor — kept as its own copy per
-  /// this codebase's existing precedent (see ContactsApi's doc comment
-  /// on the same method) even though it throws the same exception type.
+  /// Mirrors `GET /documents/{id}`.
+  Future<Document> get(String id) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('/documents/$id');
+      return Document.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw DocumentsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `POST /documents` (multipart) — uploads straight to the
+  /// library, no `applicationId` involved. `filePath` must be a real
+  /// path on device storage (`file_picker`'s `PlatformFile.path` on
+  /// mobile, not `.bytes`, which is what web platforms give instead;
+  /// this app is mobile-only, so `.path` is always populated). Same
+  /// `FormData`/`MultipartFile` shape the old nested `DocumentsApi.upload`
+  /// used.
+  Future<Document> create({
+    required String filePath,
+    required String fileName,
+    required DocumentType fileType,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath, filename: fileName),
+        'file_type': fileType.apiValue,
+      });
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/documents',
+        data: formData,
+      );
+      return Document.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw DocumentsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `PATCH /documents/{id}`. Only `file_type` is user-editable
+  /// after upload (`file_name`/`file_url` are set once at upload time),
+  /// so this takes a bare `DocumentType` rather than a `*Draft` object —
+  /// same reasoning the old nested `DocumentsApi.updateType` used.
+  Future<Document> update(String id, DocumentType fileType) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/documents/$id',
+        data: {'file_type': fileType.apiValue},
+      );
+      return Document.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw DocumentsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `DELETE /documents/{id}` (204 No Content on success) — a
+  /// real, permanent delete, unlike `ApplicationDocumentsApi.detach`
+  /// (which only removes one application's link). Removes the document
+  /// from every application it's attached to.
+  Future<void> delete(String id) async {
+    try {
+      await _dio.delete<void>('/documents/$id');
+    } on DioException catch (e) {
+      throw DocumentsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `GET /documents/{id}/download` — mints a short-lived
+  /// presigned R2 URL rather than ever returning a permanent one (see
+  /// Document's doc comment).
+  Future<DocumentDownloadResponse> download(String id) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/documents/$id/download',
+      );
+      return DocumentDownloadResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw DocumentsException(_messageFor(e));
+    }
+  }
+
+  /// Same shape as the other resource APIs' `_messageFor` — kept as its
+  /// own copy per this codebase's existing precedent.
   String _messageFor(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

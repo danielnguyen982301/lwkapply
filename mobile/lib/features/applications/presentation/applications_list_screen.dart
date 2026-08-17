@@ -332,6 +332,10 @@ class _ApplicationCard extends StatelessWidget {
   final Application application;
   final VoidCallback onTap;
 
+  bool _hasApplicationName(Application application) {
+    return application.applicationName?.isNotEmpty == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -350,7 +354,9 @@ class _ApplicationCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      application.company,
+                      _hasApplicationName(application)
+                          ? application.applicationName!
+                          : application.company,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -361,7 +367,22 @@ class _ApplicationCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 2),
-              Text(application.position, style: theme.textTheme.bodyMedium),
+              Text(
+                _hasApplicationName(application)
+                    ? application.company
+                    : application.position,
+                style: theme.textTheme.bodyMedium,
+              ),
+              if (application.applicationName != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  application.position,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
               if (application.location != null) ...[
                 const SizedBox(height: 2),
                 Text(

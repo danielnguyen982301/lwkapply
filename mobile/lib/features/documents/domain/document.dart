@@ -32,11 +32,18 @@ enum DocumentType {
 /// Mirrors DocumentRead (backend/app/schemas/document.py) and
 /// webapp/src/types/document.ts::Document. Deliberately no `fileUrl` —
 /// the API never returns the permanent R2 object key; call
-/// DocumentsApi.download to mint a short-lived presigned URL instead.
+/// DocumentDirectoryApi.download to mint a short-lived presigned URL
+/// instead.
+///
+/// Also deliberately no `applicationId` any more — a document is a
+/// top-level, user-owned resource now (backend/BACKEND_SUMMARY.md's "A
+/// note on Document / ApplicationDocument"), reusable across zero, one,
+/// or several applications via the ApplicationDocument join
+/// (features/documents/data/application_documents_api.dart), so there's
+/// no single owning application left to reference here.
 class Document {
   const Document({
     required this.id,
-    required this.applicationId,
     required this.fileName,
     required this.fileType,
     required this.createdAt,
@@ -44,7 +51,6 @@ class Document {
   });
 
   final String id;
-  final String applicationId;
   final String fileName;
   final DocumentType fileType;
   final DateTime createdAt;
@@ -53,7 +59,6 @@ class Document {
   factory Document.fromJson(Map<String, dynamic> json) {
     return Document(
       id: json['id'] as String,
-      applicationId: json['application_id'] as String,
       fileName: json['file_name'] as String,
       fileType: DocumentType.fromApiValue(json['file_type'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),

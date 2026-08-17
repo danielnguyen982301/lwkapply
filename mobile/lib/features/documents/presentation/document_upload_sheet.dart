@@ -3,19 +3,22 @@ import 'package:flutter/material.dart';
 
 import '../domain/document.dart';
 
-/// Upload form, shown via `showModalBottomSheet` from DocumentsPanel —
-/// mobile equivalent of DocumentsPanel.vue's upload `Dialog`. Kept
-/// separate from a would-be "edit" mode (unlike Contact/Interview's
+/// Upload form, shown via `showModalBottomSheet` from `DocumentsPanel`
+/// (application-scoped, followed by an attach call) and
+/// `DocumentDirectoryScreen` (library-scoped, uploads only) — mobile
+/// equivalent of `DocumentUploadDialog.vue`, always uploading straight
+/// to the library (`DocumentDirectoryApi.create`) regardless of caller.
+/// Kept separate from a would-be "edit" mode (unlike Contact/Interview's
 /// single form-sheet-does-both approach) because the fields genuinely
 /// don't overlap: upload needs a file picker, edit only ever touches
 /// `file_type` (see DocumentEditSheet) — same split the web keeps as
 /// two separate `Dialog`s rather than one.
 ///
-/// Uses `file_picker` (new dependency — see documents_api.dart's doc
-/// comment on `upload`) rather than `flutter_form_builder`, since
-/// there's no text/dropdown validation happening here that
-/// `form_builder` would add value to; a single required-file check is
-/// simpler done by hand.
+/// Uses `file_picker` (new dependency — see
+/// `DocumentDirectoryApi.create`'s doc comment) rather than
+/// `flutter_form_builder`, since there's no text/dropdown validation
+/// happening here that `form_builder` would add value to; a single
+/// required-file check is simpler done by hand.
 class DocumentUploadSheet extends StatefulWidget {
   const DocumentUploadSheet({super.key, required this.onSubmit});
 

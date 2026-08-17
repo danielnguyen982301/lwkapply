@@ -2,16 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../applications/data/applications_api.dart';
-import '../../applications/domain/application.dart';
 import '../../applications/presentation/application_formatting.dart';
-import '../../documents/data/document_directory_api.dart';
-import '../../documents/domain/document.dart';
-import '../../documents/domain/document_with_application.dart';
-import '../data/resume_analyses_api.dart';
 import '../domain/ai_job_status.dart';
 import '../domain/ats_score.dart';
-import '../domain/resume_analysis.dart';
 import 'ai_job_status_style.dart';
 import 'ats_scores_list_controller.dart';
 import 'ats_scores_list_state.dart';
@@ -19,13 +12,17 @@ import 'ats_scores_list_state.dart';
 /// Same embedded-in-`TabBarView` shape as ResumeAnalysesTab — see that
 /// file's doc comment.
 ///
-/// Needs two label lookups instead of one, since `AtsScoreRead` carries
-/// neither a resume file name nor an application company/position:
-/// `resume_analysis_id` -> (via `ResumeAnalysesApi`) -> `document_id` ->
-/// (via `DocumentDirectoryApi`) -> file name; and `application_id` ->
-/// (via `ApplicationsApi`) -> company/position. Same one-time-fetch-and-
-/// join approach as ResumeAnalysesTab/NewAtsScoreSheet, not a per-row
-/// fetch.
+/// **No more client-side joins.** `AtsScoreRead` now carries
+/// `document_file_name`/`analysis_name` directly (joined server-side —
+/// see backend/BACKEND_SUMMARY.md's "`analysis_name`, `scored_at`, and
+/// server-side `document_file_name` joins"), so the resume-label lookup
+/// this tab used to build via a dedicated fetch-and-join is gone. The
+/// `application_id` → "Company · Position" half is also gone — not
+/// replaced by anything, since `AtsScore` has no application link at all
+/// (see AtsScore's own doc comment); this was a pre-existing gap this
+/// app never caught up to, not something newly removed by this pass
+/// (every score's `applicationLabels` lookup was silently empty already,
+/// since the backend stopped returning `application_id` a while back).
 class AtsScoresTab extends ConsumerStatefulWidget {
   const AtsScoresTab({super.key});
 
@@ -37,10 +34,6 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
     with AutomaticKeepAliveClientMixin {
   final _scrollController = ScrollController();
 
-  Map<String, String> _resumeLabels = {}; // resume_analysis_id -> file name
-  Map<String, String> _applicationLabels = {}; // application_id -> "Co · Role"
-  bool _labelsLoading = true;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -48,7 +41,6 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadLabels();
   }
 
   @override
@@ -64,43 +56,6 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
     final threshold = _scrollController.position.maxScrollExtent - 200;
     if (_scrollController.position.pixels >= threshold) {
       ref.read(atsScoresListControllerProvider.notifier).loadNextPage();
-    }
-  }
-
-  Future<void> _loadLabels() async {
-    try {
-      final results = await Future.wait([
-        ref.read(resumeAnalysesApiProvider).list(pageSize: 100),
-        ref
-            .read(documentDirectoryApiProvider)
-            .list(fileType: DocumentType.resume, pageSize: 100),
-        ref.read(applicationsApiProvider).list(pageSize: 100),
-      ]);
-      if (!mounted) return;
-
-      final analyses = (results[0] as ResumeAnalysisListResponse).items;
-      final documents =
-          (results[1] as DocumentWithApplicationListResponse).items;
-      final applications = (results[2] as ApplicationListResponse).items;
-
-      final documentFileNames = {
-        for (final doc in documents) doc.document.id: doc.document.fileName,
-      };
-
-      setState(() {
-        _resumeLabels = {
-          for (final analysis in analyses)
-            analysis.id: documentFileNames[analysis.documentId] ?? 'Resume',
-        };
-        _applicationLabels = {
-          for (final application in applications)
-            application.id: '${application.company} · ${application.position}',
-        };
-        _labelsLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _labelsLoading = false);
     }
   }
 
@@ -176,14 +131,6 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
           final item = state.items[index];
           return _ScoreCard(
             score: item,
-            resumeLabel: _labelsLoading
-                ? 'Loading…'
-                : (_resumeLabels[item.resumeAnalysisId] ?? 'Resume'),
-            targetLabel: _labelsLoading
-                ? null
-                : (item.applicationId != null
-                    ? _applicationLabels[item.applicationId]
-                    : 'Pasted job description'),
             onTap: () => context.push('/ats-scores/${item.id}'),
           );
         },
@@ -227,16 +174,9 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
 }
 
 class _ScoreCard extends StatelessWidget {
-  const _ScoreCard({
-    required this.score,
-    required this.resumeLabel,
-    required this.targetLabel,
-    required this.onTap,
-  });
+  const _ScoreCard({required this.score, required this.onTap});
 
   final AtsScore score;
-  final String resumeLabel;
-  final String? targetLabel;
   final VoidCallback onTap;
 
   @override
@@ -257,15 +197,18 @@ class _ScoreCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      resumeLabel,
+                      score.documentFileName,
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      targetLabel ?? 'Loading…',
-                      style: theme.textTheme.bodyMedium,
+                      // "Analysis used" — the resume analysis this score
+                      // was run against, mirrors AtsScoresView.vue's
+                      // "Analysis used" column.
+                      score.analysisName,
+                      style: theme.textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),

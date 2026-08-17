@@ -1,15 +1,14 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../ai/data/resume_analyses_api.dart';
-import '../../applications/presentation/application_formatting.dart';
-import '../data/documents_api.dart';
+import '../../ai/presentation/view_resume_analysis_action.dart';
+import '../data/application_documents_api.dart';
+import '../data/document_directory_api.dart';
 import '../domain/document.dart';
+import 'document_attach_sheet.dart';
 import 'document_edit_sheet.dart';
+import 'document_formatting.dart';
 import 'document_upload_sheet.dart';
 import 'documents_list_controller.dart';
 import 'documents_list_state.dart';
@@ -18,6 +17,18 @@ import 'documents_list_state.dart';
 /// equivalent of webapp's DocumentsPanel.vue, rendered inside
 /// ApplicationFormScreen once an application exists (same
 /// `!isNew && applicationId` gating the other panels use).
+///
+/// **Attach/detach, not create/delete** — a document is a top-level,
+/// user-owned resource now (see document.dart's doc comment), so this
+/// panel no longer uploads a file scoped to this application directly.
+/// Two ways a document ends up attached here: "Attach existing" (picks
+/// an already-uploaded library document via `DocumentAttachSheet`) or
+/// "Upload new" (uploads to the library via `DocumentDirectoryApi.create`,
+/// then attaches the result — two sequential calls where there used to
+/// be one; either exception propagates rather than silently swallowing a
+/// partial success). "Remove from this application" only detaches the
+/// link (`ApplicationDocumentsApi.detach`) — the document itself, and
+/// any of its other applications' attachments, are untouched.
 ///
 /// Same infinite-scroll shape as InterviewsPanel (paginated backend,
 /// `.family`-scoped controller) — see DocumentsListController's doc
@@ -72,6 +83,64 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
         documentsListControllerProvider(widget.applicationId).notifier,
       );
 
+  Future<void> _openAddDocumentSheet() async {
+    final choice = await showModalBottomSheet<_AddDocumentChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('Attach existing document'),
+              onTap: () =>
+                  Navigator.pop(context, _AddDocumentChoice.attachExisting),
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_outlined),
+              title: const Text('Upload new document'),
+              onTap: () => Navigator.pop(context, _AddDocumentChoice.uploadNew),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _AddDocumentChoice.attachExisting:
+        await _openAttachSheet();
+      case _AddDocumentChoice.uploadNew:
+        await _openUploadSheet();
+    }
+  }
+
+  Future<void> _openAttachSheet() async {
+    final state =
+        ref.read(documentsListControllerProvider(widget.applicationId));
+    final alreadyAttachedIds = {for (final doc in state.items) doc.id};
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => DocumentAttachSheet(
+        alreadyAttachedIds: alreadyAttachedIds,
+        onSelected: (document) async {
+          try {
+            final attached = await ref
+                .read(applicationDocumentsApiProvider)
+                .attach(widget.applicationId, document.id);
+            if (mounted) _controller.prepend(attached);
+          } on DocumentsException catch (e) {
+            if (!sheetContext.mounted) return;
+            ScaffoldMessenger.of(
+              sheetContext,
+            ).showSnackBar(SnackBar(content: Text(e.message)));
+          }
+        },
+      ),
+    );
+  }
+
   Future<void> _openUploadSheet() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -82,13 +151,15 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
           required fileName,
           required fileType,
         }) async {
-          final uploaded = await ref.read(documentsApiProvider).upload(
-                applicationId: widget.applicationId,
+          final uploaded = await ref.read(documentDirectoryApiProvider).create(
                 filePath: filePath,
                 fileName: fileName,
                 fileType: fileType,
               );
-          if (mounted) _controller.prepend(uploaded);
+          final attached = await ref
+              .read(applicationDocumentsApiProvider)
+              .attach(widget.applicationId, uploaded.id);
+          if (mounted) _controller.prepend(attached);
         },
       ),
     );
@@ -101,24 +172,28 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
       builder: (context) => DocumentEditSheet(
         existing: document,
         onSubmit: (fileType) async {
-          final updated = await ref.read(documentsApiProvider).updateType(
-                widget.applicationId,
-                document.id,
-                fileType,
-              );
+          final updated = await ref
+              .read(documentDirectoryApiProvider)
+              .update(document.id, fileType);
           if (mounted) _controller.replaceById(updated);
         },
       ),
     );
   }
 
-  Future<void> _confirmDelete(Document document) async {
+  /// Detaches only — the document itself stays in the user's library,
+  /// and any of its other applications' attachments are untouched.
+  /// Mirrors webapp/src/components/applications/DocumentsPanel.vue's
+  /// `confirmDetach()` copy, explicit that this isn't a delete.
+  Future<void> _confirmDetach(Document document) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete document?'),
+        title: const Text('Remove from this application?'),
         content: Text(
-          'Delete "${document.fileName}"? This can\'t be undone.',
+          'Remove "${document.fileName}" from this application? The '
+          'document itself won\'t be deleted - it stays in your document '
+          'library.',
         ),
         actions: [
           TextButton(
@@ -130,7 +205,7 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Delete'),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -139,8 +214,8 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
 
     try {
       await ref
-          .read(documentsApiProvider)
-          .delete(widget.applicationId, document.id);
+          .read(applicationDocumentsApiProvider)
+          .detach(widget.applicationId, document.id);
       if (!mounted) return;
       _controller.removeById(document.id);
     } on DocumentsException catch (e) {
@@ -151,67 +226,14 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
     }
   }
 
-  /// Reuses ResumeAnalysisDetailScreen wholesale rather than building a
-  /// second display for the same data — see that screen's doc comment.
-  /// Fetches the most recent analysis for this document if one exists
-  /// (`latestForDocument`, page_size-1 trick — see that method's doc
-  /// comment on ResumeAnalysesApi). If none exists, confirms with the
-  /// user before calling `create()` — mirrors
-  /// webapp/src/components/ai/ResumeAnalysisModal.vue's "No analysis
-  /// yet for this resume" + explicit "Analyze now" button: `create()`
-  /// hits a rate-limited AI call, so it must never fire just because
-  /// someone tapped "View Analysis", only when they've actually said
-  /// they want a new analysis.
   Future<void> _viewAnalysis(Document document) async {
     setState(() => _analyzingId = document.id);
     try {
-      final api = ref.read(resumeAnalysesApiProvider);
-      var analysis = await api.latestForDocument(document.id);
-      if (analysis == null) {
-        if (!mounted) return;
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('No analysis yet'),
-            content: Text(
-              '"${document.fileName}" hasn\'t been analyzed yet. Analyze '
-              'it now?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Analyze now'),
-              ),
-            ],
-          ),
-        );
-        if (confirmed != true || !mounted) return;
-        analysis = await api.create(document.id);
-      }
-      if (!mounted) return;
-      // Threading applicationId through as a query param is what lets
-      // ResumeAnalysisDetailScreen look up (via AtsScoresApi
-      // .latestForApplication) and show a score already run against
-      // *this* application, rather than only ever offering "Score
-      // against a job" as if none had ever been run — this is the one
-      // entry point into that screen that actually has an application
-      // in context (AiToolsScreen's tab/create flow has none, since a
-      // resume analysis isn't owned by any single application).
-      unawaited(
-        context.push(
-          '/resume-analyses/${analysis.id}'
-          '?applicationId=${Uri.encodeQueryComponent(widget.applicationId)}',
-        ),
+      await viewResumeAnalysisAction(
+        context: context,
+        ref: ref,
+        document: document,
       );
-    } on ResumeAnalysesException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _analyzingId = null);
     }
@@ -220,9 +242,8 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
   Future<void> _download(Document document) async {
     setState(() => _downloadingId = document.id);
     try {
-      final response = await ref
-          .read(documentsApiProvider)
-          .download(widget.applicationId, document.id);
+      final response =
+          await ref.read(documentDirectoryApiProvider).download(document.id);
       final uri = Uri.parse(response.downloadUrl);
       // Launched externally (browser/PDF viewer) rather than downloaded
       // in-app — the presigned URL is already a normal HTTPS link the
@@ -262,9 +283,9 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
           right: 16,
           bottom: 16,
           child: FloatingActionButton.extended(
-            onPressed: _openUploadSheet,
-            icon: const Icon(Icons.upload_file_outlined),
-            label: const Text('Upload document'),
+            onPressed: _openAddDocumentSheet,
+            icon: const Icon(Icons.add),
+            label: const Text('Add document'),
           ),
         ),
       ],
@@ -305,8 +326,8 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 64),
             child: Text(
-              'No documents yet. Upload a resume, cover letter, or other '
-              'file for this application.',
+              'No documents attached yet. Upload a new file or attach one '
+              'already in your document library.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
@@ -334,7 +355,7 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
               ? () => _viewAnalysis(document)
               : null,
           onEdit: () => _openEditSheet(document),
-          onDelete: () => _confirmDelete(document),
+          onDetach: () => _confirmDetach(document),
         );
       },
     );
@@ -373,6 +394,8 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
   }
 }
 
+enum _AddDocumentChoice { attachExisting, uploadNew }
+
 class _DocumentCard extends StatelessWidget {
   const _DocumentCard({
     required this.document,
@@ -381,7 +404,7 @@ class _DocumentCard extends StatelessWidget {
     required this.onDownload,
     required this.onViewAnalysis,
     required this.onEdit,
-    required this.onDelete,
+    required this.onDetach,
   });
 
   final Document document;
@@ -394,7 +417,7 @@ class _DocumentCard extends StatelessWidget {
   /// on this same row action.
   final VoidCallback? onViewAnalysis;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback onDetach;
 
   @override
   Widget build(BuildContext context) {
@@ -409,7 +432,7 @@ class _DocumentCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Uploaded ${formatDate(document.createdAt)}',
+                'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall,
               ),
@@ -454,10 +477,10 @@ class _DocumentCard extends StatelessWidget {
               onPressed: onEdit,
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete document',
+              icon: const Icon(Icons.link_off),
+              tooltip: 'Remove from this application',
               color: theme.colorScheme.error,
-              onPressed: onDelete,
+              onPressed: onDetach,
             ),
           ],
         ),

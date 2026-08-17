@@ -22,15 +22,33 @@ class ApplicationPicker extends ConsumerStatefulWidget {
 
 class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   Timer? _debounce;
   List<Application> _results = [];
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Shows results the moment the field is tapped, not just after
+    // typing — mirrors web's `complete-on-focus` on the equivalent
+    // `AutoComplete`s. Undebounced (a deliberate tap, not a keystroke),
+    // and re-runs on every focus gain so results stay current even if
+    // the picker was left with a stale list from an earlier search.
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
     _debounce?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) _search(_controller.text);
   }
 
   void _onChanged(String query) {
@@ -60,10 +78,16 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
   void _select(Application application) {
     setState(() {
       _results = [];
-      _controller.text = application.company;
+      _controller.text = _hasApplicationName(application)
+          ? application.applicationName!
+          : application.company;
     });
     FocusScope.of(context).unfocus();
     widget.onSelected(application);
+  }
+
+  bool _hasApplicationName(Application application) {
+    return application.applicationName?.isNotEmpty == true;
   }
 
   @override
@@ -73,6 +97,7 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
       children: [
         TextField(
           controller: _controller,
+          focusNode: _focusNode,
           decoration: InputDecoration(
             labelText: 'Application',
             hintText: 'Search your tracked applications…',
@@ -108,8 +133,16 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
                     application.jobUrl!.isNotEmpty;
                 return ListTile(
                   dense: true,
-                  title: Text(application.company),
-                  subtitle: Text(application.position),
+                  title: Text(
+                    _hasApplicationName(application)
+                        ? application.applicationName!
+                        : application.company,
+                  ),
+                  subtitle: Text(
+                    _hasApplicationName(application)
+                        ? '${application.company} · ${application.position}'
+                        : application.position,
+                  ),
                   // job_url drives ATS Score's auto-fetch path (see
                   // AtsScoresTab's create sheet) — surfacing it here up
                   // front avoids a later "no job_url" 422 surprise,

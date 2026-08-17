@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/document.dart';
-import '../domain/document_with_application.dart';
 
 enum RequestStatus { idle, loading, loadingMore, error }
 
@@ -24,7 +23,7 @@ class DocumentDirectoryState {
     this.errorMessage,
   });
 
-  final List<DocumentWithApplication> items;
+  final List<Document> items;
   final int total;
   final int page;
   final int pageSize;
@@ -38,7 +37,7 @@ class DocumentDirectoryState {
   bool get hasActiveFilter => search.isNotEmpty || fileTypeFilter != null;
 
   DocumentDirectoryState copyWith({
-    List<DocumentWithApplication>? items,
+    List<Document>? items,
     int? total,
     int? page,
     int? pageSize,

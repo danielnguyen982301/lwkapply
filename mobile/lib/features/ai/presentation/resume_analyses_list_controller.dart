@@ -77,6 +77,18 @@ class ResumeAnalysesListController
       total: state.total + 1,
     );
   }
+
+  /// After a successful `analysis_name` rename — same item, same
+  /// position, so this list reflects the new name without a manual
+  /// pull-to-refresh. Mirrors DocumentsListController's `replaceById`.
+  void replaceById(ResumeAnalysis updated) {
+    state = state.copyWith(
+      items: [
+        for (final item in state.items)
+          if (item.id == updated.id) updated else item,
+      ],
+    );
+  }
 }
 
 final resumeAnalysesListControllerProvider = StateNotifierProvider.autoDispose<

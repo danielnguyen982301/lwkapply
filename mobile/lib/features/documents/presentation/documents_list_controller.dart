@@ -1,38 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/documents_api.dart';
+import '../data/application_documents_api.dart';
 import '../domain/document.dart';
 import 'documents_list_state.dart';
 
 /// Mirrors InterviewsListController's `.family`-scoped infinite-scroll
 /// shape (features/interviews/presentation/
-/// interviews_list_controller.dart), scoped to one application.
+/// interviews_list_controller.dart), scoped to one application — this
+/// application's *attached* documents (via `ApplicationDocumentsApi`,
+/// the `ApplicationDocument` join), not documents it owns outright
+/// (there's no more "owns" — see document.dart's doc comment).
 ///
 /// Deliberately scoped to list/pagination only — same boundary
 /// InterviewsListController/ApplicationsListController draw. Mutations
-/// go through `DocumentsApi` directly from DocumentsPanel, then call
-/// back into this controller to patch local state.
+/// (attach, upload-then-attach, edit type, detach) go through
+/// `ApplicationDocumentsApi`/`DocumentDirectoryApi` directly from
+/// `DocumentsPanel`, then call back into this controller to patch local
+/// state.
 ///
-/// One real difference from Interviews: this list is ordered by
-/// `created_at DESC` (see documents.py::list_documents), and only
-/// `file_type` is ever editable in place — nothing about an upload or
-/// an edit can change a document's position in that ordering the way
-/// editing an interview's `scheduled_at` can. So unlike
-/// InterviewsListController (full `refresh()` after every
-/// create/update, since position genuinely is ambiguous there), this
-/// controller patches `items` directly for all three mutations:
-/// `prepend()` after upload (a new document is always the newest, so
-/// always belongs at the front — correct even with several
-/// infinite-scrolled pages already loaded), `replaceById()` after a
-/// file-type edit (position never changes), and `removeById()` after
-/// delete (same no-reorder reasoning every other list already uses).
+/// Same no-reorder-ambiguity reasoning `DocumentsListController` always
+/// had (`GET /applications/{id}/documents` orders by attach time
+/// descending, and neither attaching nor editing `file_type` can change
+/// that position): `prepend()` after attach/upload-then-attach (always
+/// newest, always belongs at index 0), `replaceById()` after a
+/// file-type edit (position unchanged), `removeById()` after detach.
 class DocumentsListController extends StateNotifier<DocumentsListState> {
   DocumentsListController(this._api, this._applicationId)
       : super(const DocumentsListState()) {
     fetchFirstPage();
   }
 
-  final DocumentsApi _api;
+  final ApplicationDocumentsApi _api;
   final String _applicationId;
 
   Future<void> fetchFirstPage() async {
@@ -86,9 +84,9 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
 
   Future<void> refresh() => fetchFirstPage();
 
-  /// After a successful upload — always the newest document, so always
-  /// belongs at index 0 regardless of how many pages are already
-  /// loaded (see class doc comment).
+  /// After a successful attach (or upload-then-attach) — always the
+  /// newest attachment, so always belongs at index 0 regardless of how
+  /// many pages are already loaded (see class doc comment).
   void prepend(Document document) {
     state = state.copyWith(
       items: [document, ...state.items],
@@ -106,8 +104,9 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
     );
   }
 
-  /// After a successful delete — no reorder ambiguity, same reasoning
-  /// as every other list's `removeById`.
+  /// After a successful detach — no reorder ambiguity, same reasoning
+  /// as every other list's `removeById`. The document itself still
+  /// exists in the library; only this application's link is gone.
   void removeById(String id) {
     if (!state.items.any((item) => item.id == id)) return;
     state = state.copyWith(
@@ -121,7 +120,7 @@ final documentsListControllerProvider = StateNotifierProvider.autoDispose
     .family<DocumentsListController, DocumentsListState, String>(
         (ref, applicationId) {
   return DocumentsListController(
-    ref.watch(documentsApiProvider),
+    ref.watch(applicationDocumentsApiProvider),
     applicationId,
   );
 });

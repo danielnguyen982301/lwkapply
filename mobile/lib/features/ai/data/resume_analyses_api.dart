@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../domain/ai_job_status.dart';
 import '../domain/resume_analysis.dart';
 
 /// Thrown for any non-2xx `/ai/resume-analyses` response, mirroring
@@ -58,6 +59,8 @@ class ResumeAnalysesApi {
 
   Future<ResumeAnalysisListResponse> list({
     String? documentId,
+    AIJobStatus? status,
+    String? search,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -66,6 +69,8 @@ class ResumeAnalysesApi {
         '/ai/resume-analyses',
         queryParameters: {
           if (documentId != null) 'document_id': documentId,
+          if (status != null) 'status': status.apiValue,
+          if (search != null && search.isNotEmpty) 'search': search,
           'page': page,
           'page_size': pageSize,
         },
@@ -83,6 +88,40 @@ class ResumeAnalysesApi {
   Future<ResumeAnalysis?> latestForDocument(String documentId) async {
     final response = await list(documentId: documentId, page: 1, pageSize: 1);
     return response.items.isEmpty ? null : response.items.first;
+  }
+
+  /// Live-searched (server-side `status=completed` + `analysis_name`
+  /// `search`) — used by `ResumeAnalysisPicker` for `NewAtsScoreSheet`'s
+  /// resume-analysis picker, replacing a preloaded-and-client-filtered
+  /// list capped at 100 items (a user with more completed analyses than
+  /// that could never find the rest). Mirrors
+  /// webapp/src/stores/resumeAnalyses.ts::searchCompletedForPicker.
+  Future<List<ResumeAnalysis>> searchCompletedForPicker(
+    String query, {
+    int pageSize = 10,
+  }) async {
+    final response = await list(
+      status: AIJobStatus.completed,
+      search: query,
+      page: 1,
+      pageSize: pageSize,
+    );
+    return response.items;
+  }
+
+  /// Mirrors `PATCH /ai/resume-analyses/{id}` — `analysis_name` is the
+  /// only client-editable field (see ResumeAnalysis.analysisName's doc
+  /// comment).
+  Future<ResumeAnalysis> updateName(String id, String analysisName) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/ai/resume-analyses/$id',
+        data: {'analysis_name': analysisName},
+      );
+      return ResumeAnalysis.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ResumeAnalysesException(_messageFor(e));
+    }
   }
 
   /// Same shape as DocumentsApi/ApplicationsApi's `_messageFor` — kept

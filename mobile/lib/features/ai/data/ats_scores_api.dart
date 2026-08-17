@@ -17,11 +17,15 @@ class AtsScoresException implements Exception {
 /// Raw HTTP calls against `/ai/ats-scores`. Same top-level/user-owned
 /// shape and async create-then-poll pattern as ResumeAnalysesApi.
 ///
-/// `create`'s job-description sourcing mirrors the backend/web contract
-/// exactly: pass `jobDescription` to paste it directly (always wins,
-/// even if `applicationId` is also set); omit it to let the backend
-/// resolve it from `applicationId`'s `job_url` — which only works if
-/// that application has one, and can still fail asynchronously if the
+/// **No `applicationId` anywhere here** — `AtsScore` has no application
+/// link at all (backend/BACKEND_SUMMARY.md's "A note on Document /
+/// ApplicationDocument"; a pre-existing gap this app never caught up to,
+/// not something newly removed by this pass). `create`'s job-description
+/// sourcing: pass `jobDescription` to paste it directly (always wins,
+/// even if `jobUrl` is also set); pass `jobUrl` to fetch and score
+/// against it server-side (resolved client-side from a picked
+/// `Application.jobUrl`, or a pasted URL — this class has no way to
+/// resolve one by id any more) — can still fail asynchronously if the
 /// URL can't be fetched (see AtsScoreDetailController's paste-and-retry
 /// fallback).
 class AtsScoresApi {
@@ -31,7 +35,7 @@ class AtsScoresApi {
 
   Future<AtsScore> create({
     required String resumeAnalysisId,
-    String? applicationId,
+    String? jobUrl,
     String? jobDescription,
   }) async {
     try {
@@ -39,7 +43,7 @@ class AtsScoresApi {
         '/ai/ats-scores',
         data: {
           'resume_analysis_id': resumeAnalysisId,
-          if (applicationId != null) 'application_id': applicationId,
+          if (jobUrl != null) 'job_url': jobUrl,
           if (jobDescription != null) 'job_description': jobDescription,
         },
       );
@@ -61,7 +65,7 @@ class AtsScoresApi {
   }
 
   Future<AtsScoreListResponse> list({
-    String? applicationId,
+    String? resumeAnalysisId,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -69,7 +73,7 @@ class AtsScoresApi {
       final response = await _dio.get<Map<String, dynamic>>(
         '/ai/ats-scores',
         queryParameters: {
-          if (applicationId != null) 'application_id': applicationId,
+          if (resumeAnalysisId != null) 'resume_analysis_id': resumeAnalysisId,
           'page': page,
           'page_size': pageSize,
         },
@@ -80,29 +84,21 @@ class AtsScoresApi {
     }
   }
 
-  /// The most recent score for `(applicationId, resumeAnalysisId)`, or
-  /// null. The backend's list endpoint only filters by `applicationId`
-  /// (no `resume_analysis_id` filter exists server-side), so the
-  /// `resumeAnalysisId` match happens client-side over an
-  /// already-created_at-desc-ordered page — `firstWhere` naturally
-  /// returns the most recent match. Mirrors
-  /// webapp/src/stores/atsScores.ts::fetchLatestForApplication exactly,
-  /// including the page_size 100 cap (a generous bound for one
-  /// application's score history, not a real listing). Used by the
-  /// Documents panel's "View Analysis" row action.
-  Future<AtsScore?> latestForApplication(
-    String applicationId,
-    String resumeAnalysisId,
-  ) async {
+  /// The most recent score for `resumeAnalysisId`, or null. The backend
+  /// filters and orders (`created_at DESC`) server-side, so `page_size:
+  /// 1` is enough — no client-side `.firstWhere` needed. Mirrors
+  /// webapp/src/stores/atsScores.ts::fetchLatestForResumeAnalysis. Used
+  /// by `ResumeAnalysisDetailScreen` (both the app-scoped and
+  /// Document-Library "view analysis" entry points — a score isn't
+  /// scoped to any one application any more, so both behave identically
+  /// here).
+  Future<AtsScore?> latestForResumeAnalysis(String resumeAnalysisId) async {
     final response = await list(
-      applicationId: applicationId,
+      resumeAnalysisId: resumeAnalysisId,
       page: 1,
-      pageSize: 100,
+      pageSize: 1,
     );
-    for (final item in response.items) {
-      if (item.resumeAnalysisId == resumeAnalysisId) return item;
-    }
-    return null;
+    return response.items.isEmpty ? null : response.items.first;
   }
 
   String _messageFor(DioException e) {

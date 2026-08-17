@@ -14,6 +14,9 @@ class ResumeAnalysis {
     required this.errorMessage,
     required this.createdAt,
     required this.updatedAt,
+    required this.completedAt,
+    required this.analysisName,
+    required this.documentFileName,
   });
 
   final String id;
@@ -23,6 +26,22 @@ class ResumeAnalysis {
   final String? errorMessage;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Set only once `status` transitions to `completed` (distinct from
+  /// `createdAt`, since parsing is async) — null otherwise, including on
+  /// a failed run.
+  final DateTime? completedAt;
+
+  /// Auto-generated (source file name + completion timestamp) once
+  /// `status` transitions to `completed`, null otherwise — same
+  /// lifecycle as `completedAt`. Editable afterward via
+  /// `PATCH /ai/resume-analyses/{id}` (`ResumeAnalysesApi.updateName`).
+  final String? analysisName;
+
+  /// The source document's file name, joined in server-side — always
+  /// present (`documentId` is a required FK). Spares a separate
+  /// Documents fetch just to render a label.
+  final String documentFileName;
 
   factory ResumeAnalysis.fromJson(Map<String, dynamic> json) {
     return ResumeAnalysis(
@@ -35,6 +54,11 @@ class ResumeAnalysis {
       errorMessage: json['error_message'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      completedAt: json['completed_at'] == null
+          ? null
+          : DateTime.parse(json['completed_at'] as String),
+      analysisName: json['analysis_name'] as String?,
+      documentFileName: json['document_file_name'] as String,
     );
   }
 }
