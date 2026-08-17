@@ -26,9 +26,24 @@ import 'ats_score_result_card.dart';
 /// after the backend tried and couldn't fetch `job_url` — needs a retry
 /// surface here.
 class AtsScoreDetailScreen extends ConsumerStatefulWidget {
-  const AtsScoreDetailScreen({super.key, required this.scoreId});
+  const AtsScoreDetailScreen({
+    super.key,
+    required this.scoreId,
+    this.showAnalysisLink = false,
+  });
 
   final String scoreId;
+
+  /// Whether to show the "View resume analysis" row below. Only true
+  /// when reached directly from the ATS Scores list (AtsScoresTab's card
+  /// tap, or AiToolsScreen's "New Score" flow while on that tab) — the
+  /// user hasn't necessarily seen the underlying analysis yet there. When
+  /// reached the other way around — ResumeAnalysisDetailScreen's own
+  /// "View score" row or its "Score against a job" flow, which is also
+  /// how DocumentsPanel's/DocumentDirectoryScreen's "View AI analysis"
+  /// action lands here — the user just came from that analysis screen,
+  /// so a link back to it would be redundant.
+  final bool showAnalysisLink;
 
   @override
   ConsumerState<AtsScoreDetailScreen> createState() =>
@@ -57,7 +72,10 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
             jobDescription: _pastedController.text.trim(),
           );
       if (!mounted) return;
-      context.pushReplacement('/ats-scores/${created.id}');
+      context.pushReplacement(
+        '/ats-scores/${created.id}'
+        '${widget.showAnalysisLink ? '?showAnalysisLink=true' : ''}',
+      );
     } on AtsScoresException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -211,11 +229,42 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      child: AtsScoreResultCard(
-        score: score.feedback!,
-        jobDescription: score.jobDescription,
-        jobDescriptionSource: score.jobDescriptionSource,
-        jobUrl: score.jobUrl,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showAnalysisLink) ...[
+            // A proper full-width, chevron-affordanced row — same
+            // Card+ListTile shape as ResumeAnalysisDetailScreen's own
+            // "View score" row (the reverse link) — rather than a small
+            // inline text link, which is too small a touch target to
+            // reliably tap from AtsScoresTab's card.
+            Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(
+                  score.analysisName,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  score.documentFileName,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    context.push('/resume-analyses/${score.resumeAnalysisId}'),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          AtsScoreResultCard(
+            score: score.feedback!,
+            jobDescription: score.jobDescription,
+            jobDescriptionSource: score.jobDescriptionSource,
+            jobUrl: score.jobUrl,
+          ),
+        ],
       ),
     );
   }

@@ -149,6 +149,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'ats-score-detail',
         builder: (context, state) => AtsScoreDetailScreen(
           scoreId: state.pathParameters['id']!,
+          // Only set when reached from AtsScoresTab/AiToolsScreen's "New
+          // Score" flow — see AtsScoreDetailScreen's doc comment for why
+          // the "View resume analysis" row is conditional.
+          showAnalysisLink:
+              state.uri.queryParameters['showAnalysisLink'] == 'true',
         ),
       ),
       // Also a plain top-level push, same reasoning. Reached via the
