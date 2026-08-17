@@ -11,7 +11,9 @@ import Tag from 'primevue/tag'
 import AiToolsTabs from '@/components/ai/AiToolsTabs.vue'
 import NewResumeAnalysisDialog from '@/components/ai/NewResumeAnalysisDialog.vue'
 import ResumeAnalysisDetailDialog from '@/components/ai/ResumeAnalysisDetailDialog.vue'
+import EditAnalysisNameDialog from '@/components/ai/EditAnalysisNameDialog.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
+import { tooltip } from '@/lib/tooltip'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity } from '@/lib/ai-ui'
 import { formatDate, formatDateTime } from '@/lib/date-utils'
@@ -56,9 +58,23 @@ function openDetailDialog(analysis: ResumeAnalysis) {
 
 // Vue template expressions can't parse an inline arrow function with a
 // typed destructured parameter (`({ data }: { data: X }) => ...`) - named
-// here instead of written inline in @row-click below.
-function handleRowClick(event: { data: ResumeAnalysis }) {
+// here instead of written inline in @row-click below. Skips clicks that
+// originated on the row's own rename button - same target.closest('a,
+// button') guard as lib/row-click.ts's useApplicationRowClick, just
+// opening a local dialog here instead of navigating.
+function handleRowClick(event: { originalEvent: Event; data: ResumeAnalysis }) {
+  const target = event.originalEvent.target as HTMLElement
+  if (target.closest('a, button')) return
   openDetailDialog(event.data)
+}
+
+// --- edit (rename) dialog ------------------------------------------------
+const editDialogVisible = ref(false)
+const editingAnalysis = ref<ResumeAnalysis | null>(null)
+
+function openEditDialog(analysis: ResumeAnalysis) {
+  editingAnalysis.value = analysis
+  editDialogVisible.value = true
 }
 
 onMounted(() => {
@@ -132,6 +148,22 @@ onBeforeUnmount(() => {
             />
           </template>
         </Column>
+        <Column field="analysis_name" header="Analysis name">
+          <template #body="{ data }: { data: ResumeAnalysis }">
+            <div class="flex items-center gap-1">
+              <TruncatedText :text="data.analysis_name" max-width="14rem" />
+              <Button
+                v-if="data.status === 'completed'"
+                v-tooltip.bottom="tooltip('Rename analysis')"
+                icon="pi pi-pencil"
+                aria-label="Rename analysis"
+                link
+                size="small"
+                @click="openEditDialog(data)"
+              />
+            </div>
+          </template>
+        </Column>
         <Column header="Status">
           <template #body="{ data }: { data: ResumeAnalysis }">
             <Tag
@@ -145,7 +177,7 @@ onBeforeUnmount(() => {
             {{ formatDate(data.created_at) }}
           </template>
         </Column>
-        <Column header="Analyzed At">
+        <Column header="Analyzed at">
           <template #body="{ data }: { data: ResumeAnalysis }">
             {{ formatAnalyzedAt(data.completed_at) }}
           </template>
@@ -167,4 +199,6 @@ onBeforeUnmount(() => {
   <NewResumeAnalysisDialog v-model:visible="createDialogVisible" @created="handleCreated" />
 
   <ResumeAnalysisDetailDialog v-model:visible="detailDialogVisible" />
+
+  <EditAnalysisNameDialog v-model:visible="editDialogVisible" :analysis="editingAnalysis" />
 </template>
