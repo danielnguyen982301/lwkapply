@@ -21,8 +21,14 @@ so far) from the project roadmap.
 - **Device tokens**: `POST`/`DELETE /users/me/device-tokens`, backing
   the mobile client's push-notification registration — see "Interview
   reminder system" below
-- **Applications**: full CRUD, pagination, status filter, company/position
-  search — all scoped to the authenticated user
+- **Applications**: full CRUD, pagination, status filter,
+  company/position/`application_name` search — all scoped to the
+  authenticated user. `application_name` is an optional, user-chosen
+  label (e.g. "Re-applied after rejection") so applications that share
+  the same company/position are still easy to tell apart in list views —
+  purely a display/search convenience, no other endpoint behavior depends
+  on it. Embedded in the Contacts/Interviews directory endpoints'
+  `ApplicationSummary` too (see those notes below)
 - **Interviews**: full CRUD, pagination, nested under
   `/applications/{application_id}/interviews`; plus a read-only, top-level
   `GET /interviews` — a cross-application directory of every interview
@@ -116,7 +122,12 @@ so far) from the project roadmap.
   guard gets direct coverage, not just incidental exercise via the
   happy-path tests), `test_ai_tasks.py`, and `test_ai_endpoints.py` — see
   "AI features" below for the new `join_transaction_mode` pattern
-  `test_ai_tasks.py` establishes for testing a per-request Celery task
+  `test_ai_tasks.py` establishes for testing a per-request Celery task.
+  `application_name` round-trip/search coverage lives in
+  `test_applications_endpoints.py`; its presence in the embedded
+  `ApplicationSummary` is covered directly in `test_contacts_directory.py`
+  and `test_interviews_directory.py` (plus `test_contact_schema.py`'s
+  pure-schema fixtures, updated to include the new required field)
 
 All Interview/Contact endpoints enforce ownership by joining through
 `Application.user_id`, the same IDOR-prevention approach the
@@ -311,10 +322,11 @@ gets extended:
 the one Contact route that isn't nested under `/applications/{id}`:
 
 - The response embeds a minimal `ApplicationSummary` (company, position,
-  status) per contact, via `contains_eager(Contact.application)` on the
-  same join used for the ownership filter — one query, not N+1. This
-  relies on the join/filter staying the actual source of that relationship
-  data, so don't reorder the query without care.
+  `application_name`, status) per contact, via
+  `contains_eager(Contact.application)` on the same join used for the
+  ownership filter — one query, not N+1. This relies on the join/filter
+  staying the actual source of that relationship data, so don't reorder
+  the query without care.
 - Considered, and deliberately deferred: a many-to-many `contact_applications`
   join table, so one real person (e.g. a recruiter reaching out about two
   different roles) could be a single contact linked to multiple
@@ -343,9 +355,10 @@ is the one Interview route that isn't nested under `/applications/{id}`,
 built the same way as the contacts directory above:
 
 - The response embeds a minimal `ApplicationSummary` (company, position,
-  status) per interview, via `contains_eager(Interview.application)` on
-  the same join used for the ownership filter — one query, not N+1. Same
-  caution as the Contacts version: don't reorder the query without care.
+  `application_name`, status) per interview, via
+  `contains_eager(Interview.application)` on the same join used for the
+  ownership filter — one query, not N+1. Same caution as the Contacts
+  version: don't reorder the query without care.
 - No text `search` param, unlike Contacts — `Interview` has no name-like
   field to match against. The filter here is `result`
   (`pending`/`passed`/`failed`/`cancelled`), scoped by the same
@@ -1149,6 +1162,8 @@ backend/
       ..._resume_analyses_add_completed_at.py # migrations rather than
       ..._ats_scores_add_job_url.py          # one big one - see "A note
       ..._ats_scores_drop_application_id.py  # on Document / ApplicationDocument"
+      ..._applications_add_application_name.py # optional label field,
+                                                 # see the Applications bullet above
   requirements.txt
   Dockerfile
 ```
