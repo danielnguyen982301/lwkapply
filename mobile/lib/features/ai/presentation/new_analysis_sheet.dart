@@ -88,7 +88,7 @@ class _NewAnalysisSheetState extends State<NewAnalysisSheet> {
               ],
               ResumeDocumentPicker(
                 onSelected: (doc) =>
-                    setState(() => _selectedDocumentId = doc.document.id),
+                    setState(() => _selectedDocumentId = doc.id),
               ),
               const SizedBox(height: 24),
               Row(

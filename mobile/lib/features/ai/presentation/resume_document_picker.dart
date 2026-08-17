@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../documents/data/document_directory_api.dart';
 import '../../documents/domain/document.dart';
-import '../../documents/domain/document_with_application.dart';
+import '../../documents/presentation/document_formatting.dart';
 
 /// Search-and-pick-one widget for choosing a resume `Document` to start
 /// a new analysis from. No prior art anywhere in this app (or on web,
@@ -26,7 +26,7 @@ import '../../documents/domain/document_with_application.dart';
 class ResumeDocumentPicker extends ConsumerStatefulWidget {
   const ResumeDocumentPicker({super.key, required this.onSelected});
 
-  final ValueChanged<DocumentWithApplication> onSelected;
+  final ValueChanged<Document> onSelected;
 
   @override
   ConsumerState<ResumeDocumentPicker> createState() =>
@@ -35,15 +35,31 @@ class ResumeDocumentPicker extends ConsumerStatefulWidget {
 
 class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   Timer? _debounce;
-  List<DocumentWithApplication> _results = [];
+  List<Document> _results = [];
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Shows results the moment the field is tapped, not just after
+    // typing — mirrors web's `complete-on-focus` on the equivalent
+    // `AutoComplete`s. Undebounced (a deliberate tap, not a keystroke).
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
     _debounce?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) _search(_controller.text);
   }
 
   void _onChanged(String query) {
@@ -70,10 +86,10 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
     }
   }
 
-  void _select(DocumentWithApplication doc) {
+  void _select(Document doc) {
     setState(() {
       _results = [];
-      _controller.text = doc.document.fileName;
+      _controller.text = doc.fileName;
     });
     FocusScope.of(context).unfocus();
     widget.onSelected(doc);
@@ -86,6 +102,7 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
       children: [
         TextField(
           controller: _controller,
+          focusNode: _focusNode,
           decoration: InputDecoration(
             labelText: 'Resume',
             hintText: 'Search your uploaded resumes…',
@@ -119,9 +136,9 @@ class _ResumeDocumentPickerState extends ConsumerState<ResumeDocumentPicker> {
                 final doc = _results[index];
                 return ListTile(
                   dense: true,
-                  title: Text(doc.document.fileName),
+                  title: Text(doc.fileName),
                   subtitle: Text(
-                    '${doc.application.company} · ${doc.application.position}',
+                    'Uploaded ${formatDateTime(doc.createdAt.toLocal())}',
                   ),
                   onTap: () => _select(doc),
                 );

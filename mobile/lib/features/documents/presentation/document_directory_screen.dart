@@ -2,33 +2,38 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../applications/domain/application.dart';
-import '../../applications/presentation/application_formatting.dart';
-import '../../applications/presentation/application_status_style.dart';
+import '../../ai/presentation/view_resume_analysis_action.dart';
 import '../../settings/presentation/settings_icon_button.dart';
+import '../data/application_documents_api.dart';
+import '../data/document_directory_api.dart';
 import '../domain/document.dart';
-import '../domain/document_with_application.dart';
 import 'document_directory_controller.dart';
 import 'document_directory_state.dart';
+import 'document_edit_sheet.dart';
+import 'document_formatting.dart';
+import 'document_upload_sheet.dart';
 
 /// Mobile counterpart to webapp/src/views/documents/
 /// DocumentDirectoryView.vue and the bottom-nav "Documents" tab
-/// (previously `ComingSoonScreen` — see router.dart). Read-only by
-/// design, same reasoning as ContactDirectoryScreen/
-/// InterviewDirectoryScreen: it aggregates every document across every
-/// application the user owns, and each row points back to the owning
-/// application to upload/edit/delete/download rather than duplicating
-/// that here (documents only have that UI nested inside
-/// `ApplicationFormScreen`'s Documents tab, via `DocumentsPanel`) — this
-/// directory doesn't even offer a download shortcut, matching the web
-/// view's contract exactly.
+/// (previously `ComingSoonScreen` — see router.dart).
+///
+/// **No longer read-only** — this is now the primary place to manage the
+/// user's whole document library (upload/edit/download/delete/view AI
+/// analysis), matching `DocumentDirectoryView.vue`'s own rework once
+/// `Document` became a top-level, user-owned resource (see document.dart's
+/// doc comment). Each row no longer points back to "the" owning
+/// application — a document can belong to zero, one, or several
+/// applications now, so there's no single one left to navigate to;
+/// attaching a document to a specific application still only happens
+/// from within that application's Documents tab (`DocumentsPanel`).
 ///
 /// Combines both prior directory screens' filter UI rather than
 /// introducing a third pattern: a debounced text search
-/// (ContactDirectoryScreen's box, matching file name or company) *and* a
-/// file-type filter sheet (InterviewDirectoryScreen's
+/// (ContactDirectoryScreen's box, now matching `file_name` only — no more
+/// company match, since there's no single parent application to search
+/// on) *and* a file-type filter sheet (InterviewDirectoryScreen's
 /// `_pickResultFilter` shape), since `GET /documents`
 /// (DocumentDirectoryApi's doc comment) supports both at once. Each
 /// filter clears independently via its own control, plus a combined
@@ -47,6 +52,10 @@ class _DocumentDirectoryScreenState
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _debounce;
+
+  /// Same spinner-swap treatment as DocumentsPanel's row actions.
+  String? _downloadingId;
+  String? _analyzingId;
 
   @override
   void initState() {
@@ -71,6 +80,9 @@ class _DocumentDirectoryScreenState
       ref.read(documentDirectoryControllerProvider.notifier).loadNextPage();
     }
   }
+
+  DocumentDirectoryController get _controller =>
+      ref.read(documentDirectoryControllerProvider.notifier);
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
@@ -127,73 +139,197 @@ class _DocumentDirectoryScreenState
         .setFileTypeFilter(selected);
   }
 
+  Future<void> _openUploadSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DocumentUploadSheet(
+        onSubmit: ({
+          required filePath,
+          required fileName,
+          required fileType,
+        }) async {
+          final uploaded = await ref.read(documentDirectoryApiProvider).create(
+                filePath: filePath,
+                fileName: fileName,
+                fileType: fileType,
+              );
+          if (mounted) _controller.prepend(uploaded);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openEditSheet(Document document) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DocumentEditSheet(
+        existing: document,
+        onSubmit: (fileType) async {
+          final updated = await ref
+              .read(documentDirectoryApiProvider)
+              .update(document.id, fileType);
+          if (mounted) _controller.replaceById(updated);
+        },
+      ),
+    );
+  }
+
+  Future<void> _download(Document document) async {
+    setState(() => _downloadingId = document.id);
+    try {
+      final response =
+          await ref.read(documentDirectoryApiProvider).download(document.id);
+      final uri = Uri.parse(response.downloadUrl);
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't open the document.")),
+        );
+      }
+    } on DocumentsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _downloadingId = null);
+    }
+  }
+
+  Future<void> _viewAnalysis(Document document) async {
+    setState(() => _analyzingId = document.id);
+    try {
+      await viewResumeAnalysisAction(
+        context: context,
+        ref: ref,
+        document: document,
+      );
+    } finally {
+      if (mounted) setState(() => _analyzingId = null);
+    }
+  }
+
+  /// Permanent, cross-application delete — explicitly warns about that,
+  /// unlike DocumentsPanel's detach-only "Remove from this application"
+  /// confirm, since removing a document here really does delete it
+  /// everywhere it's attached.
+  Future<void> _confirmDelete(Document document) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete document?'),
+        content: Text(
+          'Permanently delete "${document.fileName}"? This removes it from '
+          'every application it\'s attached to, and can\'t be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(documentDirectoryApiProvider).delete(document.id);
+      if (!mounted) return;
+      _controller.removeById(document.id);
+    } on DocumentsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(documentDirectoryControllerProvider);
-    final controller = ref.read(documentDirectoryControllerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Documents'),
         actions: const [SettingsIconButton()],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search by file name or company…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: _clearSearchOnly,
-                      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search by file name…',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: _clearSearchOnly,
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                  ),
                 ),
-                isDense: true,
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _pickFileTypeFilter(state.fileTypeFilter),
-                    icon: const Icon(Icons.filter_list, size: 18),
-                    label: Text(state.fileTypeFilter?.label ?? 'All types'),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _pickFileTypeFilter(state.fileTypeFilter),
+                        icon: const Icon(Icons.filter_list, size: 18),
+                        label: Text(state.fileTypeFilter?.label ?? 'All types'),
+                      ),
+                    ),
+                    if (state.hasActiveFilter) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: _clearAllFilters,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
                 ),
-                if (state.hasActiveFilter) ...[
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: _clearAllFilters,
-                    child: const Text('Clear'),
-                  ),
-                ],
-              ],
+              ),
+              const SizedBox(height: 4),
+              Expanded(child: _buildBody(context, state)),
+            ],
+          ),
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _openUploadSheet,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text('Upload document'),
             ),
           ),
-          const SizedBox(height: 4),
-          Expanded(child: _buildBody(context, state, controller)),
         ],
       ),
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    DocumentDirectoryState state,
-    DocumentDirectoryController controller,
-  ) {
+  Widget _buildBody(BuildContext context, DocumentDirectoryState state) {
     if (state.status == RequestStatus.error && state.items.isEmpty) {
       return Center(
         child: Padding(
@@ -207,7 +343,7 @@ class _DocumentDirectoryScreenState
               ),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: controller.refresh,
+                onPressed: _controller.refresh,
                 child: const Text('Retry'),
               ),
             ],
@@ -243,19 +379,22 @@ class _DocumentDirectoryScreenState
               Text(
                 state.hasActiveFilter
                     ? 'Try a different search term or type filter.'
-                    : 'Upload a resume or cover letter from within an '
-                        'application\'s detail page, and it\'ll show up '
-                        'here.',
+                    : 'Upload a resume, cover letter, or other file to get '
+                        'started.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (state.hasActiveFilter) ...[
-                const SizedBox(height: 12),
+              const SizedBox(height: 12),
+              if (state.hasActiveFilter)
                 TextButton(
                   onPressed: _clearAllFilters,
                   child: const Text('Clear filters'),
+                )
+              else
+                FilledButton(
+                  onPressed: _openUploadSheet,
+                  child: const Text('Upload document'),
                 ),
-              ],
             ],
           ),
         ),
@@ -263,21 +402,27 @@ class _DocumentDirectoryScreenState
     }
 
     return RefreshIndicator(
-      onRefresh: controller.refresh,
+      onRefresh: _controller.refresh,
       child: ListView.separated(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
         itemCount: state.items.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index == state.items.length) {
             return _buildFooter(state);
           }
-          final item = state.items[index];
+          final document = state.items[index];
           return _DocumentCard(
-            item: item,
-            onTap: () =>
-                context.push('/applications/${item.application.id}/edit'),
+            document: document,
+            isDownloading: _downloadingId == document.id,
+            isAnalyzing: _analyzingId == document.id,
+            onDownload: () => _download(document),
+            onViewAnalysis: document.fileType == DocumentType.resume
+                ? () => _viewAnalysis(document)
+                : null,
+            onEdit: () => _openEditSheet(document),
+            onDelete: () => _confirmDelete(document),
           );
         },
       ),
@@ -320,82 +465,98 @@ class _DocumentDirectoryScreenState
 }
 
 class _DocumentCard extends StatelessWidget {
-  const _DocumentCard({required this.item, required this.onTap});
+  const _DocumentCard({
+    required this.document,
+    required this.isDownloading,
+    required this.isAnalyzing,
+    required this.onDownload,
+    required this.onViewAnalysis,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
-  final DocumentWithApplication item;
-  final VoidCallback onTap;
+  final Document document;
+  final bool isDownloading;
+  final bool isAnalyzing;
+  final VoidCallback onDownload;
+
+  /// Null for non-resume documents — "View Analysis" only makes sense
+  /// for a resume, mirroring DocumentsPanel's own file-type gating on
+  /// this same row action.
+  final VoidCallback? onViewAnalysis;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final document = item.document;
-    final application = item.application;
-
     return Card(
       margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      document.fileName,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+      child: ListTile(
+        title: Text(document.fileName, overflow: TextOverflow.ellipsis),
+        subtitle: Row(
+          children: [
+            _TypeChip(type: document.fileType),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            isDownloading
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.download_outlined),
+                    tooltip: 'Download',
+                    onPressed: onDownload,
+                  ),
+            if (onViewAnalysis != null)
+              isAnalyzing
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      overflow: TextOverflow.ellipsis,
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      tooltip: 'View AI analysis',
+                      onPressed: onViewAnalysis,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _TypeChip(type: document.fileType),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Uploaded ${formatDate(document.createdAt)}',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.business_outlined,
-                    size: 16,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${application.company} · ${application.position}',
-                      style: theme.textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _StatusChip(status: application.status),
-                ],
-              ),
-            ],
-          ),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit type',
+              onPressed: onEdit,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete document',
+              color: theme.colorScheme.error,
+              onPressed: onDelete,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Same color logic as DocumentsPanel's private `_TypeChip`
-/// (documents_panel.dart) — duplicated rather than exported, since that
-/// widget is private to its own file; kept pixel-for-pixel identical so
-/// a document type reads the same way in both the per-application panel
-/// and this directory.
 class _TypeChip extends StatelessWidget {
   const _TypeChip({required this.type});
 
@@ -419,7 +580,7 @@ class _TypeChip extends StatelessWidget {
         ),
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(999),
@@ -428,35 +589,6 @@ class _TypeChip extends StatelessWidget {
         type.label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: foreground,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
-}
-
-/// Same as ContactDirectoryScreen's/InterviewDirectoryScreen's private
-/// `_StatusChip` — duplicated for the same reason (private to each
-/// file), styled via `ApplicationStatus`'s own
-/// `backgroundColor(context)`/`foregroundColor(context)` extension so it
-/// stays visually consistent with every other status chip in the app.
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final ApplicationStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: status.backgroundColor(context),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status.label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: status.foregroundColor(context),
               fontWeight: FontWeight.w600,
             ),
       ),

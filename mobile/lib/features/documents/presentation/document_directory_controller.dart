@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/application_documents_api.dart' show DocumentsException;
 import '../data/document_directory_api.dart';
-import '../data/documents_api.dart' show DocumentsException;
 import '../domain/document.dart';
 import 'document_directory_state.dart';
 
@@ -13,11 +13,14 @@ import 'document_directory_state.dart';
 /// comment). Plain (non-`.family`) StateNotifier, same reasoning as the
 /// other two directory controllers: one global, cross-application list.
 ///
-/// Read-only, same as ContactDirectoryController/
-/// InterviewDirectoryController — no upload/update/delete/download here;
-/// those still only happen from `DocumentsPanel` on the owning
-/// application (this directory doesn't even offer a download shortcut,
-/// matching DocumentDirectoryView.vue's read-only contract).
+/// **No longer read-only.** This is now the primary place to manage the
+/// document library (upload/edit/download/delete), not a read-only
+/// cross-application view — `Document` is a top-level, user-owned
+/// resource now (see document.dart's doc comment), so there's no other
+/// screen with a better claim to owning these actions.
+/// `prepend`/`replaceById`/`removeById` patch local state the same way
+/// `DocumentsListController` does for its own (now application-scoped
+/// attach/detach) list.
 class DocumentDirectoryController
     extends StateNotifier<DocumentDirectoryState> {
   DocumentDirectoryController(this._api)
@@ -110,6 +113,36 @@ class DocumentDirectoryController
     if (state.search.isEmpty && state.fileTypeFilter == null) return;
     state = state.copyWith(search: '', clearFileTypeFilter: true);
     await fetchFirstPage();
+  }
+
+  /// After a successful upload — always the newest document, so always
+  /// belongs at index 0 regardless of how many pages are already
+  /// loaded. Mirrors DocumentsListController.prepend.
+  void prepend(Document document) {
+    state = state.copyWith(
+      items: [document, ...state.items],
+      total: state.total + 1,
+    );
+  }
+
+  /// After a successful file-type edit — same item, same position.
+  void replaceById(Document updated) {
+    state = state.copyWith(
+      items: [
+        for (final item in state.items)
+          if (item.id == updated.id) updated else item,
+      ],
+    );
+  }
+
+  /// After a successful delete — no reorder ambiguity, same reasoning
+  /// as every other list's `removeById`.
+  void removeById(String id) {
+    if (!state.items.any((item) => item.id == id)) return;
+    state = state.copyWith(
+      items: state.items.where((item) => item.id != id).toList(),
+      total: state.total > 0 ? state.total - 1 : 0,
+    );
   }
 }
 

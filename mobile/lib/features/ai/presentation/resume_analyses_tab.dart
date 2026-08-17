@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../applications/presentation/application_formatting.dart';
-import '../../documents/data/document_directory_api.dart';
-import '../../documents/domain/document.dart';
+import '../data/resume_analyses_api.dart';
 import '../domain/ai_job_status.dart';
 import '../domain/resume_analysis.dart';
 import 'ai_job_status_style.dart';
+import 'analysis_name_edit_sheet.dart';
 import 'resume_analyses_list_controller.dart';
 import 'resume_analyses_list_state.dart';
 
@@ -17,6 +17,12 @@ import 'resume_analyses_list_state.dart';
 /// list-body shape as DocumentDirectoryScreen: `ListView.separated` +
 /// scroll-threshold `loadNextPage`, `RefreshIndicator`, loading/empty/
 /// error states.
+///
+/// **No more client-side join.** `ResumeAnalysisRead` now carries
+/// `document_file_name`/`analysis_name` directly (joined server-side —
+/// see backend/BACKEND_SUMMARY.md's "`analysis_name`, `scored_at`, and
+/// server-side `document_file_name` joins"), so the dedicated
+/// documents-fetch-and-join this tab used to build on mount is gone.
 class ResumeAnalysesTab extends ConsumerStatefulWidget {
   const ResumeAnalysesTab({super.key});
 
@@ -28,13 +34,6 @@ class _ResumeAnalysesTabState extends ConsumerState<ResumeAnalysesTab>
     with AutomaticKeepAliveClientMixin {
   final _scrollController = ScrollController();
 
-  // document_id -> file_name. `ResumeAnalysisRead` carries no file name
-  // of its own (see backend/app/schemas/ai.py), so this fetches the
-  // user's resume documents once and joins client-side — same problem
-  // and same fix NewAtsScoreSheet's resume picker already uses.
-  Map<String, String> _documentLabels = {};
-  bool _labelsLoading = true;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -42,7 +41,6 @@ class _ResumeAnalysesTabState extends ConsumerState<ResumeAnalysesTab>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadDocumentLabels();
   }
 
   @override
@@ -61,22 +59,29 @@ class _ResumeAnalysesTabState extends ConsumerState<ResumeAnalysesTab>
     }
   }
 
-  Future<void> _loadDocumentLabels() async {
-    try {
-      final docs = await ref
-          .read(documentDirectoryApiProvider)
-          .list(fileType: DocumentType.resume, pageSize: 100);
-      if (!mounted) return;
-      setState(() {
-        _documentLabels = {
-          for (final doc in docs.items) doc.document.id: doc.document.fileName,
-        };
-        _labelsLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _labelsLoading = false);
-    }
+  /// Rename affordance — mirrors webapp/src/views/ai/ResumeAnalysesView.vue's
+  /// row-level pencil button, the one deliberate edit surface for
+  /// `analysis_name` (see AnalysisNameEditSheet's doc comment).
+  Future<void> _openRenameSheet(ResumeAnalysis analysis) async {
+    final name = analysis.analysisName;
+    if (name == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => AnalysisNameEditSheet(
+        existingName: name,
+        onSubmit: (newName) async {
+          final updated = await ref
+              .read(resumeAnalysesApiProvider)
+              .updateName(analysis.id, newName);
+          if (mounted) {
+            ref
+                .read(resumeAnalysesListControllerProvider.notifier)
+                .replaceById(updated);
+          }
+        },
+      ),
+    );
   }
 
   @override
@@ -151,10 +156,9 @@ class _ResumeAnalysesTabState extends ConsumerState<ResumeAnalysesTab>
           final item = state.items[index];
           return _AnalysisCard(
             analysis: item,
-            documentLabel: _labelsLoading
-                ? 'Loading…'
-                : (_documentLabels[item.documentId] ?? 'Resume'),
             onTap: () => context.push('/resume-analyses/${item.id}'),
+            onRename:
+                item.analysisName != null ? () => _openRenameSheet(item) : null,
           );
         },
       ),
@@ -199,13 +203,17 @@ class _ResumeAnalysesTabState extends ConsumerState<ResumeAnalysesTab>
 class _AnalysisCard extends StatelessWidget {
   const _AnalysisCard({
     required this.analysis,
-    required this.documentLabel,
     required this.onTap,
+    required this.onRename,
   });
 
   final ResumeAnalysis analysis;
-  final String documentLabel;
   final VoidCallback onTap;
+
+  /// Null while pending/processing/failed — `analysisName` is only
+  /// auto-generated once parsing completes, so there's nothing to
+  /// rename yet.
+  final VoidCallback? onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -225,11 +233,38 @@ class _AnalysisCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      documentLabel,
+                      analysis.documentFileName,
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (analysis.analysisName != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              analysis.analysisName!,
+                              style: theme.textTheme.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (onRename != null)
+                            InkWell(
+                              onTap: onRename,
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 14,
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       formatDate(analysis.createdAt),
