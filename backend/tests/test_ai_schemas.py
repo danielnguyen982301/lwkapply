@@ -21,6 +21,7 @@ from app.schemas.ai import (
     EducationItem,
     ParsedResume,
     ResumeAnalysisCreate,
+    ResumeAnalysisUpdate,
     WorkExperienceItem,
 )
 
@@ -109,9 +110,7 @@ class TestAtsScoreCreate:
             AtsScoreCreate.model_validate({"job_description": "x" * 60})
 
     def test_job_description_is_optional(self):
-        payload = AtsScoreCreate(
-            resume_analysis_id=uuid.uuid4(), application_id=uuid.uuid4()
-        )
+        payload = AtsScoreCreate(resume_analysis_id=uuid.uuid4())
         assert payload.job_description is None
 
     def test_job_description_too_short_is_rejected(self):
@@ -130,3 +129,17 @@ class TestResumeAnalysisCreate:
         # Same model_validate() reasoning as AtsScoreCreate above.
         with pytest.raises(ValidationError):
             ResumeAnalysisCreate.model_validate({})
+
+
+class TestResumeAnalysisUpdate:
+    def test_analysis_name_is_optional(self):
+        payload = ResumeAnalysisUpdate()
+        assert payload.analysis_name is None
+
+    def test_accepts_a_new_analysis_name(self):
+        payload = ResumeAnalysisUpdate(analysis_name="my_custom_name")
+        assert payload.analysis_name == "my_custom_name"
+
+    def test_rejects_analysis_name_over_max_length(self):
+        with pytest.raises(ValidationError):
+            ResumeAnalysisUpdate(analysis_name="x" * 256)
