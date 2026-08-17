@@ -131,7 +131,8 @@ class _AtsScoresTabState extends ConsumerState<AtsScoresTab>
           final item = state.items[index];
           return _ScoreCard(
             score: item,
-            onTap: () => context.push('/ats-scores/${item.id}'),
+            onTap: () =>
+                context.push('/ats-scores/${item.id}?showAnalysisLink=true'),
           );
         },
       ),
@@ -203,10 +204,14 @@ class _ScoreCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
+                    // "Analysis used" — the resume analysis this score was
+                    // run against, mirrors AtsScoresView.vue's "Analysis
+                    // used" column. Plain text, not its own tap target —
+                    // a nested link this small is too fiddly to hit
+                    // reliably; AtsScoreDetailScreen (reached by tapping
+                    // this whole card) has a proper full-width "View
+                    // resume analysis" row instead.
                     Text(
-                      // "Analysis used" — the resume analysis this score
-                      // was run against, mirrors AtsScoresView.vue's
-                      // "Analysis used" column.
                       score.analysisName,
                       style: theme.textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,

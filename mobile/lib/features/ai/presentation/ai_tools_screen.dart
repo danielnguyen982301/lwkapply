@@ -98,7 +98,9 @@ class _AiToolsScreenState extends ConsumerState<AiToolsScreen>
     );
     if (created == null || !mounted) return;
     ref.read(atsScoresListControllerProvider.notifier).prepend(created);
-    unawaited(context.push('/ats-scores/${created.id}'));
+    unawaited(
+      context.push('/ats-scores/${created.id}?showAnalysisLink=true'),
+    );
   }
 
   @override

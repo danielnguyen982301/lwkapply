@@ -490,69 +490,122 @@ class _DocumentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Same restructuring as DocumentsPanel's own _DocumentCard: four row
+    // actions squeezed into a ListTile's trailing area left no room for
+    // the file name or upload timestamp — collapsed into a single
+    // overflow menu so the name/date get the full row width instead,
+    // each on its own line.
+    final isBusy = isDownloading || isAnalyzing;
     return Card(
       margin: EdgeInsets.zero,
-      child: ListTile(
-        title: Text(document.fileName, overflow: TextOverflow.ellipsis),
-        subtitle: Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _TypeChip(type: document.fileType),
-            const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    document.fileName,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  _TypeChip(type: document.fileType),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            isDownloading
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            if (isBusy)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              PopupMenuButton<_DocumentCardAction>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Document actions',
+                onSelected: (action) {
+                  switch (action) {
+                    case _DocumentCardAction.download:
+                      onDownload();
+                    case _DocumentCardAction.viewAnalysis:
+                      onViewAnalysis?.call();
+                    case _DocumentCardAction.edit:
+                      onEdit();
+                    case _DocumentCardAction.delete:
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _DocumentCardAction.download,
+                    child: _MenuRow(
+                      icon: Icons.download_outlined,
+                      label: 'Download',
                     ),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.download_outlined),
-                    tooltip: 'Download',
-                    onPressed: onDownload,
                   ),
-            if (onViewAnalysis != null)
-              isAnalyzing
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                  if (onViewAnalysis != null)
+                    const PopupMenuItem(
+                      value: _DocumentCardAction.viewAnalysis,
+                      child: _MenuRow(
+                        icon: Icons.auto_awesome_outlined,
+                        label: 'View AI analysis',
                       ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      tooltip: 'View AI analysis',
-                      onPressed: onViewAnalysis,
                     ),
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit type',
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete document',
-              color: theme.colorScheme.error,
-              onPressed: onDelete,
-            ),
+                  const PopupMenuItem(
+                    value: _DocumentCardAction.edit,
+                    child: _MenuRow(
+                      icon: Icons.edit_outlined,
+                      label: 'Edit type',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _DocumentCardAction.delete,
+                    child: _MenuRow(
+                      icon: Icons.delete_outline,
+                      label: 'Delete document',
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+enum _DocumentCardAction { download, viewAnalysis, edit, delete }
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.label, this.color});
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: color)),
+      ],
     );
   }
 }
