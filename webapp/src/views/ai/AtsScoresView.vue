@@ -14,47 +14,13 @@ import NewAtsScoreDialog from '@/components/ai/NewAtsScoreDialog.vue'
 import AtsScoreDetailDialog from '@/components/ai/AtsScoreDetailDialog.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useAtsScoresStore } from '@/stores/atsScores'
-import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
-import { useDocumentsStore } from '@/stores/documents'
 import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, atsScoreSeverity } from '@/lib/ai-ui'
 import { formatDate } from '@/lib/date-utils'
-import type { AtsScore, ResumeAnalysis } from '@/types/ai'
-import type { Document } from '@/types/document'
+import type { AtsScore } from '@/types/ai'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAtsScoresStore()
-const resumeAnalyses = useResumeAnalysesStore()
-const documents = useDocumentsStore()
-
-// --- friendly resume labels, same approach as ResumeAnalysesView.vue -----
-const documentLabels = ref<Record<string, string>>({})
-
-async function loadDocumentLabels() {
-  const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
-  documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
-}
-
-// resume_analysis_id -> document_id, built once on mount from the same
-// fetch NewAtsScoreDialog's picker needs (see loadResumeAnalysisIndex()
-// below) - deliberately NOT read from stores/resumeAnalyses.ts's `items`,
-// which is only populated once the Resume Analyses tab has actually been
-// visited in this session and would silently show blank labels otherwise.
-const completedAnalyses = ref<ResumeAnalysis[]>([])
-const resumeAnalysisIndex = ref<Record<string, string>>({})
-
-function resumeLabelFor(resumeAnalysisId: string): string {
-  const documentId = resumeAnalysisIndex.value[resumeAnalysisId]
-  return (documentId && documentLabels.value[documentId]) || 'Resume analysis'
-}
-
-async function loadResumeAnalysisIndex() {
-  const analyses = await resumeAnalyses.fetchCompletedForPicker().catch(() => [])
-  completedAnalyses.value = analyses
-  resumeAnalysisIndex.value = Object.fromEntries(
-    analyses.map((analysis) => [analysis.id, analysis.document_id]),
-  )
-}
 
 // --- list ----------------------------------------------------------------
 function loadList(page = 1) {
@@ -78,11 +44,7 @@ const preselectedResumeAnalysisId = computed(() =>
   typeof route.query.resume_analysis_id === 'string' ? route.query.resume_analysis_id : null,
 )
 
-async function openCreateDialog() {
-  // Awaited so NewAtsScoreDialog's own visible-watcher (which checks
-  // completedAnalyses for the preselected id) sees fresh data the moment
-  // it opens, rather than racing an in-flight fetch.
-  await loadResumeAnalysisIndex()
+function openCreateDialog() {
   createDialogVisible.value = true
 }
 
@@ -117,8 +79,6 @@ function handleRowClick(event: { data: AtsScore }) {
 
 onMounted(() => {
   loadList()
-  loadDocumentLabels()
-  loadResumeAnalysisIndex()
   if (typeof route.query.resume_analysis_id === 'string') openCreateDialog()
 })
 
@@ -188,7 +148,7 @@ onBeforeUnmount(() => {
         <Column header="Resume">
           <template #body="{ data }: { data: AtsScore }">
             <TruncatedText
-              :text="resumeLabelFor(data.resume_analysis_id)"
+              :text="data.document_file_name"
               max-width="16rem"
               class="cursor-pointer font-medium text-ink hover:underline"
             />
@@ -241,8 +201,6 @@ onBeforeUnmount(() => {
 
   <NewAtsScoreDialog
     v-model:visible="createDialogVisible"
-    :completed-analyses="completedAnalyses"
-    :document-labels="documentLabels"
     :initial-resume-analysis-id="preselectedResumeAnalysisId"
     @created="handleScoreCreated"
   />
