@@ -161,6 +161,119 @@
   - **No new tests**, matching web's/every other mobile feature's
     existing precedent
 
+### Changed
+
+- **Documents decoupled from a single Application; `AtsScore` drops its
+  `application_id` link entirely** — a correctness rework of the AI
+  Tools feature just added above, done within this same unreleased
+  version rather than shipped and then fixed. Full detail in
+  BACKEND_SUMMARY.md's "A note on Document / ApplicationDocument";
+  summary here:
+  - **The trigger was `AtsScore`, not `Document`**: it carried its own
+    `application_id` alongside `resume_analysis_id`, and nothing ever
+    cross-checked that the two actually agreed — a caller could score a
+    resume against a different application's job posting than the one it
+    was really attached to, with no error, no warning. Deriving
+    `application_id` server-side instead of trusting the client doesn't
+    close the gap either: `job_description`/`job_url` are always
+    caller-supplied free text, so even a perfectly-derived link can't
+    verify they're the *right* job. `AtsScore.application_id` was
+    dropped outright rather than patched
+  - **`Document` became a top-level, user-owned resource** (`user_id`
+    direct FK, like `ResumeAnalysis`/`AtsScore`), reachable at
+    `/documents` — no longer nested under `/applications/{id}/documents`,
+    no longer owned by exactly one application. Reusable across zero,
+    one, or several applications via a new many-to-many join,
+    `ApplicationDocument` (`POST`/`GET`/`DELETE
+    /applications/{application_id}/documents` attaches/lists/detaches).
+    Deleting an application no longer deletes its documents — only the
+    join rows; deleting a document still cascades its `ApplicationDocument`
+    links and its `ResumeAnalysis`/`AtsScore` rows
+  - **`POST /ai/ats-scores` now takes `job_url` directly in the payload**
+    alongside `job_description` — no `application_id` anywhere on this
+    resource any more. `job_description_source` (`pasted`/`url`) is
+    recorded immediately at creation time instead of resolved later
+    against an application row
+  - **`ResumeAnalysis` gains `completed_at`**, set only when `status`
+    transitions to `completed` — distinct from `created_at` since
+    parsing is async
+  - **Migration split into six small, single-purpose, chained files**
+    rather than one large migration, ordered so each drop only happens
+    once every migration that still needs to read the dropped column has
+    already run its backfill
+  - **`app/services/r2.py`'s object key format changed** —
+    `users/{user_id}/applications/{application_id}/...` became
+    `users/{user_id}/documents/...`, since upload no longer happens in
+    the context of one application
+  - **Web**: matching rework across the whole AI Tools + Documents
+    surface. Full detail in WEBAPP_SUMMARY.md; summary here:
+    - `stores/documents.ts` became the top-level document library store
+      (list/search/upload/edit/download/delete); a new
+      `stores/applicationDocuments.ts` handles one application's
+      attached-documents list/attach/detach — deliberately two stores,
+      not one, mirroring the backend split. `stores/documentDirectory.ts`
+      retired
+    - Three new reusable dialog components under `components/documents/`
+      (`DocumentUploadDialog.vue`, `DocumentEditDialog.vue`,
+      `DocumentAttachDialog.vue`), shared between `DocumentsPanel.vue`
+      (application-scoped) and `DocumentDirectoryView.vue` (the library)
+    - `AtsScoresView.vue`'s create dialog gained a third job-description
+      source option — paste a job URL directly, independent of any
+      tracked application — alongside the existing tracked-application
+      and paste-a-description options
+    - `ResumeAnalysisModal.vue` can now re-score even when a completed
+      score already exists (a "Score again" toggle), since the latest
+      score for a resume is no longer necessarily a score against *this*
+      application's job
+- **`application_name` added to `Application`** — an optional,
+  user-chosen label distinguishing applications that share the same
+  company/position (e.g. a re-apply after rejection). Included in
+  `GET /applications`' search, and in the Contacts/Interviews directory
+  endpoints' embedded `ApplicationSummary`. On web, it replaced the
+  static page heading on `ApplicationFormView.vue` — the `<h1>` is now
+  the editable field itself (styled to read as a heading, with a pencil
+  icon + tooltip signaling it's editable), rather than a separate form
+  field; falls back to `company` when blank. Also surfaced as a column in
+  `ApplicationListView.vue`, `ContactDirectoryView.vue`, and
+  `InterviewDirectoryView.vue`, and in `ApplicationPicker.vue`'s
+  suggestions (alongside `applied_date`)
+- **Webapp UI consolidation pass**, mostly mechanical but spanning many
+  files — full detail in WEBAPP_SUMMARY.md:
+  - New `components/common/TruncatedText.vue` (single-line ellipsis +
+    `title` tooltip + explicit `max-width`, since a bare Tailwind
+    `truncate` class does nothing inside an auto-layout `DataTable` cell)
+    applied across every list/directory table's free-text columns
+  - New `lib/tooltip.ts` (`v-tooltip` preset, PrimeVue's `Tooltip`
+    directive registered globally in `main.ts`) replacing the native
+    `title` attribute on icon-only action buttons — native `title` has a
+    fixed, unstyleable ~1s OS-level show delay
+  - New `lib/row-click.ts` (`useApplicationRowClick()`) — click-anywhere-
+    in-the-row-to-navigate for `ApplicationListView.vue`,
+    `ContactDirectoryView.vue`, and `InterviewDirectoryView.vue`, skipping
+    clicks on an already-interactive element (a link, a button) in the
+    row
+  - `lib/date-utils.ts` gained shared `formatDate`/`formatDateTime`
+    helpers, replacing eight separately-constructed
+    `Intl.DateTimeFormat` instances across pickers/dialogs/views
+  - `ResumeAnalysesView.vue`/`AtsScoresView.vue`'s inline create/detail
+    dialogs extracted into their own components
+    (`NewResumeAnalysisDialog.vue`/`ResumeAnalysisDetailDialog.vue`,
+    `NewAtsScoreDialog.vue`/`AtsScoreDetailDialog.vue`), and
+    `ContactsPanel.vue`/`InterviewsPanel.vue`'s add/edit dialogs into
+    `components/contacts/ContactFormDialog.vue`/
+    `components/interviews/InterviewFormDialog.vue`
+  - **Bug caught and fixed during the dialog-extraction pass**:
+    `ContactFormDialog.vue`/`InterviewFormDialog.vue` initially reset
+    their form on a watcher keyed off the `contact`/`interview` prop —
+    correct on first open, but PrimeVue's `Dialog` unmounts its slot
+    content while hidden, so the underlying vee-validate `useField()`s
+    reset on every close/reopen regardless, and a same-record reopen
+    doesn't even change the prop (same object reference), so the reset
+    watcher never re-fired at all. Fixed by keying the reset watcher off
+    `visible` instead — fires on every open, and (Vue's default
+    pre-flush watch timing) runs before the Dialog's content actually
+    remounts
+
 ## v0.10.0
 
 ### Added
