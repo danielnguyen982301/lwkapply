@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -83,6 +83,26 @@ class ResumeAnalysis(Base, UUIDMixin, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Auto-generated from the source document's file name + completion
+    # timestamp when status transitions to COMPLETED (app/tasks/ai.py::
+    # parse_resume_task::_generate_analysis_name) - stays NULL on a failed
+    # run, same as completed_at. User-editable afterwards (PATCH
+    # /ai/resume-analyses/{id}), so no DB-level uniqueness is enforced -
+    # the generated value is merely unique-by-construction at creation
+    # time.
+    analysis_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user: Mapped["User"] = relationship()
     document: Mapped["Document"] = relationship()
+
+    @property
+    def document_file_name(self) -> str:
+        """Convenience accessor for ResumeAnalysisRead (app/schemas/ai.py)
+        - lets the API hand back the source document's file_name directly
+        instead of making the caller separately fetch Document by
+        document_id just to build a label. Always resolvable: document_id
+        is a NOT NULL FK with ondelete="CASCADE", so `document` can never
+        be missing. List endpoints must eager-load `document` (see
+        app/api/v1/endpoints/ai.py's joinedload usage) to avoid one
+        lazy-load query per row."""
+        return self.document.file_name
