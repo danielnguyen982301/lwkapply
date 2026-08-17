@@ -27,9 +27,10 @@ rather than inventing a new API shape for that fallback signal.
 """
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -88,6 +89,22 @@ class AtsScore(Base, UUIDMixin, TimestampMixin):
     # validates this shape.
     feedback: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set only when status transitions to COMPLETED (app/tasks/ai.py::
+    # score_ats_task) - same rationale as ResumeAnalysis.completed_at:
+    # distinct from created_at since scoring is async. Stays NULL on a
+    # failed run.
+    scored_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     user: Mapped["User"] = relationship()
     resume_analysis: Mapped["ResumeAnalysis"] = relationship()
+
+    @property
+    def document_file_name(self) -> str:
+        """Same rationale as ResumeAnalysis.document_file_name, one hop
+        further - via resume_analysis.document. Always resolvable, same
+        NOT NULL/CASCADE reasoning. List endpoints must eager-load
+        resume_analysis.document (see app/api/v1/endpoints/ai.py's
+        joinedload chain) to avoid two lazy-load queries per row."""
+        return self.resume_analysis.document.file_name
