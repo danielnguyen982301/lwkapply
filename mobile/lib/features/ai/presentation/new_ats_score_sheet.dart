@@ -1,39 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../applications/domain/application.dart';
-import '../../documents/data/document_directory_api.dart';
-import '../../documents/domain/document.dart';
-import '../data/resume_analyses_api.dart';
 import '../domain/ats_score.dart';
 import '../domain/resume_analysis.dart';
 import 'application_picker.dart';
+import 'resume_analysis_picker.dart';
 
-enum _DescriptionSource { application, paste }
+enum _DescriptionSource { application, url, paste }
 
 /// "New Score" bottom sheet, shown from AiToolsScreen's FAB. Same
 /// dumb-widget/injected-callback/pop-with-created-resource shape as
 /// NewAnalysisSheet — see that file's doc comment.
 ///
 /// Two things this form needs that NewAnalysisSheet doesn't:
-/// - **A completed-resume-analysis picker.** Not a remote-search picker
-///   like ResumeDocumentPicker/ApplicationPicker — a user's completed
-///   analyses are a short, boundedly-sized list (capped by the daily
-///   rate limit), so this fetches up to 100 once via
-///   `ResumeAnalysesApi.list` (client-side filtered to `completed` —
-///   the backend has no server-side status filter on this endpoint,
-///   same as webapp/src/stores/resumeAnalyses.ts::fetchCompletedForPicker)
-///   and shows them in a nested `showModalBottomSheet` list, same shape
-///   as document_directory_screen.dart's `_pickFileTypeFilter`. Each
-///   option is labelled via the resume's document file name — same
-///   document_id -> file_name frontend join AiToolsScreen's list tabs
-///   need, since `ResumeAnalysisRead` has no file_name of its own.
+/// - **A completed-resume-analysis picker** (`ResumeAnalysisPicker`) —
+///   live search, not a preloaded list, since a user's completed
+///   analyses aren't bounded the way this sheet used to assume (see
+///   that widget's own doc comment).
 /// - **A source toggle** (`SegmentedButton`) between "Use a tracked
-///   application" (ApplicationPicker) and "Paste a job description"
-///   (a plain multiline `TextField`, mirroring the 50-20000 char bounds
-///   already enforced server-side — client-side length hint only, the
-///   server is the real validator).
-class NewAtsScoreSheet extends ConsumerStatefulWidget {
+///   application" (`ApplicationPicker`, resolves `job_url` from the
+///   picked application client-side — `AtsScore` has no application
+///   link server-side any more to resolve it by id), "Paste a job URL"
+///   (a plain `TextField`, sent as `jobUrl` directly, no application
+///   involved), or "Paste a job description" (mirrors the 50-20000 char
+///   bounds already enforced server-side — client-side length hint
+///   only, the server is the real validator).
+class NewAtsScoreSheet extends StatefulWidget {
   const NewAtsScoreSheet({
     super.key,
     required this.onSubmit,
@@ -44,30 +36,26 @@ class NewAtsScoreSheet extends ConsumerStatefulWidget {
   /// failure so the sheet can show it inline.
   final Future<AtsScore> Function({
     required String resumeAnalysisId,
-    String? applicationId,
+    String? jobUrl,
     String? jobDescription,
   }) onSubmit;
 
   /// Pre-fills the resume selection when opened from
   /// ResumeAnalysisDetailScreen's "Score against a job" button — that
   /// screen already has a completed `ResumeAnalysis` on hand, so there's
-  /// no reason to make the user pick it again from the same short list
-  /// this sheet would otherwise fetch. `null` (the default, used by
-  /// AiToolsScreen's FAB) shows the normal picker.
+  /// no reason to make the user search for it again. `null` (the
+  /// default, used by AiToolsScreen's FAB) shows the normal picker.
   final ResumeAnalysis? initialAnalysis;
 
   @override
-  ConsumerState<NewAtsScoreSheet> createState() => _NewAtsScoreSheetState();
+  State<NewAtsScoreSheet> createState() => _NewAtsScoreSheetState();
 }
 
-class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
-  bool _loadingAnalyses = true;
-  List<ResumeAnalysis> _completedAnalyses = [];
-  final Map<String, String> _documentLabels = {};
-
+class _NewAtsScoreSheetState extends State<NewAtsScoreSheet> {
   ResumeAnalysis? _selectedAnalysis;
   _DescriptionSource _descriptionSource = _DescriptionSource.application;
   Application? _selectedApplication;
+  final _pastedUrlController = TextEditingController();
   final _pastedController = TextEditingController();
 
   bool _isSubmitting = false;
@@ -76,95 +64,27 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialAnalysis != null) {
-      _selectedAnalysis = widget.initialAnalysis;
-      _loadingAnalyses = false;
-    } else {
-      _loadCompletedAnalyses();
-    }
+    _selectedAnalysis = widget.initialAnalysis;
   }
 
   @override
   void dispose() {
+    _pastedUrlController.dispose();
     _pastedController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCompletedAnalyses() async {
-    try {
-      final response =
-          await ref.read(resumeAnalysesApiProvider).list(pageSize: 100);
-      final completed = response.items
-          .where((a) => a.status.apiValue == 'completed')
-          .toList();
-
-      // document_id -> file_name, same lookup AiToolsScreen's list tabs
-      // build - a dedicated resume-only fetch, not the picker's isolated
-      // search (different concern: this wants every resume the user has
-      // analyses for, not live-search suggestions).
-      final docs = await ref
-          .read(documentDirectoryApiProvider)
-          .list(fileType: DocumentType.resume, pageSize: 100);
-      if (!mounted) return;
-      setState(() {
-        _completedAnalyses = completed;
-        _documentLabels
-          ..clear()
-          ..addEntries(
-            docs.items.map(
-              (doc) => MapEntry(doc.document.id, doc.document.fileName),
-            ),
-          );
-        _loadingAnalyses = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingAnalyses = false);
-    }
-  }
-
-  String _labelFor(ResumeAnalysis analysis) {
-    return _documentLabels[analysis.documentId] ?? 'Resume analysis';
-  }
-
-  Future<void> _pickAnalysis() async {
-    final selected = await showModalBottomSheet<ResumeAnalysis>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: _completedAnalyses.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No completed resume analyses yet — analyze a resume '
-                  'first.',
-                  textAlign: TextAlign.center,
-                ),
-              )
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final analysis in _completedAnalyses)
-                    ListTile(
-                      title: Text(_labelFor(analysis)),
-                      trailing: _selectedAnalysis?.id == analysis.id
-                          ? const Icon(Icons.check)
-                          : null,
-                      onTap: () => Navigator.pop(context, analysis),
-                    ),
-                ],
-              ),
-      ),
-    );
-    if (selected != null) setState(() => _selectedAnalysis = selected);
-  }
-
   bool get _canSubmit {
     if (_selectedAnalysis == null) return false;
-    if (_descriptionSource == _DescriptionSource.application) {
-      return _selectedApplication != null;
+    switch (_descriptionSource) {
+      case _DescriptionSource.application:
+        final jobUrl = _selectedApplication?.jobUrl;
+        return jobUrl != null && jobUrl.isNotEmpty;
+      case _DescriptionSource.url:
+        return _pastedUrlController.text.trim().isNotEmpty;
+      case _DescriptionSource.paste:
+        return _pastedController.text.trim().length >= 50;
     }
-    return _pastedController.text.trim().length >= 50;
   }
 
   Future<void> _submit() async {
@@ -176,9 +96,11 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
     try {
       final created = await widget.onSubmit(
         resumeAnalysisId: _selectedAnalysis!.id,
-        applicationId: _descriptionSource == _DescriptionSource.application
-            ? _selectedApplication?.id
-            : null,
+        jobUrl: switch (_descriptionSource) {
+          _DescriptionSource.application => _selectedApplication?.jobUrl,
+          _DescriptionSource.url => _pastedUrlController.text.trim(),
+          _DescriptionSource.paste => null,
+        },
         jobDescription: _descriptionSource == _DescriptionSource.paste
             ? _pastedController.text.trim()
             : null,
@@ -196,6 +118,12 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedApplicationHasNoJobUrl =
+        _descriptionSource == _DescriptionSource.application &&
+            _selectedApplication != null &&
+            (_selectedApplication!.jobUrl == null ||
+                _selectedApplication!.jobUrl!.isEmpty);
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -229,9 +157,9 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
                 ),
                 const SizedBox(height: 16),
               ],
-              Text('Resume *', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 4),
-              if (widget.initialAnalysis != null)
+              if (widget.initialAnalysis != null) ...[
+                Text('Resume *', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
@@ -243,21 +171,11 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text('Using your just-analyzed resume'),
-                )
-              else
-                OutlinedButton(
-                  onPressed: _loadingAnalyses ? null : _pickAnalysis,
-                  style: OutlinedButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: Text(
-                    _loadingAnalyses
-                        ? 'Loading…'
-                        : _selectedAnalysis == null
-                            ? 'Choose a completed analysis'
-                            : _labelFor(_selectedAnalysis!),
-                  ),
+                ),
+              ] else
+                ResumeAnalysisPicker(
+                  onSelected: (analysis) =>
+                      setState(() => _selectedAnalysis = analysis),
                 ),
               const SizedBox(height: 20),
               Text(
@@ -272,8 +190,12 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
                     label: Text('Tracked application'),
                   ),
                   ButtonSegment(
+                    value: _DescriptionSource.url,
+                    label: Text('Job URL'),
+                  ),
+                  ButtonSegment(
                     value: _DescriptionSource.paste,
-                    label: Text('Paste description'),
+                    label: Text('Paste'),
                   ),
                 ],
                 selected: {_descriptionSource},
@@ -281,10 +203,43 @@ class _NewAtsScoreSheetState extends ConsumerState<NewAtsScoreSheet> {
                     setState(() => _descriptionSource = selection.first),
               ),
               const SizedBox(height: 12),
-              if (_descriptionSource == _DescriptionSource.application)
+              if (_descriptionSource == _DescriptionSource.application) ...[
                 ApplicationPicker(
                   onSelected: (application) =>
                       setState(() => _selectedApplication = application),
+                ),
+                if (selectedApplicationHasNoJobUrl) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'This application has no job URL saved - paste the job '
+                    'description instead, or add a job URL from the '
+                    'application\'s detail page first.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ] else if (_descriptionSource == _DescriptionSource.url)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _pastedUrlController,
+                      keyboardType: TextInputType.url,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        hintText: 'https://…',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'We\'ll fetch and score against the job description at '
+                      'this URL.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 )
               else
                 Column(

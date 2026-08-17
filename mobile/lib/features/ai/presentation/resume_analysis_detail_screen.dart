@@ -7,19 +7,20 @@ import 'package:go_router/go_router.dart';
 import '../data/ats_scores_api.dart';
 import '../data/resume_analyses_api.dart';
 import '../domain/ats_score.dart';
+import 'ai_formatting.dart';
 import 'ai_job_status_style.dart';
 import 'new_ats_score_sheet.dart';
 import 'parsed_resume_card.dart';
 import 'resume_analysis_detail_controller.dart';
 import 'resume_analysis_detail_state.dart';
 
-/// Pushed via `context.push('/resume-analyses/:id')` — both from
-/// ResumeAnalysesTab's cards and AiToolsScreen's "New Analysis" create
-/// flow. Also reused, unmodified, by DocumentsPanel.vue's mobile
-/// counterpart ("View Analysis" row action — see task #34): a pushed
-/// screen rather than a dialog, per the plan's "no route-based tab-
-/// toggle/dialog precedent, this app uses full pushed screens for
-/// scrollable result content" reasoning.
+/// Pushed via `context.push('/resume-analyses/:id')` — from
+/// ResumeAnalysesTab's cards, AiToolsScreen's "New Analysis" create
+/// flow, and `viewResumeAnalysisAction` (DocumentsPanel's/
+/// DocumentDirectoryScreen's "View Analysis"/"View AI analysis" row
+/// actions): a pushed screen rather than a dialog, per the plan's "no
+/// route-based tab-toggle/dialog precedent, this app uses full pushed
+/// screens for scrollable result content" reasoning.
 ///
 /// Watches `resumeAnalysisDetailControllerProvider` (fetch-and-poll
 /// only). "Try again" on a failed analysis and "Score against a job" on
@@ -30,20 +31,22 @@ class ResumeAnalysisDetailScreen extends ConsumerStatefulWidget {
   const ResumeAnalysisDetailScreen({
     super.key,
     required this.analysisId,
-    this.applicationId,
+    this.isLatest = false,
   });
 
   final String analysisId;
 
-  /// Only set when reached via DocumentsPanel's "View Analysis" row
-  /// action (see that call site and router.dart's route for why) —
-  /// every other entry point (AiToolsScreen's tab, the "New Analysis"
-  /// create flow) has no single owning application to check against.
-  /// Drives the `AtsScoresApi.latestForApplication` lookup below, so a
-  /// score already run against *this* application shows up here instead
-  /// of the screen always offering "Score against a job" as if nothing
-  /// had ever been scored.
-  final String? applicationId;
+  /// Set by `viewResumeAnalysisAction` (both the DocumentsPanel-scoped
+  /// and Document-Library-scoped "view analysis" flows — an `AtsScore`
+  /// has no application link of any kind, see AtsScore's own doc
+  /// comment, so the two entry points behave identically here) — every
+  /// other entry point (AiToolsScreen's plain history list, the "New
+  /// Analysis" create flow) leaves this `false`, since a specific row
+  /// tap there isn't necessarily "the latest" in any meaningful sense.
+  /// Drives whether an existing score is looked up/shown automatically
+  /// (`_maybeLoadExistingScore`) and the "Latest" framing (a chip +
+  /// Analyzed/Scored timestamps) on this screen.
+  final bool isLatest;
 
   @override
   ConsumerState<ResumeAnalysisDetailScreen> createState() =>
@@ -78,18 +81,14 @@ class _ResumeAnalysisDetailScreenState
     }
   }
 
-  Future<void> _maybeLoadExistingScore(
-    String applicationId,
-    String resumeAnalysisId,
-  ) async {
-    final key = '$applicationId:$resumeAnalysisId';
-    if (key == _existingScoreCheckedFor) return;
-    _existingScoreCheckedFor = key;
+  Future<void> _maybeLoadExistingScore(String resumeAnalysisId) async {
+    if (resumeAnalysisId == _existingScoreCheckedFor) return;
+    _existingScoreCheckedFor = resumeAnalysisId;
     setState(() => _existingScoreLoading = true);
     try {
       final score = await ref
           .read(atsScoresApiProvider)
-          .latestForApplication(applicationId, resumeAnalysisId);
+          .latestForResumeAnalysis(resumeAnalysisId);
       if (!mounted) return;
       setState(() {
         _existingScore = score;
@@ -112,12 +111,12 @@ class _ResumeAnalysisDetailScreenState
         initialAnalysis: analysis,
         onSubmit: ({
           required resumeAnalysisId,
-          applicationId,
+          jobUrl,
           jobDescription,
         }) =>
             ref.read(atsScoresApiProvider).create(
                   resumeAnalysisId: resumeAnalysisId,
-                  applicationId: applicationId,
+                  jobUrl: jobUrl,
                   jobDescription: jobDescription,
                 ),
       ),
@@ -135,16 +134,13 @@ class _ResumeAnalysisDetailScreenState
       resumeAnalysisDetailControllerProvider(widget.analysisId).notifier,
     );
 
-    // Same "defer the side effect past this build" reasoning as
-    // AtsScoreDetailScreen's application-label lookup — setState can't
-    // run synchronously inside build, and `_existingScoreCheckedFor`
-    // makes scheduling this on every rebuild a no-op past the first.
-    final applicationId = widget.applicationId;
-    if (applicationId != null &&
-        state.analysis?.status.apiValue == 'completed') {
+    // setState can't run synchronously inside build, so this side effect
+    // is deferred to right after this frame — `_existingScoreCheckedFor`
+    // makes scheduling it on every rebuild a no-op past the first.
+    if (widget.isLatest && state.analysis?.status.apiValue == 'completed') {
       final analysisId = state.analysis!.id;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _maybeLoadExistingScore(applicationId, analysisId),
+        (_) => _maybeLoadExistingScore(analysisId),
       );
     }
 
@@ -263,11 +259,44 @@ class _ResumeAnalysisDetailScreenState
 
     if (analysis.parsedData == null) return const SizedBox.shrink();
 
+    // This screen only ever shows the *latest* analysis for a document
+    // when `widget.isLatest` — see that field's doc comment — so the
+    // "Latest" chip makes that explicit, paired with the timestamp that
+    // actually distinguishes two runs against the same resume. The
+    // analysis-name line is unconditional (matches web's placement),
+    // display-only — the one deliberate edit surface for it is
+    // ResumeAnalysesTab's row, not here (see AnalysisNameEditSheet's doc
+    // comment).
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (analysis.analysisName != null) ...[
+            Text(
+              'Analysis name: ${analysis.analysisName}',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (widget.isLatest) ...[
+            Row(
+              children: [
+                const _LatestChip(),
+                if (analysis.completedAt != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'Analyzed ${formatDateTime(analysis.completedAt!.toLocal())}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           ParsedResumeCard(parsed: analysis.parsedData!),
           const SizedBox(height: 24),
           _buildScoreSection(context, state),
@@ -280,7 +309,7 @@ class _ResumeAnalysisDetailScreenState
     BuildContext context,
     ResumeAnalysisDetailState state,
   ) {
-    if (widget.applicationId == null) {
+    if (!widget.isLatest) {
       return FilledButton.icon(
         onPressed: () => _scoreAgainstJob(state),
         icon: const Icon(Icons.fact_check_outlined),
@@ -315,6 +344,21 @@ class _ResumeAnalysisDetailScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (existing.status.apiValue == 'completed') ...[
+          Row(
+            children: [
+              const _LatestChip(),
+              if (existing.scoredAt != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'Scored ${formatDateTime(existing.scoredAt!.toLocal())}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
         Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -334,7 +378,7 @@ class _ResumeAnalysisDetailScreenState
                 : const Icon(Icons.fact_check_outlined),
             title: Text(
               existing.status.apiValue == 'completed'
-                  ? 'Already scored against this application'
+                  ? 'View score'
                   : existing.status.label,
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -348,6 +392,34 @@ class _ResumeAnalysisDetailScreenState
           label: const Text('Score again'),
         ),
       ],
+    );
+  }
+}
+
+/// Mirrors webapp/src/components/ai/ResumeAnalysisModal.vue's/
+/// DocumentAnalysisModal.vue's `Tag value="Latest"` — this screen only
+/// ever shows the *latest* analysis/score for a document when reached
+/// via `widget.isLatest`, so this makes that explicit rather than
+/// reading as just "an" analysis/score.
+class _LatestChip extends StatelessWidget {
+  const _LatestChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Latest',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: scheme.onSecondaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
     );
   }
 }

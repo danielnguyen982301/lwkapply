@@ -86,12 +86,12 @@ class _AiToolsScreenState extends ConsumerState<AiToolsScreen>
       builder: (sheetContext) => NewAtsScoreSheet(
         onSubmit: ({
           required resumeAnalysisId,
-          applicationId,
+          jobUrl,
           jobDescription,
         }) =>
             ref.read(atsScoresApiProvider).create(
                   resumeAnalysisId: resumeAnalysisId,
-                  applicationId: applicationId,
+                  jobUrl: jobUrl,
                   jobDescription: jobDescription,
                 ),
       ),
