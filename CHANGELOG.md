@@ -1,6 +1,77 @@
 # Changelog
 
-## v0.11.0 (in progress)
+## v0.12.0 (in progress)
+
+### Added
+
+- **Mobile caught up to the Document-decoupling + AI Tools polish rework**
+  (v0.11.0's "Documents decoupled..." and "AI Tools follow-up..." entries
+  below) — backend and web had already moved; this closes the gap on the
+  mobile client. Full detail in MOBILE_SUMMARY.md's "AI Tools feature"
+  and "Contacts, Interviews, and Documents" sections; summary here:
+  - **`application_name`** added to `Application`/`ApplicationDraft`,
+    shown in `applications_list_screen.dart`'s cards, editable on
+    `application_form_screen.dart`'s Details tab, and surfaced in each
+    directory screen's `ApplicationSummary` (Contacts'/Interviews') and
+    `application_picker.dart`'s picker results.
+  - **Documents decoupled from a single Application.** `Document` lost
+    `applicationId` entirely; `documents_panel.dart` reworked from
+    upload/delete to **attach/detach** (`DocumentDirectoryApi` gained
+    full `/documents` CRUD, new `ApplicationDocumentsApi` handles
+    `list`/`attach`/`detach` against `/applications/{id}/documents`) —
+    "Attach existing" via a new `document_attach_sheet.dart` search
+    picker, "Upload new" via upload-then-attach (two calls, either
+    exception propagates). "Remove from this application" only detaches;
+    the document and its other attachments are untouched. The old
+    `documents_api.dart`/`document_with_application.dart` (broken
+    against the current backend contract) were deleted.
+    `document_directory_screen.dart` (the bottom-nav Documents tab) is
+    no longer read-only — it's now the primary place to manage the whole
+    library (upload FAB, per-row overflow menu: download/view AI
+    analysis/edit type/delete).
+  - **AI Tools caught up to `analysis_name`/`scored_at`/server-side name
+    joins**: `ResumeAnalysis`/`AtsScore` domain models gained the new
+    fields; `resume_analyses_tab.dart`/`ats_scores_tab.dart` dropped
+    their client-side document/application label joins entirely. New
+    `resume_analysis_picker.dart` (search-based, replacing a full-preload
+    bottom sheet in `new_ats_score_sheet.dart`) and
+    `analysis_name_edit_sheet.dart` (rename, one edit surface — the list
+    row — matching web's own decision not to duplicate it onto the
+    detail screen).
+  - **"Latest" framing**: `resume_analysis_detail_screen.dart` gained an
+    `isLatest` param (`?isLatest=true`) — a "Latest" chip plus
+    Analyzed/Scored timestamps, and an automatic existing-score lookup,
+    set only when reached via the new shared
+    `view_resume_analysis_action.dart` helper (used by both
+    `DocumentsPanel`'s "View Analysis" and the new
+    `DocumentDirectoryScreen`'s "View AI analysis" row action — the two
+    are identical now that `AtsScore` has no application link at all).
+  - **Search-on-focus**: all four remote-search pickers
+    (`resume_document_picker.dart`, `application_picker.dart`,
+    `resume_analysis_picker.dart`, `document_attach_sheet.dart`) now
+    fire their debounced search on focus, not just on keystroke, so
+    tapping into an empty field shows results immediately.
+  - **Score ↔ analysis cross-links with real touch targets**:
+    `resume_analysis_detail_screen.dart`'s existing "View score" row and
+    a new mirror-image "View resume analysis" row on
+    `ats_score_detail_screen.dart` (`Card`/`ListTile`, chevron trailing)
+    replace what was briefly a tiny underlined text link on
+    `AtsScoresTab`'s card — too small a touch target to reliably tap.
+    The new row is gated by a `showAnalysisLink` param, true only when
+    reached directly from the ATS Scores list/"New Score" flow (not when
+    reached via the resume-analysis screen, which would make the link
+    circular).
+  - **`_DocumentCard` layout fix** (`documents_panel.dart` and
+    `document_directory_screen.dart`): file name and "Uploaded
+    {date, time}" now each get a full-width line instead of being
+    squeezed by a `ListTile`'s trailing row of 3-4 `IconButton`s — those
+    actions collapsed into a single overflow `PopupMenuButton`.
+  - Web also gained a matching entry point: `AtsScoresView.vue`'s
+    "Analysis used" column is now clickable, reusing
+    `ResumeAnalysisDetailDialog.vue` to show the analysis behind a score
+    without leaving the ATS Scores list.
+
+## v0.11.0
 
 ### Added
 
