@@ -4,6 +4,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
+import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 
 import ParsedResumeDisplay from './ParsedResumeDisplay.vue'
@@ -11,6 +12,7 @@ import AtsScoreDisplay from './AtsScoreDisplay.vue'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { useAtsScoresStore } from '@/stores/atsScores'
 import { isAiJobInFlight } from '@/lib/ai-ui'
+import { formatDateTime } from '@/lib/date-utils'
 
 // Opened from components/applications/DocumentsPanel.vue, one row at a
 // time - see that file for why this exists (quick "view analysis" from
@@ -45,6 +47,20 @@ const hasJobUrl = computed(() => !!props.jobUrl)
 // display until the new one actually completes.
 const showRescoreForm = ref(false)
 const showScoreForm = computed(() => !atsScores.current || showRescoreForm.value)
+
+// This modal only ever shows the *latest* analysis/score for documentId
+// (see module docstring above) - the "Latest" tag makes that explicit in
+// the UI too, since a user coming from AtsScoresView.vue's full history
+// might otherwise assume this is just "a" result rather than "the most
+// recent" one. completed_at/scored_at are only ever null on a
+// pending/processing/failed run - both sections here are gated on
+// status === 'completed', so the fallback is defensive, not expected.
+const analyzedAt = computed(() =>
+  resumeAnalyses.current?.completed_at ? formatDateTime(resumeAnalyses.current.completed_at) : null,
+)
+const scoredAt = computed(() =>
+  atsScores.current?.scored_at ? formatDateTime(atsScores.current.scored_at) : null,
+)
 
 function openRescoreForm() {
   pastedDescription.value = ''
@@ -243,6 +259,13 @@ onBeforeUnmount(() => {
       </Message>
 
       <div v-else-if="resumeAnalyses.current.parsed_data" class="space-y-6">
+        <p v-if="resumeAnalyses.current.analysis_name" class="text-sm font-medium text-ink">
+          Analysis name: {{ resumeAnalyses.current.analysis_name }}
+        </p>
+        <div class="flex items-center gap-2">
+          <Tag value="Latest" severity="info" />
+          <span v-if="analyzedAt" class="text-xs text-slate">Analyzed {{ analyzedAt }}</span>
+        </div>
         <ParsedResumeDisplay :parsed="resumeAnalyses.current.parsed_data" />
 
         <div class="border-t border-slate/10 pt-4">
@@ -264,13 +287,20 @@ onBeforeUnmount(() => {
                  so this stays visible even once a rescore form is opened
                  below it, right up until the new attempt actually
                  completes and replaces it. -->
-            <AtsScoreDisplay
+            <template
               v-if="atsScores.current?.status === 'completed' && atsScores.current.feedback"
-              :score="atsScores.current.feedback"
-              :job-description="atsScores.current.job_description"
-              :job-description-source="atsScores.current.job_description_source"
-              :job-url="atsScores.current.job_url"
-            />
+            >
+              <div class="flex items-center gap-2">
+                <Tag value="Latest" severity="info" />
+                <span v-if="scoredAt" class="text-xs text-slate">Scored {{ scoredAt }}</span>
+              </div>
+              <AtsScoreDisplay
+                :score="atsScores.current.feedback"
+                :job-description="atsScores.current.job_description"
+                :job-description-source="atsScores.current.job_description_source"
+                :job-url="atsScores.current.job_url"
+              />
+            </template>
 
             <div v-if="!showScoreForm" class="text-center">
               <Button
