@@ -143,6 +143,12 @@ export interface AtsScore {
    * (via resume_analysis.document) - always present. Same rationale as
    * ResumeAnalysis.document_file_name. */
   document_file_name: string
+  /** resume_analysis.analysis_name, joined in server-side - always
+   * present too, despite ResumeAnalysis.analysis_name itself being
+   * nullable (an AtsScore can only ever reference a resume_analysis
+   * whose parse already completed, which is when analysis_name gets
+   * set). */
+  analysis_name: string
 }
 
 export interface AtsScoreListResponse {
