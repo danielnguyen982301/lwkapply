@@ -60,10 +60,16 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
   void _select(Application application) {
     setState(() {
       _results = [];
-      _controller.text = application.company;
+      _controller.text = _hasApplicationName(application)
+          ? application.applicationName!
+          : application.company;
     });
     FocusScope.of(context).unfocus();
     widget.onSelected(application);
+  }
+
+  bool _hasApplicationName(Application application) {
+    return application.applicationName?.isNotEmpty == true;
   }
 
   @override
@@ -108,8 +114,16 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
                     application.jobUrl!.isNotEmpty;
                 return ListTile(
                   dense: true,
-                  title: Text(application.company),
-                  subtitle: Text(application.position),
+                  title: Text(
+                    _hasApplicationName(application)
+                        ? application.applicationName!
+                        : application.company,
+                  ),
+                  subtitle: Text(
+                    _hasApplicationName(application)
+                        ? '${application.company} · ${application.position}'
+                        : application.position,
+                  ),
                   // job_url drives ATS Score's auto-fetch path (see
                   // AtsScoresTab's create sheet) — surfacing it here up
                   // front avoids a later "no job_url" 422 surprise,

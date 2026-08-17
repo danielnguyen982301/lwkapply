@@ -153,6 +153,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
     final draft = ApplicationDraft(
       company: values['company'] as String,
       position: values['position'] as String,
+      applicationName: values['applicationName'] as String?,
       location: values['location'] as String?,
       status: values['status'] as ApplicationStatus,
       salaryMin: salaryMin,
@@ -379,6 +380,17 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
               ),
               const SizedBox(height: 16),
             ],
+            FormBuilderTextField(
+              name: 'applicationName',
+              initialValue: _existing?.applicationName,
+              decoration: const InputDecoration(
+                labelText: 'Application name',
+                hintText: 'e.g. "Re-applied after rejection"',
+              ),
+              valueTransformer: _emptyToNull,
+              validator: _optional(FormBuilderValidators.maxLength(255)),
+            ),
+            const SizedBox(height: 16),
             FormBuilderTextField(
               name: 'company',
               initialValue: _existing?.company,

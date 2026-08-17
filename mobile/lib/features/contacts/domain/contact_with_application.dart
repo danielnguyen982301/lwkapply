@@ -17,12 +17,14 @@ class ApplicationSummary {
     required this.id,
     required this.company,
     required this.position,
+    required this.applicationName,
     required this.status,
   });
 
   final String id;
   final String company;
   final String position;
+  final String? applicationName;
   final ApplicationStatus status;
 
   factory ApplicationSummary.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,7 @@ class ApplicationSummary {
       id: json['id'] as String,
       company: json['company'] as String,
       position: json['position'] as String,
+      applicationName: json['application_name'] as String?,
       status: ApplicationStatus.fromApiValue(json['status'] as String),
     );
   }

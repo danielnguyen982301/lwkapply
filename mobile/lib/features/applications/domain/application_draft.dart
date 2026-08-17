@@ -14,6 +14,7 @@ class ApplicationDraft {
   const ApplicationDraft({
     required this.company,
     required this.position,
+    required this.applicationName,
     required this.location,
     required this.status,
     required this.salaryMin,
@@ -25,6 +26,7 @@ class ApplicationDraft {
 
   final String company;
   final String position;
+  final String? applicationName;
   final String? location;
   final ApplicationStatus status;
   final int? salaryMin;
@@ -36,6 +38,7 @@ class ApplicationDraft {
   Map<String, dynamic> toJson() => {
         'company': company,
         'position': position,
+        'application_name': applicationName,
         'location': location,
         'status': status.apiValue,
         'salary_min': salaryMin,

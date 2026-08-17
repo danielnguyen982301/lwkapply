@@ -54,6 +54,7 @@ class Application {
     required this.userId,
     required this.company,
     required this.position,
+    required this.applicationName,
     required this.location,
     required this.status,
     required this.salaryMin,
@@ -69,6 +70,11 @@ class Application {
   final String userId;
   final String company;
   final String position;
+
+  /// Optional, user-chosen label distinguishing applications that share
+  /// the same company/position (e.g. a re-apply after rejection) —
+  /// mirrors backend/app/models/application.py's application_name.
+  final String? applicationName;
   final String? location;
   final ApplicationStatus status;
   final int? salaryMin;
@@ -88,6 +94,7 @@ class Application {
       userId: json['user_id'] as String,
       company: json['company'] as String,
       position: json['position'] as String,
+      applicationName: json['application_name'] as String?,
       location: json['location'] as String?,
       status: ApplicationStatus.fromApiValue(json['status'] as String),
       salaryMin: json['salary_min'] as int?,
