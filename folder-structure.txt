@@ -265,8 +265,10 @@
 │   │   │   │   │   ├── parsed_resume.dart
 │   │   │   │   │   └── resume_analysis.dart
 │   │   │   │   └── presentation
+│   │   │   │       ├── ai_formatting.dart
 │   │   │   │       ├── ai_job_status_style.dart
 │   │   │   │       ├── ai_tools_screen.dart
+│   │   │   │       ├── analysis_name_edit_sheet.dart
 │   │   │   │       ├── application_picker.dart
 │   │   │   │       ├── ats_score_detail_controller.dart
 │   │   │   │       ├── ats_score_detail_screen.dart
@@ -284,7 +286,9 @@
 │   │   │   │       ├── resume_analysis_detail_controller.dart
 │   │   │   │       ├── resume_analysis_detail_screen.dart
 │   │   │   │       ├── resume_analysis_detail_state.dart
-│   │   │   │       └── resume_document_picker.dart
+│   │   │   │       ├── resume_analysis_picker.dart
+│   │   │   │       ├── resume_document_picker.dart
+│   │   │   │       └── view_resume_analysis_action.dart
 │   │   │   ├── analytics
 │   │   │   │   ├── data
 │   │   │   │   │   └── analytics_api.dart
@@ -337,16 +341,17 @@
 │   │   │   │       └── contacts_panel.dart
 │   │   │   ├── documents
 │   │   │   │   ├── data
-│   │   │   │   │   ├── document_directory_api.dart
-│   │   │   │   │   └── documents_api.dart
+│   │   │   │   │   ├── application_documents_api.dart
+│   │   │   │   │   └── document_directory_api.dart
 │   │   │   │   ├── domain
-│   │   │   │   │   ├── document.dart
-│   │   │   │   │   └── document_with_application.dart
+│   │   │   │   │   └── document.dart
 │   │   │   │   └── presentation
+│   │   │   │       ├── document_attach_sheet.dart
 │   │   │   │       ├── document_directory_controller.dart
 │   │   │   │       ├── document_directory_screen.dart
 │   │   │   │       ├── document_directory_state.dart
 │   │   │   │       ├── document_edit_sheet.dart
+│   │   │   │       ├── document_formatting.dart
 │   │   │   │       ├── document_upload_sheet.dart
 │   │   │   │       ├── documents_list_controller.dart
 │   │   │   │       ├── documents_list_state.dart
@@ -512,4 +517,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-130 directories, 383 files
+130 directories, 388 files
