@@ -1,16 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
-import { toTypedSchema } from '@vee-validate/zod'
-import z from 'zod'
-import { useForm } from 'vee-validate'
 import { DateTime } from 'luxon'
 import { tooltip } from '@/lib/tooltip'
 
@@ -18,126 +14,28 @@ import { useInterviewsStore } from '@/stores/interviews'
 import {
   INTERVIEW_RESULT_LABELS,
   INTERVIEW_TYPE_LABELS,
-  interviewResultOptions,
   interviewResultSeverity,
-  interviewTypeOptions,
 } from '@/lib/interview-ui'
-import {
-  INTERVIEW_RESULTS,
-  INTERVIEW_TYPES,
-  type Interview,
-  type InterviewCreatePayload,
-  type InterviewResult,
-  type InterviewType,
-} from '@/types/interview'
-import CustomSelect from '../custom_form_fields/CustomSelect.vue'
-import CustomDatePicker from '../custom_form_fields/CustomDatePicker.vue'
-import CustomInputNumber from '../custom_form_fields/CustomInputNumber.vue'
-import CustomTextarea from '../custom_form_fields/CustomTextarea.vue'
-
-interface FormValues {
-  type: InterviewType
-  scheduled_at: Date | null
-  duration_minutes: number | null
-  feedback: string
-  result: InterviewResult
-}
+import InterviewFormDialog from '@/components/interviews/InterviewFormDialog.vue'
+import type { Interview } from '@/types/interview'
 
 const props = defineProps<{ applicationId: string }>()
 
 const store = useInterviewsStore()
 const confirm = useConfirm()
 
-const typeOptions = interviewTypeOptions()
-const resultOptions = interviewResultOptions()
-
-function blankForm(): FormValues {
-  return {
-    type: 'phone_screen',
-    scheduled_at: null,
-    duration_minutes: null,
-    feedback: '',
-    result: 'pending',
-  }
-}
-
-function populateForm(interview: Interview): FormValues {
-  const { type, scheduled_at, duration_minutes, feedback, result } = interview
-  return {
-    type,
-    scheduled_at: scheduled_at ? DateTime.fromISO(scheduled_at).toJSDate() : null,
-    duration_minutes,
-    feedback: feedback ?? '',
-    result,
-  }
-}
-
-const validationSchema = toTypedSchema(
-  z.object({
-    type: z.enum(INTERVIEW_TYPES as [InterviewType, ...InterviewType[]]),
-    scheduled_at: z.date(),
-    duration_minutes: z.number().nullable(),
-    feedback: z.string().nullable(),
-    result: z.enum(INTERVIEW_RESULTS as [InterviewResult, ...InterviewResult[]]),
-  }),
-)
-
-const { errors, handleSubmit, meta, resetForm } = useForm<FormValues>({
-  validationSchema,
-  initialValues: { ...blankForm() },
-})
-
 const dialogVisible = ref(false)
 const editingInterview = ref<Interview | null>(null)
-
-const dialogTitle = computed(() =>
-  editingInterview.value ? 'Edit interview' : 'Schedule interview',
-)
 
 function openAddDialog() {
   editingInterview.value = null
   dialogVisible.value = true
-  resetForm({
-    values: { ...blankForm() },
-  })
 }
 
 function openEditDialog(interview: Interview) {
   editingInterview.value = interview
   dialogVisible.value = true
-  resetForm({
-    values: { ...populateForm(interview) },
-  })
 }
-
-function closeDialog() {
-  dialogVisible.value = false
-}
-
-function buildPayload(formValues: FormValues): InterviewCreatePayload {
-  const { type, scheduled_at, duration_minutes, feedback, result } = formValues
-  return {
-    type,
-    scheduled_at: scheduled_at ? scheduled_at.toISOString() : '',
-    duration_minutes,
-    feedback: feedback.trim() || null,
-    result,
-  }
-}
-
-const onFormSubmit = handleSubmit(async (formValues) => {
-  const payload = buildPayload(formValues)
-  try {
-    if (editingInterview.value) {
-      await store.updateInterview(props.applicationId, editingInterview.value.id, payload)
-    } else {
-      await store.createInterview(props.applicationId, payload)
-    }
-    dialogVisible.value = false
-  } catch {
-    // store.mutationError is already set and rendered in the dialog below.
-  }
-})
 
 function confirmDelete(interview: Interview) {
   confirm.require({
@@ -284,94 +182,9 @@ onBeforeUnmount(() => {
     </template>
   </Card>
 
-  <Dialog
+  <InterviewFormDialog
     v-model:visible="dialogVisible"
-    :header="dialogTitle"
-    modal
-    dismissable-mask
-    class="w-full max-w-md"
-    @hide="closeDialog"
-  >
-    <form class="space-y-4" @submit.prevent="onFormSubmit">
-      <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
-        {{ store.mutationError }}
-      </Message>
-
-      <div class="flex flex-col gap-1">
-        <label for="interview-type" class="text-sm font-medium text-ink">Type</label>
-        <CustomSelect
-          name="type"
-          input-id="interview-type"
-          :options="typeOptions"
-          option-label="label"
-          option-value="value"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="interview-scheduled" class="text-sm font-medium text-ink">
-          Date &amp; time *
-        </label>
-        <CustomDatePicker
-          name="scheduled_at"
-          input-id="interview-scheduled"
-          show-time
-          hour-format="24"
-          date-format="yy-mm-dd"
-          show-icon
-          icon-display="input"
-          :invalid="!!errors.scheduled_at"
-          :aria-describedby="!!errors.scheduled_at ? 'interview-scheduled-error' : undefined"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="interview-duration" class="text-sm font-medium text-ink">
-          Duration (minutes)
-        </label>
-        <CustomInputNumber
-          name="duration_minutes"
-          input-id="interview-duration"
-          :min="1"
-          :max="1440"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="interview-result" class="text-sm font-medium text-ink">Result</label>
-        <CustomSelect
-          name="result"
-          input-id="interview-result"
-          :options="resultOptions"
-          option-label="label"
-          option-value="value"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="interview-feedback" class="text-sm font-medium text-ink">Feedback</label>
-        <CustomTextarea id="interview-feedback" name="feedback" rows="3" class="w-full" />
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button label="Cancel" severity="secondary" outlined type="button" @click="closeDialog" />
-        <Button
-          type="submit"
-          :label="
-            store.mutationStatus === 'loading'
-              ? 'Saving…'
-              : editingInterview
-                ? 'Save changes'
-                : 'Schedule interview'
-          "
-          :loading="store.mutationStatus === 'loading'"
-          :disabled="(!!editingInterview && !meta.dirty) || store.mutationStatus === 'loading'"
-        />
-      </div>
-    </form>
-  </Dialog>
+    :application-id="props.applicationId"
+    :interview="editingInterview"
+  />
 </template>
