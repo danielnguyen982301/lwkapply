@@ -50,6 +50,7 @@ const formatUploadedAt = formatDateTime
     placeholder="Search your uploaded resumes…"
     class="w-full"
     fluid
+    complete-on-focus
     @complete="onComplete"
   >
     <template #option="{ option }: { option: Document }">

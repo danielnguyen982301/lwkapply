@@ -45,6 +45,7 @@ const formatAppliedDate = formatDate
     placeholder="Search your tracked applications…"
     class="w-full"
     fluid
+    complete-on-focus
     @complete="onComplete"
   >
     <template #option="{ option }: { option: Application }">
