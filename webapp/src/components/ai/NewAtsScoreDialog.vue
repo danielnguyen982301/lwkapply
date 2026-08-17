@@ -1,28 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import AutoComplete from 'primevue/autocomplete'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import Textarea from 'primevue/textarea'
 
 import ApplicationPicker from './ApplicationPicker.vue'
 import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useAtsScoresStore } from '@/stores/atsScores'
+import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
 import { formatDateTime } from '@/lib/date-utils'
 import type { AtsScore, ResumeAnalysis } from '@/types/ai'
 import type { Application } from '@/types/application'
 
 // Extracted out of AtsScoresView.vue - the "New ATS score" form dialog.
-// `completedAnalyses`/`documentLabels` are passed down rather than
-// fetched here: the parent view already loads both for its own table's
-// resume-label column (resumeLabelFor), so fetching them again here
-// would just be a duplicate round trip for the same data.
 const props = defineProps<{
-  completedAnalyses: ResumeAnalysis[]
-  documentLabels: Record<string, string>
   /** Prefilled resume_analysis_id, e.g. arriving via
    * ?resume_analysis_id=... from ResumeAnalysesView.vue's "Score against
    * a job" button. */
@@ -33,8 +28,29 @@ const visible = defineModel<boolean>('visible', { default: false })
 const emit = defineEmits<{ created: [score: AtsScore] }>()
 
 const store = useAtsScoresStore()
+const resumeAnalyses = useResumeAnalysesStore()
 
-const selectedAnalysisId = ref<string | null>(null)
+// Live-searched (server-side status=completed + analysis_name search) via
+// searchCompletedForPicker() - same debounced-AutoComplete pattern as
+// ApplicationPicker.vue/ResumeDocumentPicker.vue, not a preloaded list
+// capped at some page size.
+const selectedAnalysis = ref<ResumeAnalysis | null>(null)
+const suggestions = ref<ResumeAnalysis[]>([])
+
+let debounceTimer: ReturnType<typeof setTimeout> | undefined
+function onComplete(event: { query: string }) {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    resumeAnalyses
+      .searchCompletedForPicker(event.query)
+      .then((results) => {
+        suggestions.value = results
+      })
+      .catch(() => {
+        suggestions.value = []
+      })
+  }, 300)
+}
 
 type DescriptionSource = 'application' | 'url' | 'paste'
 const descriptionSourceOptions = [
@@ -47,29 +63,32 @@ const selectedApplication = ref<Application | null>(null)
 const pastedJobUrl = ref('')
 const pastedDescription = ref('')
 
-function resumeLabelFor(analysis: ResumeAnalysis): string {
-  return props.documentLabels[analysis.document_id] || 'Resume analysis'
-}
-
 // Matches ResumeAnalysesView.vue's "Completed At" column - this is the
 // field that actually tells apart two runs of the same resume.
 function analyzedAtFor(analysis: ResumeAnalysis): string {
   return analysis.completed_at ? formatDateTime(analysis.completed_at) : '—'
 }
 
-function selectedAnalysis(id: string | null): ResumeAnalysis | undefined {
-  return props.completedAnalyses.find((a) => a.id === id)
-}
-
 // Reset the form fresh every time the dialog opens - mirrors
 // ResumeAnalysisModal.vue's `immediate: true` visible watcher.
+// fetchResumeAnalysisById() is isolated (doesn't touch the AI Tools
+// list's shared `current`/polling state) so preloading the prefilled
+// analysis here can't disturb it.
 watch(visible, (isVisible) => {
   if (!isVisible) return
-  selectedAnalysisId.value =
-    props.initialResumeAnalysisId &&
-    props.completedAnalyses.some((a) => a.id === props.initialResumeAnalysisId)
-      ? props.initialResumeAnalysisId
-      : null
+  selectedAnalysis.value = null
+  suggestions.value = []
+  if (props.initialResumeAnalysisId) {
+    const id = props.initialResumeAnalysisId
+    resumeAnalyses
+      .fetchResumeAnalysisById(id)
+      .then((analysis) => {
+        if (analysis.status === 'completed') selectedAnalysis.value = analysis
+      })
+      .catch(() => {
+        // Leave the picker empty - the id may since have been deleted.
+      })
+  }
   descriptionSource.value = 'application'
   selectedApplication.value = null
   pastedJobUrl.value = ''
@@ -77,17 +96,17 @@ watch(visible, (isVisible) => {
 })
 
 const canSubmit = computed(() => {
-  if (!selectedAnalysisId.value) return false
+  if (!selectedAnalysis.value) return false
   if (descriptionSource.value === 'application') return !!selectedApplication.value?.job_url
   if (descriptionSource.value === 'url') return pastedJobUrl.value.trim().length > 0
   return pastedDescription.value.trim().length >= 50
 })
 
 async function handleCreate() {
-  if (!selectedAnalysisId.value || !canSubmit.value) return
+  if (!selectedAnalysis.value || !canSubmit.value) return
   try {
     const score = await store.create({
-      resume_analysis_id: selectedAnalysisId.value,
+      resume_analysis_id: selectedAnalysis.value.id,
       job_url:
         descriptionSource.value === 'application'
           ? selectedApplication.value?.job_url
@@ -123,35 +142,25 @@ function closeDialog() {
       </Message>
 
       <div class="flex flex-col gap-1">
-        <label for="ats-resume" class="text-sm font-medium text-ink">Resume *</label>
-        <Select
-          v-model="selectedAnalysisId"
+        <label for="ats-resume" class="text-sm font-medium text-ink">Resume Analysis *</label>
+        <AutoComplete
+          v-model="selectedAnalysis"
           input-id="ats-resume"
-          :options="completedAnalyses"
-          option-label="id"
-          option-value="id"
-          placeholder="Choose a completed analysis"
+          :suggestions="suggestions"
+          option-label="document_file_name"
+          placeholder="Search your completed resume analyses…"
           class="w-full"
+          fluid
+          complete-on-focus
+          @complete="onComplete"
         >
           <template #option="{ option }: { option: ResumeAnalysis }">
             <div class="flex items-center justify-between gap-3 py-1">
-              <TruncatedText :text="resumeLabelFor(option)" max-width="14rem" />
+              <TruncatedText :text="option.analysis_name" max-width="14rem" />
               <span class="shrink-0 text-xs text-slate">Analyzed {{ analyzedAtFor(option) }}</span>
             </div>
           </template>
-          <template #value="{ value }: { value: string | null }">
-            <div v-if="value && selectedAnalysis(value)" class="flex items-center gap-2 truncate">
-              <span class="truncate">{{ resumeLabelFor(selectedAnalysis(value)!) }}</span>
-              <span class="shrink-0 text-xs text-slate">
-                · Analyzed {{ analyzedAtFor(selectedAnalysis(value)!) }}
-              </span>
-            </div>
-            <span v-else class="text-slate">Choose a completed analysis</span>
-          </template>
-        </Select>
-        <p v-if="completedAnalyses.length === 0" class="text-xs text-slate">
-          No completed resume analyses yet - analyze a resume first.
-        </p>
+        </AutoComplete>
       </div>
 
       <div class="flex flex-col gap-2">
