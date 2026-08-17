@@ -28,6 +28,7 @@ own globals" reasoning documented in test_documents_endpoints.py.
 """
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -38,7 +39,7 @@ from app.models.document import Document, DocumentType
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
 from app.schemas.ai import AtsScoreResult, ParsedResume
 from app.services.ai.resume_parser import UnsupportedResumeFormatError
-from app.tasks.ai import parse_resume_task, score_ats_task
+from app.tasks.ai import _generate_analysis_name, parse_resume_task, score_ats_task
 
 
 @pytest.fixture()
@@ -102,6 +103,27 @@ def _make_ats_score(db_session, user, resume_analysis, **overrides):
     return ats_score
 
 
+class TestGenerateAnalysisName:
+    def test_combines_slugified_filename_and_timestamp(self):
+        completed_at = datetime(2026, 8, 17, 14, 32, 5, tzinfo=timezone.utc)
+        name = _generate_analysis_name("My Resume (v2).pdf", completed_at)
+        assert name.startswith("my_resume_v2_20260817_143205_")
+
+    def test_falls_back_to_resume_for_unnamed_or_unslugifiable_file(self):
+        completed_at = datetime(2026, 8, 17, 14, 32, 5, tzinfo=timezone.utc)
+        assert _generate_analysis_name("", completed_at).startswith(
+            "resume_20260817_143205_"
+        )
+        assert _generate_analysis_name("***.pdf", completed_at).startswith(
+            "resume_20260817_143205_"
+        )
+
+    def test_is_unique_across_calls_with_the_same_inputs(self):
+        completed_at = datetime(2026, 8, 17, 14, 32, 5, tzinfo=timezone.utc)
+        names = {_generate_analysis_name("resume.pdf", completed_at) for _ in range(20)}
+        assert len(names) == 20
+
+
 class TestParseResumeTask:
     def test_success_path_populates_parsed_data(
         self, db_session, patch_ai_tasks_session, monkeypatch
@@ -137,6 +159,8 @@ class TestParseResumeTask:
         assert analysis.parsed_data["full_name"] == "Jane Doe"
         assert analysis.error_message is None
         assert analysis.completed_at is not None
+        assert analysis.analysis_name is not None
+        assert analysis.analysis_name.startswith("resume_")
 
     def test_unsupported_format_marks_failed_with_clear_message(
         self, db_session, patch_ai_tasks_session, monkeypatch
@@ -161,6 +185,7 @@ class TestParseResumeTask:
         assert analysis.error_message is not None
         assert "PDF or DOCX" in analysis.error_message
         assert analysis.completed_at is None
+        assert analysis.analysis_name is None
 
     def test_unexpected_error_marks_failed_generically(
         self, db_session, patch_ai_tasks_session, monkeypatch
@@ -179,6 +204,7 @@ class TestParseResumeTask:
         db_session.refresh(analysis)
         assert analysis.status == AIJobStatus.FAILED
         assert analysis.error_message == "Resume parsing failed. Please try again."
+        assert analysis.analysis_name is None
 
 
 class TestScoreAtsTask:
@@ -229,6 +255,7 @@ class TestScoreAtsTask:
         assert ats_score.status == AIJobStatus.COMPLETED
         assert ats_score.score == 80
         assert ats_score.job_description_source == "pasted"
+        assert ats_score.scored_at is not None
 
     def test_job_url_fetch_success_backfills_job_description(
         self, db_session, patch_ai_tasks_session, monkeypatch
@@ -303,6 +330,7 @@ class TestScoreAtsTask:
         assert ats_score.error_message is not None
         assert "resubmit" in ats_score.error_message.lower()
         assert ats_score.job_description is None
+        assert ats_score.scored_at is None
 
     def test_gemini_failure_marks_failed_generically(
         self, db_session, patch_ai_tasks_session, monkeypatch
@@ -330,3 +358,4 @@ class TestScoreAtsTask:
         db_session.refresh(ats_score)
         assert ats_score.status == AIJobStatus.FAILED
         assert ats_score.error_message == "ATS scoring failed. Please try again."
+        assert ats_score.scored_at is None
