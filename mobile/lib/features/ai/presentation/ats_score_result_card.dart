@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/ats_score_result.dart';
 import 'ai_job_status_style.dart';
@@ -11,7 +12,7 @@ class AtsScoreResultCard extends StatelessWidget {
     required this.score,
     required this.jobDescription,
     required this.jobDescriptionSource,
-    this.targetLabel,
+    this.jobUrl,
   });
 
   final AtsScoreResult score;
@@ -24,11 +25,12 @@ class AtsScoreResultCard extends StatelessWidget {
   /// "pasted" | "url" | null.
   final String? jobDescriptionSource;
 
-  /// "Company · Position" when the caller already has it on hand (e.g.
-  /// AtsScoresTab's lookup) — optional, since a standalone score with no
-  /// `application_id` has nothing to identify the job by beyond the
-  /// description itself.
-  final String? targetLabel;
+  /// The pasted URL when `jobDescriptionSource == "url"` — null for a
+  /// pasted score, since `AtsScore` has no application link any more to
+  /// identify the job by any other means. The one remaining way to show
+  /// "which job" for a URL-sourced score. Mirrors
+  /// AtsScoreDisplay.vue's `jobUrl` prop.
+  final String? jobUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -68,10 +70,30 @@ class AtsScoreResultCard extends StatelessWidget {
                 ),
                 visualDensity: VisualDensity.compact,
               ),
-            if (targetLabel != null)
-              Text(
-                'Scored against $targetLabel',
-                style: theme.textTheme.bodySmall,
+            if (jobUrl != null && jobUrl!.isNotEmpty)
+              InkWell(
+                onTap: () => launchUrl(
+                  Uri.parse(jobUrl!),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View job posting',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.open_in_new,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ],
+                ),
               ),
           ],
         ),

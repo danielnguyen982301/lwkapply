@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../applications/data/applications_api.dart';
-import '../../applications/domain/application.dart';
 import '../data/ats_scores_api.dart';
 import 'ats_score_detail_controller.dart';
 import 'ats_score_detail_state.dart';
@@ -20,12 +18,13 @@ import 'ats_score_result_card.dart';
 /// 422 (no `job_url` on the application at all, so no row is ever
 /// created) and an asynchronous fetch failure (a row is created but
 /// resolves to `failed`). Mobile's `NewAtsScoreSheet` instead makes the
-/// user choose the source (tracked application vs. pasted text) *before*
-/// submitting, via its `SegmentedButton` toggle — so the synchronous-422
-/// case surfaces as an inline error in that sheet (the user just flips
-/// the toggle and resubmits) and never reaches this screen at all. Only
-/// the async failure — a score that reached `failed` after the backend
-/// tried and couldn't fetch `job_url` — needs a retry surface here.
+/// user choose the source (tracked application / job URL / pasted text)
+/// *before* submitting, via its `SegmentedButton` toggle — so the
+/// synchronous-422 case surfaces as an inline error in that sheet (the
+/// user just flips the toggle and resubmits) and never reaches this
+/// screen at all. Only the async failure — a score that reached `failed`
+/// after the backend tried and couldn't fetch `job_url` — needs a retry
+/// surface here.
 class AtsScoreDetailScreen extends ConsumerStatefulWidget {
   const AtsScoreDetailScreen({super.key, required this.scoreId});
 
@@ -41,40 +40,13 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
   bool _isRetrying = false;
   String? _retryError;
 
-  Application? _application;
-  bool _applicationLoading = false;
-  String? _applicationLoadedFor;
-
   @override
   void dispose() {
     _pastedController.dispose();
     super.dispose();
   }
 
-  Future<void> _maybeLoadApplication(String? applicationId) async {
-    if (applicationId == null || applicationId == _applicationLoadedFor) {
-      return;
-    }
-    _applicationLoadedFor = applicationId;
-    setState(() => _applicationLoading = true);
-    try {
-      final application =
-          await ref.read(applicationsApiProvider).get(applicationId);
-      if (!mounted) return;
-      setState(() {
-        _application = application;
-        _applicationLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _applicationLoading = false);
-    }
-  }
-
-  Future<void> _retryWithPaste(
-    String resumeAnalysisId,
-    String? applicationId,
-  ) async {
+  Future<void> _retryWithPaste(String resumeAnalysisId) async {
     setState(() {
       _isRetrying = true;
       _retryError = null;
@@ -82,7 +54,6 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
     try {
       final created = await ref.read(atsScoresApiProvider).create(
             resumeAnalysisId: resumeAnalysisId,
-            applicationId: applicationId,
             jobDescription: _pastedController.text.trim(),
           );
       if (!mounted) return;
@@ -101,18 +72,6 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
     final state = ref.watch(atsScoreDetailControllerProvider(widget.scoreId));
     final controller =
         ref.read(atsScoreDetailControllerProvider(widget.scoreId).notifier);
-
-    // Fetching the linked application's label is a side effect, so it
-    // can't run synchronously inside build (Flutter forbids setState
-    // during build) — deferred to right after this frame. `_maybeLoad
-    // Application`'s own `_applicationLoadedFor` guard makes repeat
-    // calls on later rebuilds a no-op, so scheduling this on every
-    // build is safe, not just on the first one.
-    final applicationId = state.score?.applicationId;
-    if (applicationId != null) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _maybeLoadApplication(applicationId));
-    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('ATS Score')),
@@ -234,10 +193,7 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
             FilledButton(
               onPressed: (_isRetrying || pasteLength < 50)
                   ? null
-                  : () => _retryWithPaste(
-                        score.resumeAnalysisId,
-                        score.applicationId,
-                      ),
+                  : () => _retryWithPaste(score.resumeAnalysisId),
               child: _isRetrying
                   ? const SizedBox(
                       width: 20,
@@ -253,19 +209,13 @@ class _AtsScoreDetailScreenState extends ConsumerState<AtsScoreDetailScreen> {
 
     if (score.feedback == null) return const SizedBox.shrink();
 
-    final targetLabel = _applicationLoading
-        ? null
-        : (_application != null
-            ? '${_application!.company} — ${_application!.position}'
-            : null);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: AtsScoreResultCard(
         score: score.feedback!,
         jobDescription: score.jobDescription,
         jobDescriptionSource: score.jobDescriptionSource,
-        targetLabel: targetLabel,
+        jobUrl: score.jobUrl,
       ),
     );
   }
