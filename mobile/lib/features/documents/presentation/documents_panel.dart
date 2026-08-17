@@ -422,69 +422,122 @@ class _DocumentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Four row actions (download/view-analysis/edit/detach) left no room
+    // for the file name or upload timestamp when squeezed into a
+    // ListTile's trailing area alongside its title/subtitle — collapsed
+    // into a single overflow menu so the name/date get the full row
+    // width instead, each on its own line.
+    final isBusy = isDownloading || isAnalyzing;
     return Card(
       margin: EdgeInsets.zero,
-      child: ListTile(
-        title: Text(document.fileName, overflow: TextOverflow.ellipsis),
-        subtitle: Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _TypeChip(type: document.fileType),
-            const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    document.fileName,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  _TypeChip(type: document.fileType),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Uploaded ${formatDateTime(document.createdAt.toLocal())}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            isDownloading
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            if (isBusy)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              PopupMenuButton<_DocumentCardAction>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Document actions',
+                onSelected: (action) {
+                  switch (action) {
+                    case _DocumentCardAction.download:
+                      onDownload();
+                    case _DocumentCardAction.viewAnalysis:
+                      onViewAnalysis?.call();
+                    case _DocumentCardAction.edit:
+                      onEdit();
+                    case _DocumentCardAction.detach:
+                      onDetach();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _DocumentCardAction.download,
+                    child: _MenuRow(
+                      icon: Icons.download_outlined,
+                      label: 'Download',
                     ),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.download_outlined),
-                    tooltip: 'Download',
-                    onPressed: onDownload,
                   ),
-            if (onViewAnalysis != null)
-              isAnalyzing
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                  if (onViewAnalysis != null)
+                    const PopupMenuItem(
+                      value: _DocumentCardAction.viewAnalysis,
+                      child: _MenuRow(
+                        icon: Icons.auto_awesome_outlined,
+                        label: 'View Analysis',
                       ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      tooltip: 'View Analysis',
-                      onPressed: onViewAnalysis,
                     ),
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit type',
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.link_off),
-              tooltip: 'Remove from this application',
-              color: theme.colorScheme.error,
-              onPressed: onDetach,
-            ),
+                  const PopupMenuItem(
+                    value: _DocumentCardAction.edit,
+                    child: _MenuRow(
+                      icon: Icons.edit_outlined,
+                      label: 'Edit type',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _DocumentCardAction.detach,
+                    child: _MenuRow(
+                      icon: Icons.link_off,
+                      label: 'Remove from this application',
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+enum _DocumentCardAction { download, viewAnalysis, edit, detach }
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.label, this.color});
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: color)),
+      ],
     );
   }
 }
