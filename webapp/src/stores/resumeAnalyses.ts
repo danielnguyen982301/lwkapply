@@ -6,6 +6,7 @@ import type {
   ResumeAnalysisCreatePayload,
   ResumeAnalysisListParams,
   ResumeAnalysisListResponse,
+  ResumeAnalysisUpdatePayload,
 } from '@/types/ai'
 
 type RequestStatus = 'idle' | 'loading' | 'error'
@@ -30,6 +31,12 @@ interface ResumeAnalysesState {
 
   createStatus: RequestStatus
   createError: string | null
+
+  // Renaming analysis_name - separate from createStatus/currentStatus,
+  // same reasoning as stores/documents.ts's mutationStatus/mutationError
+  // for its own single-field update (file_type).
+  mutationStatus: RequestStatus
+  mutationError: string | null
 
   // Only one in-flight poll at a time per store - starting a new one
   // clears any previous interval first. Views must call stopPolling() in
@@ -58,6 +65,9 @@ export const useResumeAnalysesStore = defineStore('resumeAnalyses', {
 
     createStatus: 'idle',
     createError: null,
+
+    mutationStatus: 'idle',
+    mutationError: null,
 
     pollingHandle: null,
     pollingAttempts: 0,
@@ -126,6 +136,29 @@ export const useResumeAnalysesStore = defineStore('resumeAnalyses', {
       }
     },
 
+    /** Patches items[] in place, same as stores/documents.ts's
+     * updateDocument() - ResumeAnalysesView.vue's table reads straight off
+     * `items`, so the row's label updates immediately without a full
+     * re-fetch. */
+    async updateAnalysisName(
+      id: string,
+      payload: ResumeAnalysisUpdatePayload,
+    ): Promise<ResumeAnalysis> {
+      this.mutationStatus = 'loading'
+      this.mutationError = null
+      try {
+        const { data } = await api.patch<ResumeAnalysis>(`/ai/resume-analyses/${id}`, payload)
+        const index = this.items.findIndex((item) => item.id === id)
+        if (index !== -1) this.items[index] = data
+        this.mutationStatus = 'idle'
+        return data
+      } catch (err) {
+        this.mutationStatus = 'error'
+        this.mutationError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
     startPolling(id: string) {
       this.stopPolling()
       this.pollingAttempts = 0
@@ -166,19 +199,38 @@ export const useResumeAnalysesStore = defineStore('resumeAnalyses', {
     },
 
     /**
-     * Isolated, like fetchLatestForDocument() above - used by
-     * AtsScoresView.vue's "New Score" dialog to populate a picker of
-     * completed analyses to score. No server-side status filter exists on
-     * GET /ai/resume-analyses, so this fetches the most recent page (the
-     * backend's max page_size) and filters to 'completed' client-side -
-     * fine at this scale (bounded by the free-tier daily rate limit, not a
-     * real listing that needs true pagination).
+     * Isolated, like fetchLatestForDocument() above - live-searched variant
+     * used by NewAtsScoreDialog.vue's Resume AutoComplete (same
+     * debounced-search pattern as stores/documents.ts's searchDocuments()
+     * and stores/applications.ts's searchApplications()). Server-side
+     * status=completed + analysis_name search (GET /ai/resume-analyses'
+     * `status`/`search` params), not a preloaded page capped at some size -
+     * a user with more completed analyses than that cap could previously
+     * never find the rest.
      */
-    async fetchCompletedForPicker(): Promise<ResumeAnalysis[]> {
+    async searchCompletedForPicker(query: string, pageSize = 10): Promise<ResumeAnalysis[]> {
       const { data } = await api.get<ResumeAnalysisListResponse>('/ai/resume-analyses', {
-        params: { page: 1, page_size: 100 },
+        params: {
+          status: 'completed',
+          search: query || undefined,
+          page: 1,
+          page_size: pageSize,
+        },
       })
-      return data.items.filter((item) => item.status === 'completed')
+      return data.items
+    },
+
+    /**
+     * Isolated, like fetchApplicationById() (stores/applications.ts) -
+     * returns one analysis directly without touching `current`/polling
+     * state. Used by NewAtsScoreDialog.vue to preload the analysis behind
+     * a prefilled ?resume_analysis_id=... (arriving from
+     * ResumeAnalysesView.vue's "Score against a job" button) into the
+     * Resume AutoComplete without disturbing the AI Tools list's own state.
+     */
+    async fetchResumeAnalysisById(id: string): Promise<ResumeAnalysis> {
+      const { data } = await api.get<ResumeAnalysis>(`/ai/resume-analyses/${id}`)
+      return data
     },
 
     /** Called on unmount of the AI Tools resume-analyses view. */
@@ -194,6 +246,8 @@ export const useResumeAnalysesStore = defineStore('resumeAnalyses', {
       this.currentError = null
       this.createStatus = 'idle'
       this.createError = null
+      this.mutationStatus = 'idle'
+      this.mutationError = null
       this.stopPolling()
       this.pollingTimedOut = false
     },
