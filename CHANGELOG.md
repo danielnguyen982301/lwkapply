@@ -273,6 +273,45 @@
     `visible` instead — fires on every open, and (Vue's default
     pre-flush watch timing) runs before the Dialog's content actually
     remounts
+- **AI Tools follow-up: `analysis_name` (auto-generated, user-editable),
+  `scored_at`, and server-side `document_file_name`/`analysis_name`
+  joins** — refinements to the AI Features/AI Tools work added earlier in
+  this same version. Full detail in BACKEND_SUMMARY.md's "`analysis_name`,
+  `scored_at`, and server-side `document_file_name` joins" section and
+  WEBAPP_SUMMARY.md's "AI Tools" section; summary here:
+  - **New `ResumeAnalysis.analysis_name`** — auto-generated (slugified
+    source file name + completion timestamp + a random suffix) the moment
+    parsing completes, e.g. `resume_20260817_143205_a1b2c3`. Deliberately
+    not DB-uniqueness-enforced, since it's also user-editable afterward
+    via a new `PATCH /ai/resume-analyses/{id}` (`ResumeAnalysisUpdate`,
+    the only editable field). **New `AtsScore.scored_at`** — same
+    shape/lifecycle as `ResumeAnalysis.completed_at`.
+  - **`document_file_name`/`analysis_name` computed properties, joined
+    server-side** (`ResumeAnalysis`/`AtsScore` models, eager-loaded via
+    `joinedload` in `ai.py`'s endpoints) — removes a frontend-only join
+    `ResumeAnalysesView.vue`/`AtsScoresView.vue` used to build row labels
+    (fetch up to 100 documents/analyses client-side, look up by id) that
+    silently mislabeled anything past that 100-item cap.
+  - **`GET /ai/resume-analyses` gained `status`/`search` query params**
+    (`search` matches `analysis_name`) — replaces `NewAtsScoreDialog.vue`'s
+    Resume picker's own 100-item preload-and-filter with a live,
+    server-searched `AutoComplete`, matching `ApplicationPicker.vue`'s
+    existing debounced-search pattern.
+  - **New rename UI**: a pencil button on each row of
+    `ResumeAnalysesView.vue` opens `EditAnalysisNameDialog.vue` (same
+    single-field shape as `DocumentEditDialog.vue`). `AtsScoresView.vue`
+    gained an "Analysis used" column showing the same field.
+  - **New `components/ai/DocumentAnalysisModal.vue`** — the Document
+    Library's own "View AI analysis" row action
+    (`DocumentDirectoryView.vue`), alongside `DocumentsPanel.vue`'s
+    identically-named one. Same shape as `ResumeAnalysisModal.vue`, but
+    with no single application's `job_url` to default-score against —
+    scoring always goes through the same 3-option
+    application/URL/paste picker `NewAtsScoreDialog.vue` uses, inlined
+    directly.
+  - **`ResumeAnalysisModal.vue`** gained "Latest" tags and
+    Analyzed/Scored timestamps on both its analysis and score sections,
+    plus an "Analysis name: …" line.
 
 ## v0.10.0
 
