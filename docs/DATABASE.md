@@ -91,6 +91,10 @@ itself is untouched. Deleting a document cascades its join rows (and its
 - error_message
 - completed_at (nullable — set only when status transitions to
   `completed`; distinct from `created_at` since parsing is async)
+- analysis_name (nullable — auto-generated in the same commit as
+  `completed_at`: slugified `documents.file_name` + completion timestamp
+  + a random suffix, e.g. `resume_20260817_143205_a1b2c3`. Not
+  DB-unique — user-editable afterward via `PATCH /ai/resume-analyses/{id}`)
 
 ### ats_scores (AI features — backend/BACKEND_SUMMARY.md)
 
@@ -105,6 +109,8 @@ itself is untouched. Deleting a document cascades its join rows (and its
 - score
 - feedback (JSONB)
 - error_message
+- scored_at (nullable — same shape as resume_analyses.completed_at, set
+  only when status transitions to `completed`)
 
 **No `application_id`.** Originally had one (nullable, mirroring
 `documents.application_id`), dropped in the same pass as
