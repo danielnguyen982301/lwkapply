@@ -499,6 +499,80 @@ matching every other feature's "one store per resource" convention.
   `NewAtsScoreDialog.vue`'s resume `Select` shows the same "Analyzed at"
   timestamp next to each (`TruncatedText`) resume label, for the same
   reason.
+- **Server-side `document_file_name`/`analysis_name` joins replaced a
+  frontend-only join capped at 100 items** — see BACKEND_SUMMARY.md's
+  "`analysis_name`, `scored_at`, and server-side `document_file_name`
+  joins" section for the backend side. `ResumeAnalysesView.vue`/
+  `AtsScoresView.vue` used to call `documents.searchDocuments('', 'resume', 100)`
+  on mount (and, for `AtsScoresView.vue`, `resumeAnalyses.fetchCompletedForPicker()`
+  too) purely to build a `document_id -> file_name` lookup map for row
+  labels — a real correctness bug for any user with more than 100
+  documents/analyses, since anything past the cap silently fell back to a
+  generic date-based label. Both views now just read
+  `data.document_file_name`/`data.analysis_name` straight off the API
+  response; `stores/documents.ts`/`useDocumentsStore` is no longer
+  imported by either view at all.
+- **`NewAtsScoreDialog.vue`'s Resume field: preloaded `Select` → live
+  `AutoComplete`.** Previously backed by `resumeAnalyses.fetchCompletedForPicker()`
+  (fetch the most recent 100 analyses, filter to `status="completed"`
+  client-side) — same 100-item ceiling problem as the join above, just for
+  a picker instead of a label. Now a debounced `AutoComplete`
+  (`resumeAnalyses.searchCompletedForPicker(query)`, hitting the backend's
+  new `status`/`search` params directly), matching
+  `ApplicationPicker.vue`/`ResumeDocumentPicker.vue`'s existing pattern
+  exactly — `option-label="analysis_name"`. The `?resume_analysis_id=...`
+  prefill (arriving from `ResumeAnalysesView.vue`'s "Score against a job"
+  button) no longer needs the id to be present in a preloaded list either:
+  a new isolated `resumeAnalyses.fetchResumeAnalysisById(id)` fetches it
+  directly, same "isolated, doesn't touch shared `current`/polling state"
+  reasoning as `applications.fetchApplicationById()`. `AtsScoresView.vue`
+  correspondingly dropped its own `completedAnalyses` preload entirely —
+  `openCreateDialog()` is a plain synchronous function again.
+- **`ResumeAnalysisModal.vue`: "Latest" tags, Analyzed/Scored timestamps,
+  and the analysis name.** Since this modal only ever shows the *latest*
+  analysis/score for a document (not full history — see its own
+  docstring), a `Tag value="Latest"` now makes that explicit above both
+  the parsed-resume section and the score section, each paired with a
+  formatted `completed_at`/`scored_at` ("Analyzed …" / "Scored …"). An
+  "Analysis name: {{ analysis_name }}" line sits at the very top of the
+  analysis section, above the "Latest" tag.
+- **New `components/ai/DocumentAnalysisModal.vue`** — the Document
+  Library's own "View AI analysis" action, wired into
+  `DocumentDirectoryView.vue`'s row actions (same `pi-sparkles`
+  icon-only button, resume-type documents only, as
+  `DocumentsPanel.vue`'s). Same overall shape and `load()`/polling logic
+  as `ResumeAnalysisModal.vue`, but takes no `jobUrl` prop — a Document
+  Library document isn't reached from any one application's detail page,
+  so there's no single job to default-score against. Scoring here always
+  goes through the same 3-option `application`/`url`/`paste` picker
+  `NewAtsScoreDialog.vue` uses (`ApplicationPicker.vue` +
+  `SelectButton` + `InputText`/`Textarea`), inlined directly rather than
+  the single-button-plus-paste-fallback flow `ResumeAnalysisModal.vue`
+  offers — shown immediately when there's no score yet, and again behind
+  a "Score again" toggle once one exists, mirroring that same toggle
+  mechanics.
+- **Renaming `analysis_name`: `EditAnalysisNameDialog.vue` + a row-level
+  pencil button in `ResumeAnalysesView.vue`.** A single-field rename
+  dialog, same shape as `components/documents/DocumentEditDialog.vue`
+  (`file_type`) — PATCHes via a new `resumeAnalyses.updateAnalysisName(id, payload)`
+  store action (new `mutationStatus`/`mutationError` state, mirroring
+  `stores/documents.ts`'s `updateDocument()`; patches the row in `items`
+  in place so the table updates without a refetch). Deliberately **not**
+  added to `ResumeAnalysisModal.vue`/`DocumentAnalysisModal.vue` (quick
+  "check latest status" popups, not where a user is organizing/comparing
+  multiple named analyses) or duplicated into
+  `ResumeAnalysisDetailDialog.vue` — one edit surface, in the list view
+  where the name actually earns its keep (it's also now what
+  `search` filters on). Since `ResumeAnalysesView.vue`'s table already has
+  `@row-click` opening the detail dialog, `handleRowClick` gained the same
+  `target.closest('a, button')` guard `lib/row-click.ts`'s
+  `useApplicationRowClick` uses, so clicking the rename button doesn't
+  also pop the detail dialog open underneath it.
+- **New table columns**: "Analysis name" on `ResumeAnalysesView.vue`
+  (`data.analysis_name`, `TruncatedText` + the rename button above) and
+  "Analysis used" on `AtsScoresView.vue` (`data.analysis_name` — the name
+  of the resume analysis that score was run against), both reading
+  straight off the server-joined field, no client-side lookup.
 
 ## What's deliberately not here yet
 
