@@ -1,106 +1,33 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useConfirm } from 'primevue/useconfirm'
-import { toTypedSchema } from '@vee-validate/zod'
-import z from 'zod'
-import { useForm } from 'vee-validate'
 
+import { tooltip } from '@/lib/tooltip'
 import { useContactsStore } from '@/stores/contacts'
-import type { Contact, ContactCreatePayload } from '@/types/contact'
-import CustomInputText from '../custom_form_fields/CustomInputText.vue'
-
-interface FormValues {
-  name: string
-  title: string
-  email: string
-  linkedin_url: string
-}
+import ContactFormDialog from '@/components/contacts/ContactFormDialog.vue'
+import type { Contact } from '@/types/contact'
 
 const props = defineProps<{ applicationId: string }>()
 
 const store = useContactsStore()
 const confirm = useConfirm()
 
-function blankForm(): FormValues {
-  return { name: '', title: '', email: '', linkedin_url: '' }
-}
-
-function populateForm(contact: Contact): FormValues {
-  const { name, title, email, linkedin_url } = contact
-  return {
-    name,
-    title: title ?? '',
-    email: email ?? '',
-    linkedin_url: linkedin_url ?? '',
-  }
-}
-
-const validationSchema = toTypedSchema(
-  z.object({
-    name: z.string().trim().min(1, 'Name is required'),
-    title: z.string().trim().nullable(),
-    email: z.union([z.string().trim().email('Enter a valid email address.'), z.literal('')]),
-    linkedin_url: z.string().trim().nullable(),
-  }),
-)
-
-const { errors, handleSubmit, meta, resetForm } = useForm<FormValues>({
-  validationSchema,
-  initialValues: { ...blankForm() },
-})
-
 const dialogVisible = ref(false)
 const editingContact = ref<Contact | null>(null)
-
-const dialogTitle = computed(() => (editingContact.value ? 'Edit contact' : 'Add contact'))
 
 function openAddDialog() {
   editingContact.value = null
   dialogVisible.value = true
-  resetForm({
-    values: { ...blankForm() },
-  })
 }
 
 function openEditDialog(contact: Contact) {
   editingContact.value = contact
   dialogVisible.value = true
-  resetForm({
-    values: { ...populateForm(contact) },
-  })
 }
-
-function closeDialog() {
-  dialogVisible.value = false
-}
-
-function buildPayload(formValues: FormValues): ContactCreatePayload {
-  return {
-    name: formValues.name.trim(),
-    title: formValues.title.trim() || null,
-    email: formValues.email.trim() || null,
-    linkedin_url: formValues.linkedin_url.trim() || null,
-  }
-}
-
-const onFormSubmit = handleSubmit(async (formValues) => {
-  const payload = buildPayload(formValues)
-  try {
-    if (editingContact.value) {
-      await store.updateContact(props.applicationId, editingContact.value.id, payload)
-    } else {
-      await store.createContact(props.applicationId, payload)
-    }
-    dialogVisible.value = false
-  } catch {
-    // store.mutationError is already set and rendered in the dialog below.
-  }
-})
 
 function confirmDelete(contact: Contact) {
   confirm.require({
@@ -201,6 +128,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex shrink-0 gap-1">
               <Button
+                v-tooltip.bottom="tooltip('Edit contact')"
                 icon="pi pi-pencil"
                 aria-label="Edit contact"
                 link
@@ -208,9 +136,10 @@ onBeforeUnmount(() => {
                 @click="openEditDialog(contact)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Remove contact')"
                 icon="pi pi-trash"
                 aria-label="Remove contact"
-                link
+                text
                 severity="danger"
                 size="small"
                 @click="confirmDelete(contact)"
@@ -222,74 +151,9 @@ onBeforeUnmount(() => {
     </template>
   </Card>
 
-  <Dialog
+  <ContactFormDialog
     v-model:visible="dialogVisible"
-    :header="dialogTitle"
-    modal
-    class="w-full max-w-md"
-    @hide="closeDialog"
-  >
-    <form class="space-y-4" @submit.prevent="onFormSubmit">
-      <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
-        {{ store.mutationError }}
-      </Message>
-
-      <div class="flex flex-col gap-1">
-        <label for="contact-name" class="text-sm font-medium text-ink">Name *</label>
-        <CustomInputText
-          id="contact-name"
-          name="name"
-          :invalid="!!errors.name"
-          :aria-describedby="!!errors.name ? 'contact-name-error' : undefined"
-          class="w-full"
-          autofocus
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="contact-title" class="text-sm font-medium text-ink">Title</label>
-        <!-- <InputText id="contact-title" v-model="form.title" class="w-full" /> -->
-        <CustomInputText id="contact-title" name="title" class="w-full" />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="contact-email" class="text-sm font-medium text-ink">Email</label>
-        <CustomInputText
-          id="contact-email"
-          name="email"
-          type="email"
-          :invalid="!!errors.email"
-          :aria-describedby="errors.email ? 'contact-email-error' : undefined"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="contact-linkedin" class="text-sm font-medium text-ink">LinkedIn URL</label>
-        <CustomInputText
-          id="contact-linkedin"
-          name="linkedin_url"
-          type="url"
-          placeholder="https://linkedin.com/in/…"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button label="Cancel" severity="secondary" outlined type="button" @click="closeDialog" />
-        <Button
-          type="submit"
-          :label="
-            store.mutationStatus === 'loading'
-              ? 'Saving…'
-              : editingContact
-                ? 'Save changes'
-                : 'Add contact'
-          "
-          :loading="store.mutationStatus === 'loading'"
-          :disabled="(!!editingContact && !meta.dirty) || store.mutationStatus === 'loading'"
-        />
-      </div>
-    </form>
-  </Dialog>
+    :application-id="props.applicationId"
+    :contact="editingContact"
+  />
 </template>

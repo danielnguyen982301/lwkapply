@@ -15,10 +15,14 @@ import { isAiJobInFlight } from '@/lib/ai-ui'
 // Opened from components/applications/DocumentsPanel.vue, one row at a
 // time - see that file for why this exists (quick "view analysis" from
 // an application's Documents section, without switching to the AI Tools
-// tab and hunting for which resume/application this was). Shows only the
-// *latest* analysis/score for (documentId, applicationId), not full
-// history - that's the AI Tools tab's job.
-const props = defineProps<{ documentId: string; applicationId: string }>()
+// tab and hunting for which resume this was). Shows only the *latest*
+// analysis/score for documentId, not full history - that's the AI Tools
+// tab's job. `jobUrl` is the current application's job_url (looked up by
+// the caller, which already has the full Application on hand) - AtsScore
+// itself has no application link any more (see BACKEND_SUMMARY.md's "A
+// note on Document / ApplicationDocument"), so this modal has to be
+// handed the job_url explicitly rather than deriving it server-side.
+const props = defineProps<{ documentId: string; jobUrl: string | null }>()
 const visible = defineModel<boolean>('visible', { default: false })
 
 const resumeAnalyses = useResumeAnalysesStore()
@@ -26,6 +30,26 @@ const atsScores = useAtsScoresStore()
 const loading = ref(false)
 
 const pastedDescription = ref('')
+const hasJobUrl = computed(() => !!props.jobUrl)
+
+// The latest score for this resume isn't necessarily a score against
+// *this* application's job - it could equally be the latest of several
+// scores run from AtsScoresView.vue against a different application's
+// job description entirely (a score is just resume_analysis_id +
+// job_description/job_url, with no link back to any one application -
+// see BACKEND_SUMMARY.md's "A note on Document / ApplicationDocument").
+// So unlike the "no score yet" case, having a completed score already
+// doesn't mean there's nothing useful left to do here - `showRescoreForm`
+// lets the user re-open the same scoring form to score again against
+// *this* application's actual job, without losing the existing score's
+// display until the new one actually completes.
+const showRescoreForm = ref(false)
+const showScoreForm = computed(() => !atsScores.current || showRescoreForm.value)
+
+function openRescoreForm() {
+  pastedDescription.value = ''
+  showRescoreForm.value = true
+}
 
 // Reuses `current`/polling on both stores directly, same as
 // ResumeAnalysesView.vue/AtsScoresView.vue's own detail dialogs - safe
@@ -40,13 +64,14 @@ async function loadRelatedScore() {
     return
   }
   atsScores.current = await atsScores
-    .fetchLatestForApplication(props.applicationId, resumeAnalyses.current.id)
+    .fetchLatestForResumeAnalysis(resumeAnalyses.current.id)
     .catch(() => null)
 }
 
 async function load() {
   loading.value = true
   pastedDescription.value = ''
+  showRescoreForm.value = false
   resumeAnalyses.current = await resumeAnalyses
     .fetchLatestForDocument(props.documentId)
     .catch(() => null)
@@ -89,57 +114,60 @@ watch(
   },
 )
 
+// Collapses the rescore form back down once a rescore actually finishes -
+// otherwise, since atsScores.current already flips to the new (now
+// completed) score the moment polling resolves it, the form would keep
+// showing underneath a score it no longer applies to until the user
+// manually dismissed it.
+watch(
+  () => atsScores.current?.status,
+  (status) => {
+    if (status === 'completed') showRescoreForm.value = false
+  },
+)
+
 async function analyzeNow() {
   await resumeAnalyses.create({ document_id: props.documentId }).catch(() => {})
 }
 
 async function scoreNow() {
-  if (!resumeAnalyses.current) return
+  if (!resumeAnalyses.current || !props.jobUrl) return
   await atsScores
     .create({
       resume_analysis_id: resumeAnalyses.current.id,
-      application_id: props.applicationId,
+      job_url: props.jobUrl,
     })
     .catch(() => {})
 }
 
-// Fallback for when the automatic job_url path fails (most commonly: the
-// application has no job_url, or it couldn't be fetched - see backend/
-// app/tasks/ai.py's JobDescriptionUnavailableError, whose message
-// explicitly asks the caller to resubmit with job_description pasted).
-// Without this, that failure was a dead end - no picker/textarea existed
-// anywhere in this modal to act on that instruction. An explicit paste
-// always wins over job_url server-side, so application_id is still sent
-// for record-keeping even though job_description is what actually drives
-// this attempt.
 async function scoreNowWithPaste() {
   if (!resumeAnalyses.current) return
   await atsScores
     .create({
       resume_analysis_id: resumeAnalyses.current.id,
-      application_id: props.applicationId,
       job_description: pastedDescription.value,
     })
     .catch(() => {})
 }
 
-// Two distinct ways a scoreNow() attempt can fail, both needing the same
-// paste-and-retry recovery, but only one of them ever sets
-// atsScores.current: (1) the request is rejected synchronously - e.g. the
-// application has no job_url at all, so the backend 422s before any row
-// is ever created, and only atsScores.createError reflects it; (2) the
-// request succeeds (a pending row is created) but the async job_url
-// fetch fails later, reflected in atsScores.current.status/error_message
-// once polling resolves it. Gating the paste fallback on
-// `atsScores.current?.status === 'failed'` alone (as an earlier version
-// of this file did) made it unreachable for case (1) - arguably the more
-// common one, since "no job_url set at all" fails immediately, with no
-// fetch attempt needed to know it can't work.
+// Fallback for when the automatic job_url path fails (the application's
+// job_url couldn't be fetched - see backend/app/tasks/ai.py's
+// JobDescriptionUnavailableError, whose message explicitly asks the
+// caller to resubmit with job_description pasted). Two distinct ways a
+// scoreNow() attempt can fail, both needing the same paste-and-retry
+// recovery, but only one of them ever sets atsScores.current.status to
+// 'failed': (1) the async job_url fetch fails later, reflected in
+// atsScores.current once polling resolves it; (2) a synchronous
+// rejection (e.g. no job_url, validation error), reflected only in
+// atsScores.createError. Deliberately NOT gated on `!atsScores.current`
+// any more - during a rescore, atsScores.current is still the *previous*
+// completed score while the new attempt is in flight/failing, so that
+// guard would silently swallow a real rescore error instead of showing it.
 const atsScoreErrorMessage = computed(() => {
   if (atsScores.current?.status === 'failed') {
     return atsScores.current.error_message ?? 'Scoring failed. Try again.'
   }
-  if (!atsScores.current && atsScores.createStatus === 'error') {
+  if (atsScores.createStatus === 'error') {
     return atsScores.createError
   }
   return null
@@ -147,8 +175,9 @@ const atsScoreErrorMessage = computed(() => {
 
 const showAtsPasteFallback = computed(
   () =>
+    !hasJobUrl.value ||
     atsScores.current?.status === 'failed' ||
-    (!atsScores.current && atsScores.createStatus === 'error'),
+    atsScores.createStatus === 'error',
 )
 
 // Belt-and-suspenders alongside the `visible` watcher above: if the whole
@@ -165,7 +194,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" header="Resume analysis" modal class="w-full max-w-2xl">
+  <Dialog
+    v-model:visible="visible"
+    header="Resume analysis"
+    modal
+    dismissable-mask
+    class="w-full max-w-2xl"
+  >
     <div v-if="loading" class="flex justify-center py-10" aria-live="polite">
       <ProgressSpinner aria-label="Loading" style="width: 2rem; height: 2rem" />
     </div>
@@ -223,56 +258,93 @@ onBeforeUnmount(() => {
             <p class="text-sm text-slate">Scoring against this job…</p>
           </div>
 
-          <AtsScoreDisplay
-            v-else-if="atsScores.current?.status === 'completed' && atsScores.current.feedback"
-            :score="atsScores.current.feedback"
-            :job-description="atsScores.current.job_description"
-            :job-description-source="atsScores.current.job_description_source"
-          />
-
-          <div v-else class="text-center">
-            <p v-if="!atsScores.current" class="text-sm text-slate">
-              Not scored against this job yet.
-            </p>
-
-            <Message
-              v-if="atsScoreErrorMessage"
-              severity="error"
-              :closable="false"
-              class="mt-3 text-left"
-            >
-              {{ atsScoreErrorMessage }}
-            </Message>
-
-            <Button
-              label="Score now"
-              class="mt-3"
-              :severity="showAtsPasteFallback ? 'secondary' : undefined"
-              :outlined="showAtsPasteFallback"
-              :loading="atsScores.createStatus === 'loading'"
-              @click="scoreNow"
+          <div v-else class="space-y-4">
+            <!-- The latest score isn't necessarily a score against *this*
+                 application's job - see showRescoreForm's declaration -
+                 so this stays visible even once a rescore form is opened
+                 below it, right up until the new attempt actually
+                 completes and replaces it. -->
+            <AtsScoreDisplay
+              v-if="atsScores.current?.status === 'completed' && atsScores.current.feedback"
+              :score="atsScores.current.feedback"
+              :job-description="atsScores.current.job_description"
+              :job-description-source="atsScores.current.job_description_source"
+              :job-url="atsScores.current.job_url"
             />
 
-            <div v-if="showAtsPasteFallback" class="mt-4 space-y-2 text-left">
-              <label for="modal-ats-retry-description" class="text-sm font-medium text-ink">
-                Or paste the job description directly
-              </label>
-              <Textarea
-                id="modal-ats-retry-description"
-                v-model="pastedDescription"
-                rows="5"
-                class="w-full"
-                placeholder="Paste the job description here…"
-              />
-              <p class="text-xs text-slate">
-                {{ pastedDescription.trim().length }} / 20000 characters (minimum 50)
-              </p>
+            <div v-if="!showScoreForm" class="text-center">
               <Button
-                label="Score with pasted description"
+                label="Score again"
+                icon="pi pi-refresh"
+                link
                 size="small"
+                @click="openRescoreForm"
+              />
+            </div>
+
+            <div
+              v-else
+              :class="
+                atsScores.current ? 'border-t border-slate/10 pt-4 text-center' : 'text-center'
+              "
+            >
+              <p v-if="!atsScores.current" class="text-sm text-slate">
+                Not scored against this job yet.
+              </p>
+
+              <Message
+                v-if="atsScoreErrorMessage"
+                severity="error"
+                :closable="false"
+                class="mt-3 text-left"
+              >
+                {{ atsScoreErrorMessage }}
+              </Message>
+
+              <Button
+                v-if="hasJobUrl"
+                :label="atsScores.current ? 'Score again against this job' : 'Score now'"
+                class="mt-3"
+                :severity="showAtsPasteFallback ? 'secondary' : undefined"
+                :outlined="showAtsPasteFallback"
                 :loading="atsScores.createStatus === 'loading'"
-                :disabled="pastedDescription.trim().length < 50"
-                @click="scoreNowWithPaste"
+                @click="scoreNow"
+              />
+
+              <div v-if="showAtsPasteFallback" class="mt-4 space-y-2 text-left">
+                <p v-if="!hasJobUrl" class="text-sm text-slate">
+                  This application has no job URL saved. Provide job URL to the application or paste
+                  the job description to score against it.
+                </p>
+                <label for="modal-ats-retry-description" class="text-sm font-medium text-ink">
+                  {{ hasJobUrl ? 'Or paste the job description directly' : 'Job description' }}
+                </label>
+                <Textarea
+                  id="modal-ats-retry-description"
+                  v-model="pastedDescription"
+                  rows="5"
+                  class="w-full"
+                  placeholder="Paste the job description here…"
+                />
+                <p class="text-xs text-slate">
+                  {{ pastedDescription.trim().length }} / 20000 characters (minimum 50)
+                </p>
+                <Button
+                  label="Score with pasted description"
+                  size="small"
+                  :loading="atsScores.createStatus === 'loading'"
+                  :disabled="pastedDescription.trim().length < 50"
+                  @click="scoreNowWithPaste"
+                />
+              </div>
+
+              <Button
+                v-if="atsScores.current"
+                label="Cancel"
+                link
+                size="small"
+                class="mt-2 block"
+                @click="showRescoreForm = false"
               />
             </div>
           </div>

@@ -10,10 +10,12 @@ const props = defineProps<{
    * which job a score was actually run against. */
   jobDescription: string | null
   jobDescriptionSource?: 'pasted' | 'url' | null
-  /** Only known when the caller already has the linked application on
-   * hand (see AtsScoresView.vue) - optional, not every score has one
-   * (application_id is nullable). */
-  applicationSummary?: { company: string; position: string } | null
+  /** The URL fetched for a source="url" score - null for a pasted score,
+   * since AtsScore has no link back to any application any more (see
+   * BACKEND_SUMMARY.md's "A note on Document / ApplicationDocument") - a
+   * raw link is the only remaining way to show "which job" for a
+   * URL-sourced score. */
+  jobUrl?: string | null
 }>()
 
 // Deliberately NOT built via string interpolation (e.g. `text-${x}`) -
@@ -42,9 +44,15 @@ function scoreColorClass(score: number): string {
         :value="jobDescriptionSource === 'url' ? 'Sourced from job URL' : 'Pasted job description'"
         severity="secondary"
       />
-      <span v-if="applicationSummary" class="text-sm text-slate">
-        Scored against {{ applicationSummary.company }} — {{ applicationSummary.position }}
-      </span>
+      <a
+        v-if="jobUrl"
+        :href="jobUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm text-teal-dark hover:underline"
+      >
+        View job posting <i class="pi pi-external-link text-xs" />
+      </a>
     </div>
 
     <p class="text-sm text-ink">{{ score.summary }}</p>
@@ -81,9 +89,8 @@ function scoreColorClass(score: number): string {
     </div>
 
     <!-- The ground truth of "which job was this scored against" - always
-         shown, regardless of source, since a company/position label isn't
-         always available (a standalone score with no application_id has
-         nothing else to identify the job by). -->
+         shown, regardless of source, since a score has no other link back
+         to a tracked application to identify the job by. -->
     <div v-if="jobDescription">
       <h4 class="mb-2 text-sm font-semibold text-ink">Job description used</h4>
       <div

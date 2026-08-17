@@ -42,6 +42,9 @@ export interface Application {
   user_id: string
   company: string
   position: string
+  /** Optional user-chosen label to tell apart applications to the same
+   * company/position (a re-apply, two postings with the same title). */
+  application_name: string | null
   location: string | null
   status: ApplicationStatus
   salary_min: number | null
@@ -84,6 +87,7 @@ export interface ApplicationListParams {
 export interface ApplicationCreatePayload {
   company: string
   position: string
+  application_name?: string | null
   location?: string | null
   status?: ApplicationStatus
   salary_min?: number | null

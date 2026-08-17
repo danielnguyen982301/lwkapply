@@ -4,61 +4,56 @@ import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
-import Select from 'primevue/select'
-import SelectButton from 'primevue/selectbutton'
 import Tag from 'primevue/tag'
-import Textarea from 'primevue/textarea'
 
 import AiToolsTabs from '@/components/ai/AiToolsTabs.vue'
-import ApplicationPicker from '@/components/ai/ApplicationPicker.vue'
-import AtsScoreDisplay from '@/components/ai/AtsScoreDisplay.vue'
+import NewAtsScoreDialog from '@/components/ai/NewAtsScoreDialog.vue'
+import AtsScoreDetailDialog from '@/components/ai/AtsScoreDetailDialog.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useAtsScoresStore } from '@/stores/atsScores'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
-import { useDocumentDirectoryStore } from '@/stores/documentDirectory'
-import { useApplicationsStore } from '@/stores/applications'
-import {
-  AI_JOB_STATUS_LABELS,
-  aiJobStatusSeverity,
-  atsScoreSeverity,
-  isAiJobInFlight,
-} from '@/lib/ai-ui'
+import { useDocumentsStore } from '@/stores/documents'
+import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, atsScoreSeverity } from '@/lib/ai-ui'
+import { formatDate } from '@/lib/date-utils'
 import type { AtsScore, ResumeAnalysis } from '@/types/ai'
-import type { Application } from '@/types/application'
-import type { DocumentWithApplication } from '@/types/document'
+import type { Document } from '@/types/document'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAtsScoresStore()
 const resumeAnalyses = useResumeAnalysesStore()
-const documentDirectory = useDocumentDirectoryStore()
-const applications = useApplicationsStore()
+const documents = useDocumentsStore()
 
 // --- friendly resume labels, same approach as ResumeAnalysesView.vue -----
 const documentLabels = ref<Record<string, string>>({})
 
 async function loadDocumentLabels() {
-  const docs = await documentDirectory
-    .searchResumeDocuments('', 100)
-    .catch(() => [] as DocumentWithApplication[])
+  const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
   documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
 }
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
-
 // resume_analysis_id -> document_id, built once on mount from the same
-// fetch the create dialog's picker needs (see loadResumeAnalysisIndex()
+// fetch NewAtsScoreDialog's picker needs (see loadResumeAnalysisIndex()
 // below) - deliberately NOT read from stores/resumeAnalyses.ts's `items`,
 // which is only populated once the Resume Analyses tab has actually been
 // visited in this session and would silently show blank labels otherwise.
+const completedAnalyses = ref<ResumeAnalysis[]>([])
 const resumeAnalysisIndex = ref<Record<string, string>>({})
 
 function resumeLabelFor(resumeAnalysisId: string): string {
   const documentId = resumeAnalysisIndex.value[resumeAnalysisId]
   return (documentId && documentLabels.value[documentId]) || 'Resume analysis'
+}
+
+async function loadResumeAnalysisIndex() {
+  const analyses = await resumeAnalyses.fetchCompletedForPicker().catch(() => [])
+  completedAnalyses.value = analyses
+  resumeAnalysisIndex.value = Object.fromEntries(
+    analyses.map((analysis) => [analysis.id, analysis.document_id]),
+  )
 }
 
 // --- list ----------------------------------------------------------------
@@ -74,130 +69,43 @@ async function onPageChange(event: { first: number; rows: number }) {
 
 // --- create dialog ---------------------------------------------------
 const createDialogVisible = ref(false)
-const completedAnalyses = ref<ResumeAnalysis[]>([])
-const selectedAnalysisId = ref<string | null>(null)
 
-type DescriptionSource = 'application' | 'paste'
-const descriptionSourceOptions = [
-  { label: 'Use a tracked application', value: 'application' as DescriptionSource },
-  { label: 'Paste a job description', value: 'paste' as DescriptionSource },
-]
-const descriptionSource = ref<DescriptionSource>('application')
-const selectedApplication = ref<Application | null>(null)
-const pastedDescription = ref('')
-
-async function loadResumeAnalysisIndex() {
-  const analyses = await resumeAnalyses.fetchCompletedForPicker().catch(() => [])
-  completedAnalyses.value = analyses
-  resumeAnalysisIndex.value = Object.fromEntries(
-    analyses.map((analysis) => [analysis.id, analysis.document_id]),
-  )
-}
+// Prefilled via ?resume_analysis_id=... arriving from ResumeAnalysesView.vue's
+// "Score against a job" button - read live off the route so a later
+// query change (Vue Router won't remount this component for a query-only
+// change) is picked up by the watcher below.
+const preselectedResumeAnalysisId = computed(() =>
+  typeof route.query.resume_analysis_id === 'string' ? route.query.resume_analysis_id : null,
+)
 
 async function openCreateDialog() {
-  selectedAnalysisId.value = null
-  descriptionSource.value = 'application'
-  selectedApplication.value = null
-  pastedDescription.value = ''
+  // Awaited so NewAtsScoreDialog's own visible-watcher (which checks
+  // completedAnalyses for the preselected id) sees fresh data the moment
+  // it opens, rather than racing an in-flight fetch.
   await loadResumeAnalysisIndex()
-
-  const preselected = route.query.resume_analysis_id
-  if (
-    typeof preselected === 'string' &&
-    completedAnalyses.value.some((a) => a.id === preselected)
-  ) {
-    selectedAnalysisId.value = preselected
-  }
-
   createDialogVisible.value = true
 }
 
-function closeCreateDialog() {
-  createDialogVisible.value = false
-  // Don't let a stale resume_analysis_id keep re-triggering the dialog on
-  // a later mount/query change - clear it once the dialog's been handled.
-  if (route.query.resume_analysis_id) {
+// Don't let a stale resume_analysis_id keep re-triggering the dialog on
+// a later mount/query change - clear it once the dialog's been closed by
+// any path (Cancel, successful create, clicking outside).
+watch(createDialogVisible, (isVisible) => {
+  if (!isVisible && route.query.resume_analysis_id) {
     router.replace({ name: 'ats-scores' })
   }
-}
-
-const canSubmit = computed(() => {
-  if (!selectedAnalysisId.value) return false
-  if (descriptionSource.value === 'application') return !!selectedApplication.value
-  return pastedDescription.value.trim().length >= 50
 })
 
-async function handleCreate() {
-  if (!selectedAnalysisId.value || !canSubmit.value) return
-  try {
-    const score = await store.create({
-      resume_analysis_id: selectedAnalysisId.value,
-      application_id:
-        descriptionSource.value === 'application' ? selectedApplication.value?.id : null,
-      job_description: descriptionSource.value === 'paste' ? pastedDescription.value : null,
-    })
-    createDialogVisible.value = false
-    if (route.query.resume_analysis_id) router.replace({ name: 'ats-scores' })
-    openDetailDialog(score)
-    loadList(store.page)
-  } catch {
-    // store.createError is already set and rendered in the dialog below.
-  }
+function handleScoreCreated(score: AtsScore) {
+  openDetailDialog(score)
+  loadList(store.page)
 }
 
 // --- detail dialog -----------------------------------------------------
 const detailDialogVisible = ref(false)
 
-// Fetched (isolated - see applications.ts::fetchApplicationById) whenever
-// the open score has an application_id, so the detail view can say
-// "Scored against Acme Corp — Backend Engineer" instead of just a job_url
-// source tag with no indication of *which* job. Cleared for scores with
-// no application_id (a standalone, pasted-description score).
-const detailApplication = ref<Application | null>(null)
-
-async function loadDetailApplication(applicationId: string | null) {
-  detailApplication.value = applicationId
-    ? await applications.fetchApplicationById(applicationId).catch(() => null)
-    : null
-}
-
 function openDetailDialog(score: AtsScore) {
   store.current = score
-  retryDescription.value = ''
   detailDialogVisible.value = true
-  loadDetailApplication(score.application_id)
-  if (isAiJobInFlight(score.status)) store.startPolling(score.id)
-}
-
-function closeDetailDialog() {
-  detailDialogVisible.value = false
-  store.stopPolling()
-}
-
-// --- failed-score retry: the create dialog's job-description toggle
-// (application job_url vs. paste) isn't available once a score already
-// exists and failed - most commonly because the linked application's
-// job_url couldn't be fetched (see backend/app/tasks/ai.py's
-// JobDescriptionUnavailableError message, which explicitly asks the
-// caller to resubmit with job_description pasted). Without this, a
-// job_url failure was a dead end with no way to recover from the detail
-// dialog. Retrying always creates a new AtsScore (no update-in-place
-// endpoint exists) - store.create() already assigns the result to
-// `current`, so the dialog naturally swaps to the new attempt.
-const retryDescription = ref('')
-
-async function retryWithPastedDescription() {
-  if (!store.current) return
-  try {
-    await store.create({
-      resume_analysis_id: store.current.resume_analysis_id,
-      application_id: store.current.application_id,
-      job_description: retryDescription.value,
-    })
-    loadList(store.page)
-  } catch {
-    // store.createError is already set and rendered below.
-  }
 }
 
 // Vue template expressions can't parse an inline arrow function with a
@@ -237,8 +145,8 @@ onBeforeUnmount(() => {
       <div>
         <h1 class="font-display text-xl font-semibold text-ink">ATS Scores</h1>
         <p class="mt-1 max-w-2xl text-sm text-slate">
-          Score a completed resume analysis against a job description - either sourced from a
-          tracked application's job URL, or pasted directly.
+          Score a completed resume analysis against a job description - sourced from a tracked
+          application's job URL, a pasted job URL, or pasted directly.
         </p>
       </div>
       <Button label="New Score" icon="pi pi-plus" size="small" @click="openCreateDialog" />
@@ -279,9 +187,11 @@ onBeforeUnmount(() => {
       >
         <Column header="Resume">
           <template #body="{ data }: { data: AtsScore }">
-            <span class="cursor-pointer font-medium text-ink hover:underline">
-              {{ resumeLabelFor(data.resume_analysis_id) }}
-            </span>
+            <TruncatedText
+              :text="resumeLabelFor(data.resume_analysis_id)"
+              max-width="16rem"
+              class="cursor-pointer font-medium text-ink hover:underline"
+            />
           </template>
         </Column>
         <Column header="Status">
@@ -312,7 +222,7 @@ onBeforeUnmount(() => {
         </Column>
         <Column header="Created">
           <template #body="{ data }: { data: AtsScore }">
-            {{ dateFormatter.format(new Date(data.created_at)) }}
+            {{ formatDate(data.created_at) }}
           </template>
         </Column>
       </DataTable>
@@ -329,151 +239,13 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <Dialog
+  <NewAtsScoreDialog
     v-model:visible="createDialogVisible"
-    header="New ATS score"
-    modal
-    class="w-full max-w-lg"
-    @hide="closeCreateDialog"
-  >
-    <form class="space-y-4" @submit.prevent="handleCreate">
-      <Message v-if="store.createStatus === 'error'" severity="error" :closable="false">
-        {{ store.createError }}
-      </Message>
+    :completed-analyses="completedAnalyses"
+    :document-labels="documentLabels"
+    :initial-resume-analysis-id="preselectedResumeAnalysisId"
+    @created="handleScoreCreated"
+  />
 
-      <div class="flex flex-col gap-1">
-        <label for="ats-resume" class="text-sm font-medium text-ink">Resume *</label>
-        <Select
-          v-model="selectedAnalysisId"
-          input-id="ats-resume"
-          :options="completedAnalyses"
-          option-label="id"
-          option-value="id"
-          placeholder="Choose a completed analysis"
-          class="w-full"
-        >
-          <template #option="{ option }: { option: ResumeAnalysis }">
-            {{ resumeLabelFor(option.id) }}
-          </template>
-          <template #value="{ value }: { value: string | null }">
-            <span v-if="value">{{ resumeLabelFor(value) }}</span>
-            <span v-else class="text-slate">Choose a completed analysis</span>
-          </template>
-        </Select>
-        <p v-if="completedAnalyses.length === 0" class="text-xs text-slate">
-          No completed resume analyses yet - analyze a resume first.
-        </p>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <label class="text-sm font-medium text-ink">Job description *</label>
-        <SelectButton
-          v-model="descriptionSource"
-          :options="descriptionSourceOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          aria-label="Job description source"
-        />
-
-        <ApplicationPicker
-          v-if="descriptionSource === 'application'"
-          v-model="selectedApplication"
-        />
-
-        <template v-else>
-          <Textarea
-            v-model="pastedDescription"
-            rows="6"
-            class="w-full"
-            placeholder="Paste the job description here…"
-          />
-          <p class="text-xs text-slate">
-            {{ pastedDescription.trim().length }} / 20000 characters (minimum 50)
-          </p>
-        </template>
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          type="button"
-          @click="closeCreateDialog"
-        />
-        <Button
-          type="submit"
-          :label="store.createStatus === 'loading' ? 'Starting…' : 'Score'"
-          :loading="store.createStatus === 'loading'"
-          :disabled="!canSubmit"
-        />
-      </div>
-    </form>
-  </Dialog>
-
-  <Dialog
-    v-model:visible="detailDialogVisible"
-    header="ATS score"
-    modal
-    class="w-full max-w-2xl"
-    @hide="closeDetailDialog"
-  >
-    <template v-if="store.current">
-      <div
-        v-if="isAiJobInFlight(store.current.status)"
-        class="flex flex-col items-center gap-3 py-10"
-        aria-live="polite"
-      >
-        <ProgressSpinner
-          aria-label="Scoring against the job description"
-          style="width: 2.5rem; height: 2.5rem"
-        />
-        <p class="text-sm text-slate">Scoring against the job description…</p>
-        <Message v-if="store.pollingTimedOut" severity="warn" :closable="false" class="mt-2">
-          This is taking longer than expected. Close and reopen this score to check again.
-        </Message>
-      </div>
-
-      <template v-else-if="store.current.status === 'failed'">
-        <Message severity="error" :closable="false">
-          {{ store.current.error_message ?? 'This score failed. Try again.' }}
-        </Message>
-
-        <div class="mt-3 space-y-2">
-          <label for="ats-retry-description" class="text-sm font-medium text-ink">
-            Paste the job description to retry
-          </label>
-          <Textarea
-            id="ats-retry-description"
-            v-model="retryDescription"
-            rows="5"
-            class="w-full"
-            placeholder="Paste the job description here…"
-          />
-          <p class="text-xs text-slate">
-            {{ retryDescription.trim().length }} / 20000 characters (minimum 50)
-          </p>
-          <Message v-if="store.createStatus === 'error'" severity="error" :closable="false">
-            {{ store.createError }}
-          </Message>
-          <Button
-            label="Retry with pasted description"
-            size="small"
-            :loading="store.createStatus === 'loading'"
-            :disabled="retryDescription.trim().length < 50"
-            @click="retryWithPastedDescription"
-          />
-        </div>
-      </template>
-
-      <AtsScoreDisplay
-        v-else-if="store.current.status === 'completed' && store.current.feedback"
-        :score="store.current.feedback"
-        :job-description="store.current.job_description"
-        :job-description-source="store.current.job_description_source"
-        :application-summary="detailApplication"
-      />
-    </template>
-  </Dialog>
+  <AtsScoreDetailDialog v-model:visible="detailDialogVisible" @retried="loadList(store.page)" />
 </template>

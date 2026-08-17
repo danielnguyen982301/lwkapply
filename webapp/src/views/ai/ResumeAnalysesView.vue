@@ -1,27 +1,26 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
 import Tag from 'primevue/tag'
 
 import AiToolsTabs from '@/components/ai/AiToolsTabs.vue'
-import ResumeDocumentPicker from '@/components/ai/ResumeDocumentPicker.vue'
-import ParsedResumeDisplay from '@/components/ai/ParsedResumeDisplay.vue'
+import NewResumeAnalysisDialog from '@/components/ai/NewResumeAnalysisDialog.vue'
+import ResumeAnalysisDetailDialog from '@/components/ai/ResumeAnalysisDetailDialog.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useResumeAnalysesStore } from '@/stores/resumeAnalyses'
-import { useDocumentDirectoryStore } from '@/stores/documentDirectory'
-import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity, isAiJobInFlight } from '@/lib/ai-ui'
+import { useDocumentsStore } from '@/stores/documents'
+import { AI_JOB_STATUS_LABELS, aiJobStatusSeverity } from '@/lib/ai-ui'
+import { formatDate, formatDateTime } from '@/lib/date-utils'
 import type { ResumeAnalysis } from '@/types/ai'
-import type { DocumentWithApplication } from '@/types/document'
+import type { Document } from '@/types/document'
 
-const router = useRouter()
 const store = useResumeAnalysesStore()
-const documentDirectory = useDocumentDirectoryStore()
+const documents = useDocumentsStore()
 
 // --- friendly row labels (document_id -> file_name) ---------------------
 // ResumeAnalysisRead has no file_name, only document_id - see BACKEND_SUMMARY.md/
@@ -33,19 +32,21 @@ const documentDirectory = useDocumentDirectoryStore()
 const documentLabels = ref<Record<string, string>>({})
 
 async function loadDocumentLabels() {
-  const docs = await documentDirectory
-    .searchResumeDocuments('', 100)
-    .catch(() => [] as DocumentWithApplication[])
+  const docs = await documents.searchDocuments('', 'resume', 100).catch(() => [] as Document[])
   documentLabels.value = Object.fromEntries(docs.map((doc) => [doc.id, doc.file_name]))
 }
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 
 function labelFor(analysis: ResumeAnalysis): string {
   return (
     documentLabels.value[analysis.document_id] ??
-    `Resume analysis · ${dateFormatter.format(new Date(analysis.created_at))}`
+    `Resume analysis · ${formatDate(analysis.created_at)}`
   )
+}
+
+// Date + time - completed_at is the one field that actually distinguishes
+// re-runs of the same resume, so a date-only label would collapse them.
+function formatAnalyzedAt(value: string | null): string {
+  return value ? formatDateTime(value) : '—'
 }
 
 // --- list ----------------------------------------------------------------
@@ -63,27 +64,10 @@ async function onPageChange(event: { first: number; rows: number }) {
 
 // --- create dialog ---------------------------------------------------
 const createDialogVisible = ref(false)
-const selectedDocument = ref<DocumentWithApplication | null>(null)
 
-function openCreateDialog() {
-  selectedDocument.value = null
-  createDialogVisible.value = true
-}
-
-function closeCreateDialog() {
-  createDialogVisible.value = false
-}
-
-async function handleCreate() {
-  if (!selectedDocument.value) return
-  try {
-    const analysis = await store.create({ document_id: selectedDocument.value.id })
-    createDialogVisible.value = false
-    openDetailDialog(analysis)
-    loadList(store.page)
-  } catch {
-    // store.createError is already set and rendered in the dialog below.
-  }
+function handleCreated(analysis: ResumeAnalysis) {
+  openDetailDialog(analysis)
+  loadList(store.page)
 }
 
 // --- detail dialog (also the target of a freshly-created analysis) -----
@@ -92,18 +76,6 @@ const detailDialogVisible = ref(false)
 function openDetailDialog(analysis: ResumeAnalysis) {
   store.current = analysis
   detailDialogVisible.value = true
-  if (isAiJobInFlight(analysis.status)) store.startPolling(analysis.id)
-}
-
-function closeDetailDialog() {
-  detailDialogVisible.value = false
-  store.stopPolling()
-}
-
-function scoreAgainstJob() {
-  if (!store.current) return
-  detailDialogVisible.value = false
-  router.push({ name: 'ats-scores', query: { resume_analysis_id: store.current.id } })
 }
 
 // Vue template expressions can't parse an inline arrow function with a
@@ -135,7 +107,12 @@ onBeforeUnmount(() => {
           AI.
         </p>
       </div>
-      <Button label="New Analysis" icon="pi pi-plus" size="small" @click="openCreateDialog" />
+      <Button
+        label="New Analysis"
+        icon="pi pi-plus"
+        size="small"
+        @click="createDialogVisible = true"
+      />
     </div>
 
     <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
@@ -173,9 +150,11 @@ onBeforeUnmount(() => {
       >
         <Column header="Resume">
           <template #body="{ data }: { data: ResumeAnalysis }">
-            <span class="cursor-pointer font-medium text-ink hover:underline">{{
-              labelFor(data)
-            }}</span>
+            <TruncatedText
+              :text="labelFor(data)"
+              max-width="16rem"
+              class="cursor-pointer font-medium text-ink hover:underline"
+            />
           </template>
         </Column>
         <Column header="Status">
@@ -188,7 +167,12 @@ onBeforeUnmount(() => {
         </Column>
         <Column header="Created">
           <template #body="{ data }: { data: ResumeAnalysis }">
-            {{ dateFormatter.format(new Date(data.created_at)) }}
+            {{ formatDate(data.created_at) }}
+          </template>
+        </Column>
+        <Column header="Analyzed At">
+          <template #body="{ data }: { data: ResumeAnalysis }">
+            {{ formatAnalyzedAt(data.completed_at) }}
           </template>
         </Column>
       </DataTable>
@@ -205,71 +189,7 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <Dialog
-    v-model:visible="createDialogVisible"
-    header="New resume analysis"
-    modal
-    class="w-full max-w-lg"
-    @hide="closeCreateDialog"
-  >
-    <form class="space-y-4" @submit.prevent="handleCreate">
-      <Message v-if="store.createStatus === 'error'" severity="error" :closable="false">
-        {{ store.createError }}
-      </Message>
+  <NewResumeAnalysisDialog v-model:visible="createDialogVisible" @created="handleCreated" />
 
-      <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-ink">Resume *</label>
-        <ResumeDocumentPicker v-model="selectedDocument" />
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          type="button"
-          @click="closeCreateDialog"
-        />
-        <Button
-          type="submit"
-          :label="store.createStatus === 'loading' ? 'Starting…' : 'Analyze'"
-          :loading="store.createStatus === 'loading'"
-          :disabled="!selectedDocument"
-        />
-      </div>
-    </form>
-  </Dialog>
-
-  <Dialog
-    v-model:visible="detailDialogVisible"
-    header="Resume analysis"
-    modal
-    class="w-full max-w-2xl"
-    @hide="closeDetailDialog"
-  >
-    <template v-if="store.current">
-      <div
-        v-if="isAiJobInFlight(store.current.status)"
-        class="flex flex-col items-center gap-3 py-10"
-        aria-live="polite"
-      >
-        <ProgressSpinner aria-label="Analyzing your resume" style="width: 2.5rem; height: 2.5rem" />
-        <p class="text-sm text-slate">Analyzing your resume…</p>
-        <Message v-if="store.pollingTimedOut" severity="warn" :closable="false" class="mt-2">
-          This is taking longer than expected. Close and reopen this analysis to check again.
-        </Message>
-      </div>
-
-      <Message v-else-if="store.current.status === 'failed'" severity="error" :closable="false">
-        {{ store.current.error_message ?? 'This analysis failed. Try again.' }}
-      </Message>
-
-      <div v-else-if="store.current.status === 'completed' && store.current.parsed_data">
-        <ParsedResumeDisplay :parsed="store.current.parsed_data" />
-        <div class="mt-6 flex justify-end border-t border-slate/10 pt-4">
-          <Button label="Score against a job" icon="pi pi-arrow-right" @click="scoreAgainstJob" />
-        </div>
-      </div>
-    </template>
-  </Dialog>
+  <ResumeAnalysisDetailDialog v-model:visible="detailDialogVisible" />
 </template>

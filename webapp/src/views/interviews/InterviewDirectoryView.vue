@@ -12,12 +12,15 @@ import Tag from 'primevue/tag'
 
 import { useInterviewDirectoryStore } from '@/stores/interviewDirectory'
 import ApplicationStatusTag from '@/components/applications/ApplicationStatusTag.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import {
   INTERVIEW_RESULT_LABELS,
   INTERVIEW_TYPE_LABELS,
   interviewResultFilterOptions,
   interviewResultSeverity,
 } from '@/lib/interview-ui'
+import { useApplicationRowClick } from '@/lib/row-click'
+import { formatDateTime } from '@/lib/date-utils'
 import type { InterviewResult, InterviewWithApplication } from '@/types/interview'
 
 const store = useInterviewDirectoryStore()
@@ -45,17 +48,11 @@ async function onPageChange(event: { first: number; rows: number }) {
   await store.fetchInterviews({ page }).catch(() => {})
 }
 
-// Kept local rather than pulled from a shared date helper, since only
-// this view needs a "date + time" display for a directory row (the panel
-// version, InterviewsPanel.vue, formats via its own Dialog fields).
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+const formatScheduledAt = formatDateTime
 
-function formatScheduledAt(value: string): string {
-  return dateFormatter.format(new Date(value))
-}
+const handleRowClick = useApplicationRowClick<InterviewWithApplication>(
+  (interview) => interview.application.id,
+)
 </script>
 
 <template>
@@ -122,8 +119,15 @@ function formatScheduledAt(value: string): string {
         :loading="store.listStatus === 'loading'"
         size="small"
         striped-rows
+        selection-mode="single"
         aria-label="All your interviews"
+        @row-click="handleRowClick"
       >
+        <Column header="Application Name">
+          <template #body="{ data }: { data: InterviewWithApplication }">
+            <TruncatedText :text="data.application.application_name" max-width="10rem" />
+          </template>
+        </Column>
         <Column header="Scheduled">
           <template #body="{ data }: { data: InterviewWithApplication }">
             <span class="font-medium text-ink">{{ formatScheduledAt(data.scheduled_at) }}</span>
@@ -138,7 +142,8 @@ function formatScheduledAt(value: string): string {
           <template #body="{ data }: { data: InterviewWithApplication }">
             <RouterLink
               :to="{ name: 'application-detail', params: { id: data.application.id } }"
-              class="text-ink hover:underline"
+              class="block max-w-[10rem] truncate text-ink hover:underline"
+              :title="data.application.company"
             >
               {{ data.application.company }}
             </RouterLink>
@@ -146,7 +151,7 @@ function formatScheduledAt(value: string): string {
         </Column>
         <Column header="Position">
           <template #body="{ data }: { data: InterviewWithApplication }">
-            {{ data.application.position }}
+            <TruncatedText :text="data.application.position" max-width="10rem" />
           </template>
         </Column>
         <Column header="Status">

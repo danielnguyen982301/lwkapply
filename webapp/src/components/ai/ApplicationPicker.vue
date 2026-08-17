@@ -2,7 +2,9 @@
 import { ref } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
 import Tag from 'primevue/tag'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import { useApplicationsStore } from '@/stores/applications'
+import { formatDate } from '@/lib/date-utils'
 import type { Application } from '@/types/application'
 
 // Plain v-model, same reasoning as ResumeDocumentPicker.vue.
@@ -29,6 +31,10 @@ function onComplete(event: { query: string }) {
       })
   }, 300)
 }
+
+// applied_date is a backend `date`, not a `datetime` - formatDate (not
+// formatDateTime) matches that.
+const formatAppliedDate = formatDate
 </script>
 
 <template>
@@ -43,12 +49,23 @@ function onComplete(event: { query: string }) {
   >
     <template #option="{ option }: { option: Application }">
       <div class="flex items-center justify-between gap-3 py-1">
-        <div class="flex flex-col">
+        <div class="flex min-w-0 flex-col">
           <span class="font-medium text-ink">{{ option.company }}</span>
           <span class="text-xs text-slate">{{ option.position }}</span>
+          <TruncatedText
+            v-if="option.application_name"
+            :text="option.application_name"
+            max-width="12rem"
+            class="text-xs text-slate italic"
+          />
+          <span v-if="option.applied_date" class="text-xs text-slate">
+            Applied {{ formatAppliedDate(option.applied_date) }}
+          </span>
         </div>
-        <!-- job_url drives ATS Score's auto-fetch path (see AtsScoresView.vue) -
-             surfacing it here up front avoids a later "no job_url" 422 surprise. -->
+        <!-- AtsScoresView.vue reads this application's job_url client-side
+             and sends it as ATS Score's job_url (which then drives the
+             backend's auto-fetch path) - surfacing it here up front avoids
+             a later "no job_url" 422 surprise. -->
         <Tag
           :value="option.job_url ? 'Has job URL' : 'No job URL'"
           :severity="option.job_url ? 'success' : 'secondary'"

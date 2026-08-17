@@ -14,6 +14,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { useApplicationsStore } from '@/stores/applications'
 import { applicationStatusOptions } from '@/lib/application-ui'
 import { formatJSDate } from '@/lib/date-utils'
+import { tooltip } from '@/lib/tooltip'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
 import InterviewsPanel from '@/components/applications/InterviewsPanel.vue'
 import DocumentsPanel from '@/components/applications/DocumentsPanel.vue'
@@ -42,6 +43,7 @@ const applicationId = computed(() => (isNew.value ? null : String(route.params.i
 interface FormValues {
   company: string
   position: string
+  application_name: string
   location: string
   status: ApplicationStatus
   salary_min: number | null
@@ -55,6 +57,7 @@ function blankForm(): FormValues {
   return {
     company: '',
     position: '',
+    application_name: '',
     location: '',
     status: 'saved',
     salary_min: null,
@@ -69,6 +72,7 @@ function populateForm(app: Application): FormValues {
   return {
     company: app.company,
     position: app.position,
+    application_name: app.application_name ?? '',
     location: app.location ?? '',
     status: app.status,
     salary_min: app.salary_min,
@@ -84,6 +88,7 @@ const schema = toTypedSchema(
     .object({
       company: z.string().trim().min(1, 'Company is required.'),
       position: z.string().trim().min(1, 'Position is required.'),
+      application_name: z.string().trim().optional().default(''),
       location: z.string().trim().optional().default(''),
       status: z.enum(APPLICATION_STATUSES as [ApplicationStatus, ...ApplicationStatus[]]),
       salary_min: z.number().nullable(),
@@ -118,6 +123,7 @@ function buildPayload(values: FormValues): ApplicationCreatePayload {
   return {
     company: values.company,
     position: values.position,
+    application_name: values.application_name || null,
     location: values.location || null,
     status: values.status,
     salary_min: values.salary_min,
@@ -187,10 +193,28 @@ watch(
 
 <template>
   <form class="mx-auto max-w-2xl space-y-4" @submit.prevent="onFormSubmit">
-    <div class="flex items-center justify-between">
-      <h1 class="font-display text-xl font-semibold text-ink">
-        {{ isNew ? 'New Application' : values.company || 'Edit Application' }}
-      </h1>
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+        <CustomInputText
+          id="application_name"
+          name="application_name"
+          aria-label="Application name"
+          :placeholder="isNew ? 'New Application' : values.company || 'Edit Application'"
+          class="-mx-1 min-w-0 flex-1 truncate rounded-md px-1 font-display text-xl font-semibold text-ink !border-0 !bg-transparent !shadow-none hover:!bg-slate/5 focus:!bg-slate/5 focus:!shadow-none focus:!ring-0 focus:!outline-none"
+        />
+        <!-- Native label-for, not a click handler - clicking it focuses
+             #application_name via the browser's own label/input
+             association, no JS needed. Just a visual + tooltip affordance
+             that the heading above is actually an editable field, not
+             plain text. -->
+        <label
+          v-tooltip.bottom="tooltip('Edit application name')"
+          for="application_name"
+          class="shrink-0 cursor-text text-sm text-slate/50 hover:text-slate"
+        >
+          <i class="pi pi-pencil" aria-hidden="true" />
+        </label>
+      </div>
       <Button
         label="Back to list"
         icon="pi pi-arrow-left"
@@ -198,6 +222,7 @@ watch(
         :to="{ name: 'applications' }"
         link
         size="small"
+        class="shrink-0"
       />
     </div>
 
@@ -359,6 +384,10 @@ watch(
 
     <ContactsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
     <InterviewsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
-    <DocumentsPanel v-if="!isNew && applicationId" :application-id="applicationId" />
+    <DocumentsPanel
+      v-if="!isNew && applicationId"
+      :application-id="applicationId"
+      :job-url="values.job_url || null"
+    />
   </form>
 </template>

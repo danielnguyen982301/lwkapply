@@ -16,7 +16,10 @@ import { useConfirm } from 'primevue/useconfirm'
 import { useApplicationsStore } from '@/stores/applications'
 import ApplicationStatusTag from '@/components/applications/ApplicationStatusTag.vue'
 import ViewTabs from '@/components/applications/ViewTabs.vue'
+import TruncatedText from '@/components/common/TruncatedText.vue'
 import { applicationStatusFilterOptions } from '@/lib/application-ui'
+import { tooltip } from '@/lib/tooltip'
+import { useApplicationRowClick } from '@/lib/row-click'
 import type { Application, ApplicationStatus } from '@/types/application'
 
 const store = useApplicationsStore()
@@ -82,6 +85,8 @@ async function onPageChange(event: { first: number; rows: number }) {
   await store.fetchApplications({ page }).catch(() => {})
 }
 
+const handleRowClick = useApplicationRowClick<Application>((app) => app.id)
+
 function confirmDelete(app: Application) {
   confirm.require({
     message: `Delete the application to ${app.company}? This can't be undone.`,
@@ -113,9 +118,9 @@ function confirmDelete(app: Application) {
         <InputText
           v-model="searchInput"
           type="search"
-          placeholder="Search by company or position…"
+          placeholder="Search by company, position, or application name…"
           class="w-full"
-          aria-label="Search by company or position"
+          aria-label="Search by company, position, or application name"
           @input="handleSearchInput"
         />
       </IconField>
@@ -190,22 +195,34 @@ function confirmDelete(app: Application) {
         :loading="store.listStatus === 'loading'"
         size="small"
         striped-rows
+        selection-mode="single"
         aria-label="Your job applications"
+        @row-click="handleRowClick"
       >
+        <Column field="application_name" header="Application name">
+          <template #body="{ data }: { data: Application }">
+            <TruncatedText :text="data.application_name" max-width="12rem" />
+          </template>
+        </Column>
         <Column field="company" header="Company">
           <template #body="{ data }: { data: Application }">
             <RouterLink
               :to="{ name: 'application-detail', params: { id: data.id } }"
-              class="font-medium text-ink hover:underline"
+              class="block max-w-[12rem] truncate font-medium text-ink hover:underline"
+              :title="data.company"
             >
               {{ data.company }}
             </RouterLink>
           </template>
         </Column>
-        <Column field="position" header="Position" />
+        <Column field="position" header="Position">
+          <template #body="{ data }: { data: Application }">
+            <TruncatedText :text="data.position" max-width="12rem" />
+          </template>
+        </Column>
         <Column field="location" header="Location">
           <template #body="{ data }: { data: Application }">
-            {{ data.location ?? '—' }}
+            <TruncatedText :text="data.location" max-width="10rem" />
           </template>
         </Column>
         <Column field="status" header="Status">
@@ -227,15 +244,19 @@ function confirmDelete(app: Application) {
           <template #body="{ data }: { data: Application }">
             <div class="flex justify-end gap-1">
               <Button
-                label="Edit"
+                v-tooltip.bottom="tooltip('Edit application')"
+                icon="pi pi-pencil"
+                aria-label="Edit application"
                 as="RouterLink"
                 :to="{ name: 'application-detail', params: { id: data.id } }"
                 link
                 size="small"
               />
               <Button
-                label="Delete"
-                link
+                v-tooltip.bottom="tooltip('Delete application')"
+                icon="pi pi-trash"
+                aria-label="Delete application"
+                text
                 severity="danger"
                 size="small"
                 @click="confirmDelete(data)"

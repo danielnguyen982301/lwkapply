@@ -3,22 +3,31 @@ import { DateTime } from 'luxon'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
-import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
 
+import { tooltip } from '@/lib/tooltip'
+import { useApplicationDocumentsStore } from '@/stores/applicationDocuments'
 import { useDocumentsStore } from '@/stores/documents'
-import { DOCUMENT_TYPE_LABELS, documentTypeOptions, documentTypeSeverity } from '@/lib/document-ui'
+import { DOCUMENT_TYPE_LABELS, documentTypeSeverity } from '@/lib/document-ui'
+import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue'
+import DocumentEditDialog from '@/components/documents/DocumentEditDialog.vue'
+import DocumentAttachDialog from '@/components/documents/DocumentAttachDialog.vue'
 import ResumeAnalysisModal from '@/components/ai/ResumeAnalysisModal.vue'
-import type { Document, DocumentType } from '@/types/document'
+import type { Document } from '@/types/document'
 
-const props = defineProps<{ applicationId: string }>()
+const props = defineProps<{ applicationId: string; jobUrl: string | null }>()
 
-const store = useDocumentsStore()
+// Attached-to-this-application list/attach/detach vs. the user's whole
+// document library (upload/edit/download/permanent-delete) - see
+// stores/applicationDocuments.ts's module docstring for why these are two
+// separate stores now that a document can belong to zero, one, or several
+// applications.
+const attached = useApplicationDocumentsStore()
+const library = useDocumentsStore()
 
 // --- AI analysis modal ---------------------------------------------------
 const analysisModalVisible = ref(false)
@@ -30,100 +39,64 @@ function openAnalysisModal(doc: Document) {
 }
 const confirm = useConfirm()
 
-const typeOptions = documentTypeOptions()
-
-// --- Upload dialog ---------------------------------------------------
+// --- Upload dialog (uploads to the library, then attaches here) ---------
+// DocumentUploadDialog.vue only handles the library upload itself - the
+// attach-to-this-application step is this panel's own concern (a
+// DocumentDirectoryView.vue upload has no application to attach to), done
+// as a follow-up call once the dialog has already closed. A failure here
+// surfaces via attached.attachError below, not inside the (by then
+// closed) upload dialog.
 const uploadDialogVisible = ref(false)
-const selectedFile = ref<File | null>(null)
-const uploadType = ref<DocumentType>('other')
-const fileInput = ref<HTMLInputElement | null>(null)
-const uploadValidationError = ref<string | null>(null)
 
-function openUploadDialog() {
-  selectedFile.value = null
-  uploadType.value = 'other'
-  uploadValidationError.value = null
-  uploadDialogVisible.value = true
+function handleUploaded(doc: Document) {
+  attached.attach(props.applicationId, doc.id).catch(() => {})
 }
 
-function closeUploadDialog() {
-  uploadDialogVisible.value = false
-}
-
-function triggerFilePicker() {
-  fileInput.value?.click()
-}
-
-function onFileChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  selectedFile.value = target.files?.[0] ?? null
-  uploadValidationError.value = null
-}
-
-async function handleUpload() {
-  if (!selectedFile.value) {
-    uploadValidationError.value = 'Choose a file to upload.'
-    return
-  }
-  try {
-    await store.uploadDocument(props.applicationId, selectedFile.value, uploadType.value)
-    uploadDialogVisible.value = false
-  } catch {
-    // store.uploadError is already set and rendered in the dialog below.
-  }
-}
+// --- Attach-existing dialog ------------------------------------------
+// DocumentAttachDialog.vue already updates applicationDocuments' own
+// items/total on a successful attach - nothing to sync here.
+const attachDialogVisible = ref(false)
 
 // --- Edit (file_type only) dialog -------------------------------------
-// Mirrors DocumentUpdate: file_name/file_url aren't client-editable, so
-// this dialog only ever touches file_type.
 const editDialogVisible = ref(false)
 const editingDocument = ref<Document | null>(null)
-const editType = ref<DocumentType>('other')
 
 function openEditDialog(doc: Document) {
   editingDocument.value = doc
-  editType.value = doc.file_type
   editDialogVisible.value = true
 }
 
-function closeEditDialog() {
-  editDialogVisible.value = false
+// DocumentEditDialog.vue patches the library store's own copy - this
+// panel's `attached.items` is a separate store's array, so it needs its
+// own patch to stay in sync (same reasoning as the attach-after-upload
+// split above).
+function handleUpdated(doc: Document) {
+  const index = attached.items.findIndex((item) => item.id === doc.id)
+  if (index !== -1) attached.items[index] = doc
 }
 
-async function handleEditSubmit() {
-  if (!editingDocument.value) return
-  try {
-    await store.updateDocument(props.applicationId, editingDocument.value.id, {
-      file_type: editType.value,
-    })
-    editDialogVisible.value = false
-  } catch {
-    // store.mutationError is already set and rendered in the dialog below.
-  }
-}
-
-// --- Delete / download / list ----------------------------------------
-function confirmDelete(doc: Document) {
+// --- Detach / download / list ----------------------------------------
+function confirmDetach(doc: Document) {
   confirm.require({
-    message: `Delete "${doc.file_name}"? This can't be undone.`,
-    header: 'Confirm deletion',
+    message: `Remove "${doc.file_name}" from this application? The document itself won't be deleted - it stays in your document library.`,
+    header: 'Remove document',
     icon: 'pi pi-exclamation-triangle',
     rejectLabel: 'Cancel',
-    acceptLabel: 'Delete',
+    acceptLabel: 'Remove',
     rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true },
-    acceptProps: { label: 'Delete', severity: 'danger' },
+    acceptProps: { label: 'Remove', severity: 'danger' },
     accept: () => {
-      store.deleteDocument(props.applicationId, doc.id).catch(() => {})
+      attached.detach(props.applicationId, doc.id).catch(() => {})
     },
   })
 }
 
 function handleDownload(doc: Document) {
-  store.downloadDocument(props.applicationId, doc.id).catch(() => {})
+  library.downloadDocument(doc.id).catch(() => {})
 }
 
 function loadDocuments(page = 1) {
-  store.fetchDocuments(props.applicationId, { page }).catch(() => {})
+  attached.fetchAttached(props.applicationId, { page }).catch(() => {})
 }
 
 function onPageChange(event: { page: number }) {
@@ -144,7 +117,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  store.reset()
+  attached.reset()
 })
 </script>
 
@@ -154,34 +127,64 @@ onBeforeUnmount(() => {
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="font-display text-lg font-semibold text-ink">Documents</h2>
-          <Button
-            label="Upload document"
-            icon="pi pi-upload"
-            size="small"
-            @click="openUploadDialog"
-          />
+          <div class="flex gap-2">
+            <Button
+              label="Attach existing"
+              icon="pi pi-link"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="attachDialogVisible = true"
+            />
+            <Button
+              label="Upload document"
+              icon="pi pi-upload"
+              size="small"
+              @click="uploadDialogVisible = true"
+            />
+          </div>
         </div>
 
-        <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
-          {{ store.mutationError }}
+        <Message v-if="attached.listStatus === 'error'" severity="error" :closable="false">
+          <span>{{ attached.listError }}</span>
+          <Button
+            label="Retry"
+            link
+            size="small"
+            class="ml-2"
+            @click="loadDocuments(attached.page)"
+          />
         </Message>
 
         <Message
-          v-if="store.downloadError"
+          v-if="attached.attachError"
           severity="error"
           closable
-          @close="store.downloadError = null"
+          @close="attached.attachError = null"
         >
-          {{ store.downloadError }}
+          {{ attached.attachError }}
         </Message>
 
-        <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
-          <span>{{ store.listError }}</span>
-          <Button label="Retry" link size="small" class="ml-2" @click="loadDocuments(store.page)" />
+        <Message
+          v-if="attached.detachError"
+          severity="error"
+          closable
+          @close="attached.detachError = null"
+        >
+          {{ attached.detachError }}
+        </Message>
+
+        <Message
+          v-if="library.downloadError"
+          severity="error"
+          closable
+          @close="library.downloadError = null"
+        >
+          {{ library.downloadError }}
         </Message>
 
         <div
-          v-else-if="store.listStatus === 'loading' && store.items.length === 0"
+          v-if="attached.listStatus === 'loading' && attached.items.length === 0"
           aria-live="polite"
           class="flex justify-center py-8"
         >
@@ -189,17 +192,18 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          v-else-if="store.items.length === 0"
+          v-else-if="attached.items.length === 0"
           class="rounded-card border border-dashed border-slate/30 p-6 text-center"
         >
           <p class="text-sm text-slate">
-            No documents yet. Upload a resume, cover letter, or other file for this application.
+            No documents attached yet. Upload a new file or attach one already in your document
+            library.
           </p>
         </div>
 
         <ul v-else class="divide-y divide-slate/10">
           <li
-            v-for="doc in store.items"
+            v-for="doc in attached.items"
             :key="doc.id"
             class="flex items-center justify-between gap-4 py-3"
           >
@@ -216,6 +220,7 @@ onBeforeUnmount(() => {
             <div class="flex shrink-0 gap-1">
               <Button
                 v-if="doc.file_type === 'resume'"
+                v-tooltip.bottom="tooltip('View AI analysis')"
                 icon="pi pi-sparkles"
                 aria-label="View AI analysis"
                 link
@@ -223,14 +228,16 @@ onBeforeUnmount(() => {
                 @click="openAnalysisModal(doc)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Download document')"
                 icon="pi pi-download"
                 aria-label="Download document"
                 link
                 size="small"
-                :loading="store.downloadingId === doc.id"
+                :loading="library.downloadingId === doc.id"
                 @click="handleDownload(doc)"
               />
               <Button
+                v-tooltip.bottom="tooltip('Edit document type')"
                 icon="pi pi-pencil"
                 aria-label="Edit document type"
                 link
@@ -238,143 +245,47 @@ onBeforeUnmount(() => {
                 @click="openEditDialog(doc)"
               />
               <Button
-                icon="pi pi-trash"
-                aria-label="Delete document"
-                link
+                v-tooltip.bottom="tooltip('Remove from this application')"
+                icon="pi pi-times"
+                aria-label="Remove from this application"
+                text
                 severity="danger"
                 size="small"
-                @click="confirmDelete(doc)"
+                :loading="attached.detachingId === doc.id"
+                @click="confirmDetach(doc)"
               />
             </div>
           </li>
         </ul>
 
         <Paginator
-          v-if="store.total > store.pageSize"
-          :rows="store.pageSize"
-          :total-records="store.total"
-          :first="(store.page - 1) * store.pageSize"
+          v-if="attached.total > attached.pageSize"
+          :rows="attached.pageSize"
+          :total-records="attached.total"
+          :first="(attached.page - 1) * attached.pageSize"
           @page="onPageChange"
         />
       </div>
     </template>
   </Card>
 
-  <Dialog
-    v-model:visible="uploadDialogVisible"
-    header="Upload document"
-    modal
-    class="w-full max-w-md"
-    @hide="closeUploadDialog"
-  >
-    <form class="space-y-4" @submit.prevent="handleUpload">
-      <Message v-if="store.uploadStatus === 'error'" severity="error" :closable="false">
-        {{ store.uploadError }}
-      </Message>
+  <DocumentUploadDialog v-model:visible="uploadDialogVisible" @uploaded="handleUploaded" />
 
-      <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-ink">File *</label>
-        <!-- PDF/Word only, matching the backend's Content-Type validation
-             (app/services/s3.py) — the accept attribute is just a UI hint,
-             the server still validates for real. -->
-        <input
-          ref="fileInput"
-          type="file"
-          class="hidden"
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          @change="onFileChange"
-        />
-        <div class="flex items-center gap-3">
-          <Button
-            label="Choose file"
-            severity="secondary"
-            outlined
-            type="button"
-            @click="triggerFilePicker"
-          />
-          <span class="truncate text-sm text-slate">{{
-            selectedFile?.name ?? 'No file selected'
-          }}</span>
-        </div>
-        <Message v-if="uploadValidationError" severity="error" variant="simple" size="small">
-          {{ uploadValidationError }}
-        </Message>
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label for="document-type" class="text-sm font-medium text-ink">Type</label>
-        <Select
-          v-model="uploadType"
-          input-id="document-type"
-          :options="typeOptions"
-          option-label="label"
-          option-value="value"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          type="button"
-          @click="closeUploadDialog"
-        />
-        <Button
-          type="submit"
-          :label="store.uploadStatus === 'loading' ? 'Uploading…' : 'Upload'"
-          :loading="store.uploadStatus === 'loading'"
-        />
-      </div>
-    </form>
-  </Dialog>
-
-  <Dialog
+  <DocumentEditDialog
     v-model:visible="editDialogVisible"
-    header="Edit document type"
-    modal
-    class="w-full max-w-sm"
-    @hide="closeEditDialog"
-  >
-    <form class="space-y-4" @submit.prevent="handleEditSubmit">
-      <Message v-if="store.mutationStatus === 'error'" severity="error" :closable="false">
-        {{ store.mutationError }}
-      </Message>
+    :document="editingDocument"
+    @updated="handleUpdated"
+  />
 
-      <div class="flex flex-col gap-1">
-        <label for="edit-document-type" class="text-sm font-medium text-ink">Type</label>
-        <Select
-          v-model="editType"
-          input-id="edit-document-type"
-          :options="typeOptions"
-          option-label="label"
-          option-value="value"
-          class="w-full"
-        />
-      </div>
-
-      <div class="flex items-center justify-end gap-3 border-t border-slate/10 pt-4">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          type="button"
-          @click="closeEditDialog"
-        />
-        <Button
-          type="submit"
-          :label="store.mutationStatus === 'loading' ? 'Saving…' : 'Save changes'"
-          :loading="store.mutationStatus === 'loading'"
-        />
-      </div>
-    </form>
-  </Dialog>
+  <DocumentAttachDialog
+    v-model:visible="attachDialogVisible"
+    :application-id="props.applicationId"
+  />
 
   <ResumeAnalysisModal
     v-if="analysisModalDocumentId"
     v-model:visible="analysisModalVisible"
     :document-id="analysisModalDocumentId"
-    :application-id="props.applicationId"
+    :job-url="props.jobUrl"
   />
 </template>
