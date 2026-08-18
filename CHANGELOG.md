@@ -1,6 +1,90 @@
 # Changelog
 
-## v0.12.0 (in progress)
+## v0.13.0 (in progress)
+
+### Added
+
+- **Account settings + notification preferences backend, web UI deferred
+  to a later pass** — this pass builds every endpoint a future settings
+  page and bell-icon UI will need, but ships no web UI itself (see
+  TODO.md's new Frontend "Account Settings" section). Full detail in
+  BACKEND_SUMMARY.md's "Account settings & notification preferences" and
+  "In-app notification feed"; summary here:
+  - **Profile/account** (`app/api/v1/endpoints/users.py`): `PATCH /users/me`
+    (name, timezone — gains a new `timezone_is_manual` flag so an
+    explicit choice here stops being silently overwritten by the
+    existing login/refresh auto-detect), `POST /users/me/password`
+    (requires the current password even though the request is already
+    bearer-authenticated), `POST`/`DELETE /users/me/avatar` (new fixed
+    per-user R2 object key, `users/{user_id}/avatar` — a re-upload just
+    overwrites it, no separate cleanup step; presigned for 1 hour, not
+    documents' 5 minutes, since this backs a persistent `<img>` tag),
+    `DELETE /users/me` (password-confirmed; cleans up every owned
+    document's + the avatar's R2 objects before the row itself is
+    deleted — the DB cascade only handles Postgres rows).
+  - **`UserSettings`, a new dedicated per-user preferences table**
+    (`app/models/user_settings.py`) — deliberately not columns bolted
+    onto `users`, which is read on every authenticated request; a
+    migration-per-setting cost accepted in exchange for keeping
+    identity/auth and preferences as separate concerns, matching this
+    codebase's existing `Document`/`ApplicationDocument` split.
+    `reminder_lead_hours` (nullable, falls back to the existing global
+    `settings.REMINDER_LEAD_HOURS`), `notifications_enabled` (master
+    switch), `email_notifications_enabled`, `push_notifications_enabled`.
+    Every user always has exactly one row (created at registration,
+    backfilled for existing accounts). `GET`/`PATCH /users/me/settings`.
+  - **In-app notification feed** ("the bell icon" backend) — new
+    `Notification` model/table and `/notifications` endpoints (list with
+    `unread_only`, a dedicated `unread-count`, mark-one-read,
+    mark-all-read), fed by a new third `IN_APP` value on the existing
+    `ReminderChannel` enum. Delivery is confirmed as **polling**
+    (`GET /notifications/unread-count` on an interval, matching the AI
+    Tools status-polling precedent already in the web store), not
+    real-time push — this codebase has no WebSocket/SSE infrastructure,
+    and the underlying event only updates every 10 minutes anyway (the
+    beat task's own schedule), so real-time delivery would add
+    first-of-its-kind infra to shave latency off a signal that's already
+    capped.
+  - **Interview reminders are now per-user configurable, not one global
+    hardcoded value** — `sync_interview_reminders`'s `remind_at` math now
+    reads `user.settings.reminder_lead_hours` when set, falling back to
+    the previous global default otherwise; every existing account's
+    behavior is unchanged until it opts into an override. Notification
+    preferences (the master switch, plus email/push's individual
+    toggles) are enforced at *send* time in `send_due_reminders`, not
+    schedule time, per this module's own established precedent for
+    push/device-token state — so flipping a preference takes effect
+    immediately for interviews already scheduled.
+
+### Fixed
+
+Bugs caught and design calls corrected during this pass, before landing
+on the version described above:
+
+- **`DELETE /users/me` crashed with a `NotNullViolation`** when the
+  account owned any documents — the first version iterated a
+  `User.documents` ORM relationship (added for the R2-cleanup loop)
+  without a delete cascade; SQLAlchemy's default behavior on a parent
+  delete is to null out a child's foreign key rather than leave it
+  alone, and `documents.user_id` is `NOT NULL`. `passive_deletes=True`
+  (SQLAlchemy's usual fix for this) turned out not to help either, since
+  it only skips managing an *unloaded* collection — this endpoint has to
+  load it to read the file keys for R2 cleanup in the first place. Fixed
+  by querying `Document` directly instead of via any relationship on
+  `User`, sidestepping ORM cascade management entirely; the database's
+  own `ondelete="CASCADE"` on `Document.user_id` still handles the
+  Postgres-row side once the delete actually happens.
+- **`UserSettings.in_app_notifications_enabled` was added, then removed**
+  after review — unlike email/push, which reach the user *outside* this
+  app (an inbox, a device buzz/badge), the in-app feed is purely
+  pull-based (a list you only see if you open the bell), so there's no
+  external interruption to independently opt out of. It's on whenever
+  the master `notifications_enabled` switch is, matching how
+  GitHub/Slack's own notification centers work (no separate opt-out from
+  theirs either, only from email/push). Dropped in a new migration
+  rather than editing the one that introduced it.
+
+## v0.12.0
 
 ### Added
 
