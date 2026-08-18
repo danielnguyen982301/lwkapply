@@ -1,7 +1,8 @@
 """
 Celery beat task: find interview_reminders rows that are due and unsent,
-dispatch each on its `channel` (email or push), stamp sent_at on
-success.
+dispatch each on its `channel` (email, push, or in_app), stamp sent_at on
+success. A channel the user has turned off (app/models/user_settings.py)
+is resolved without dispatching - see _channel_enabled.
 
 Runs outside a request, so it can't use the `get_db` FastAPI dependency
 (that's a request-scoped generator) - opens/closes its own session
@@ -21,6 +22,8 @@ from app.models.application import Application
 from app.models.device_token import DeviceToken
 from app.models.interview import Interview
 from app.models.interview_reminder import InterviewReminder, ReminderChannel
+from app.models.notification import Notification, NotificationType
+from app.models.user import User
 from app.services.email import send_email
 from app.services.push import PushResult, send_push
 
@@ -69,6 +72,16 @@ def _build_email(reminder: InterviewReminder) -> tuple[str, str, str]:
     return subject, html, text
 
 
+def _build_in_app(reminder: InterviewReminder) -> tuple[str, str]:
+    """Returns (title, body) for the Notification row (app/models/notification.py)
+    - same interview_type/when/company/position pieces _build_email/
+    _build_push already format, just into the bell feed's shorter shape."""
+    interview_type, when, company, position = _interview_summary(reminder)
+    title = f"Upcoming {interview_type} interview at {company}"
+    body = f"{position} - {when}"
+    return title, body
+
+
 def _build_push(reminder: InterviewReminder) -> tuple[str, str, dict[str, str]]:
     """Returns (title, body, data). `data` drives the mobile client's
     tap-to-deep-link (see MOBILE_SUMMARY.md's push section) - keep keys
@@ -90,6 +103,54 @@ def _application_url(application_id) -> str:
     from app.core.config import settings
 
     return f"{settings.FRONTEND_URL}/applications/{application_id}"
+
+
+def _channel_enabled(user: User, channel: ReminderChannel) -> bool:
+    """Whether `user` has this delivery channel turned on
+    (app/models/user_settings.py). Checked at send time, not schedule
+    time - see app/services/reminders.py's module docstring for why.
+
+    IN_APP has no per-channel flag of its own, only EMAIL/PUSH do - both
+    of those reach the user *outside* this app (an inbox, a device buzz/
+    badge), so opting out of that intrusion independently of
+    "notifications at all" is a real, distinct choice. The in-app feed is
+    purely pull-based (a list you only see if you open the bell), so it's
+    on whenever `notifications_enabled` (the master switch) is."""
+    settings_row = user.settings
+    if settings_row is None:
+        # Fail-open only on a genuinely missing row (shouldn't happen -
+        # every user gets one at registration/via migration backfill) -
+        # never block a reminder just because the settings join came back
+        # empty.
+        return True
+    if not settings_row.notifications_enabled:
+        return False
+    if channel == ReminderChannel.EMAIL:
+        return settings_row.email_notifications_enabled
+    if channel == ReminderChannel.PUSH:
+        return settings_row.push_notifications_enabled
+    return True
+
+
+def _send_in_app_reminder(db: Session, reminder: InterviewReminder) -> bool:
+    """Creates the Notification row the bell feed reads. Unlike email/push
+    there's no external provider to fail against - a DB error propagates
+    and the reminder stays unsent for retry next tick, same as any other
+    exception in this loop."""
+    interview = reminder.interview
+    title, body = _build_in_app(reminder)
+    db.add(
+        Notification(
+            user_id=interview.application.user.id,
+            type=NotificationType.INTERVIEW_REMINDER,
+            title=title,
+            body=body,
+            application_id=interview.application.id,
+            interview_id=interview.id,
+        )
+    )
+    db.commit()
+    return True
 
 
 def _send_email_reminder(reminder: InterviewReminder) -> bool:
@@ -157,7 +218,7 @@ def _send_push_reminder(db: Session, reminder: InterviewReminder) -> bool:
 @celery_app.task(name="app.tasks.reminders.send_due_reminders")
 def send_due_reminders() -> int:
     """Returns the number of reminders successfully sent/resolved
-    (across both channels), for logging / test assertions."""
+    (across all channels), for logging / test assertions."""
     db: Session = SessionLocal()
     sent_count = 0
     try:
@@ -169,6 +230,7 @@ def send_due_reminders() -> int:
                     joinedload(InterviewReminder.interview)
                     .joinedload(Interview.application)
                     .joinedload(Application.user)
+                    .joinedload(User.settings)
                 )
                 .where(
                     InterviewReminder.remind_at <= now,
@@ -180,10 +242,26 @@ def send_due_reminders() -> int:
         )
 
         for reminder in due:
-            if reminder.channel == ReminderChannel.EMAIL:
+            user = reminder.interview.application.user
+            if not _channel_enabled(user, reminder.channel):
+                # User has this channel (or notifications overall) turned
+                # off - mark resolved without dispatching, same shape as
+                # the "zero devices -> nothing to send, nothing to retry"
+                # handling below for push, just gated on a preference
+                # instead of device-token existence.
+                logger.info(
+                    "Skipping reminder id=%s: user %s disabled channel=%s",
+                    reminder.id,
+                    user.id,
+                    reminder.channel.value,
+                )
+                success = True
+            elif reminder.channel == ReminderChannel.EMAIL:
                 success = _send_email_reminder(reminder)
-            else:
+            elif reminder.channel == ReminderChannel.PUSH:
                 success = _send_push_reminder(db, reminder)
+            else:
+                success = _send_in_app_reminder(db, reminder)
 
             if success:
                 reminder.sent_at = datetime.now(dt_timezone.utc)

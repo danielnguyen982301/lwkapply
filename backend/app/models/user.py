@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     # would create a circular import, since Application imports User back.
     from app.models.application import Application
     from app.models.device_token import DeviceToken
+    from app.models.notification import Notification
+    from app.models.user_settings import UserSettings
 
 
 class UserRole(str, enum.Enum):
@@ -46,10 +48,22 @@ class User(Base, UUIDMixin, TimestampMixin):
     # that reads this always falls back to UTC rather than assuming it's
     # set (e.g. accounts created before this column existed).
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # True once the user has explicitly set their timezone via
+    # PATCH /users/me (app/api/v1/endpoints/users.py) - guards
+    # _maybe_update_timezone (app/api/v1/endpoints/auth.py) from silently
+    # clobbering that explicit choice with the browser's auto-detected
+    # value on the next login/refresh.
+    timezone_is_manual: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     applications: Mapped[list["Application"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     device_tokens: Mapped[list["DeviceToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    settings: Mapped["UserSettings"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

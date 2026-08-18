@@ -11,14 +11,17 @@
 │   │   ├── env.py
 │   │   ├── script.py.mako
 │   │   └── versions
+│   │       ├── 0537a87e67b9_user_settings_drop_in_app_notifications_.py
 │   │       ├── 06abe39a184c_resume_analyses_and_ats_scores.py
 │   │       ├── 2aa540c856bd_documents_drop_application_id.py
 │   │       ├── 37f704e60528_first_migration.py
 │   │       ├── 4abd98ce29e4_documents_add_user_id.py
 │   │       ├── 5bd2ff18bf39_ats_scores_add_job_url.py
 │   │       ├── 5db76af53e3f_resume_analyses_add_analysis_name.py
+│   │       ├── 85a2b6ae241d_reminder_channel_add_in_app.py
 │   │       ├── 873b7c6fdc36_device_tokens.py
 │   │       ├── 8c175054e5e6_applications_add_application_name.py
+│   │       ├── a6f5a3a863a2_user_settings_notifications_and_.py
 │   │       ├── aa3bea687a29_application_documents_table.py
 │   │       ├── cab6d85713f0_ats_scores_drop_application_id.py
 │   │       ├── d40a14bebe2a_resume_analyses_add_completed_at.py
@@ -43,6 +46,7 @@
 │   │   │       │   ├── contacts.py
 │   │   │       │   ├── documents.py
 │   │   │       │   ├── interviews.py
+│   │   │       │   ├── notifications.py
 │   │   │       │   └── users.py
 │   │   │       └── router.py
 │   │   ├── core
@@ -67,8 +71,10 @@
 │   │   │   ├── document.py
 │   │   │   ├── interview.py
 │   │   │   ├── interview_reminder.py
+│   │   │   ├── notification.py
 │   │   │   ├── resume_analysis.py
-│   │   │   └── user.py
+│   │   │   ├── user.py
+│   │   │   └── user_settings.py
 │   │   ├── schemas
 │   │   │   ├── __init__.py
 │   │   │   ├── ai.py
@@ -79,7 +85,9 @@
 │   │   │   ├── device_token.py
 │   │   │   ├── document.py
 │   │   │   ├── interview.py
-│   │   │   └── user.py
+│   │   │   ├── notification.py
+│   │   │   ├── user.py
+│   │   │   └── user_settings.py
 │   │   ├── services
 │   │   │   ├── __init__.py
 │   │   │   ├── ai
@@ -129,10 +137,14 @@
 │       ├── test_interviews_directory.py
 │       ├── test_interviews_endpoints.py
 │       ├── test_job_description_fetcher.py
+│       ├── test_notifications_endpoints.py
 │       ├── test_rate_limit.py
+│       ├── test_reminders.py
 │       ├── test_resume_parser.py
 │       ├── test_security.py
-│       └── test_user_schema.py
+│       ├── test_user_schema.py
+│       ├── test_user_settings_schema.py
+│       └── test_users_endpoints.py
 ├── docker-compose.yml
 ├── docs
 │   ├── ARCHITECTURE.md
@@ -517,4 +529,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-130 directories, 388 files
+130 directories, 400 files

@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 class ReminderChannel(str, enum.Enum):
     EMAIL = "email"
     PUSH = "push"  # unused until Phase B (FCM) - see TODO.md
+    IN_APP = "in_app"  # drives the Notification feed - see app/models/notification.py
 
 
 class InterviewReminder(Base, UUIDMixin, TimestampMixin):

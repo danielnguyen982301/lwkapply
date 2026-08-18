@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     contacts,
     documents,
     interviews,
+    notifications,
     users,
 )
 
@@ -75,3 +76,10 @@ api_router.include_router(
 # /applications/{id}/. Both POST routes are async: they return 202 with
 # a pending row and dispatch a Celery task; see app/tasks/ai.py.
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
+
+# In-app notification feed (the "bell icon") - top-level, user-owned,
+# read-mostly, same shape as documents/ai above. The only producer is
+# app/tasks/reminders.py; this router only reads/marks rows read.
+api_router.include_router(
+    notifications.router, prefix="/notifications", tags=["notifications"]
+)

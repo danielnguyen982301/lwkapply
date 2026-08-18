@@ -37,6 +37,7 @@ from app.core.security import (
 )
 from app.db.session import get_db
 from app.models.user import User
+from app.models.user_settings import UserSettings
 from app.schemas.auth import (
     LoginRequest,
     PasswordResetConfirm,
@@ -74,6 +75,11 @@ def _maybe_update_timezone(db: Session, user: User, timezone: Optional[str]) -> 
     runs on *every* login and refresh - not worth a DB round-trip for a
     no-op UPDATE on every single request.
     """
+    if user.timezone_is_manual:
+        # User explicitly set this via PATCH /users/me
+        # (app/api/v1/endpoints/users.py) - don't let the browser's
+        # auto-detected value silently overwrite that choice.
+        return
     if not timezone or timezone == user.timezone:
         return
     if not is_valid_timezone(timezone):
@@ -120,6 +126,14 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Every user should always have exactly one settings row (see
+    # app/models/user_settings.py's module docstring) - created here at
+    # registration; pre-existing accounts got theirs backfilled by the
+    # migration that introduced the table.
+    db.add(UserSettings(user_id=user.id))
+    db.commit()
+
     return user
 
 

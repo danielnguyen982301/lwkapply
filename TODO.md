@@ -66,6 +66,38 @@
         registration-screen picker
   - [x] Hardcoded single lead time (`REMINDER_LEAD_HOURS`) for this
         pass, as planned — multi-lead-time UI still not in scope
+  - [x] Phase C (later pass, backend only): `UserSettings` table —
+        per-user `reminder_lead_hours` override (falls back to the
+        global `REMINDER_LEAD_HOURS`), plus a master
+        `notifications_enabled` switch and per-channel
+        `email_notifications_enabled`/`push_notifications_enabled`
+        toggles, all enforced at *send* time in `send_due_reminders`
+        (not at scheduling time — so flipping a preference takes effect
+        immediately for already-scheduled interviews). Deliberately no
+        per-channel toggle for `IN_APP` — it's pull-based with no
+        external interruption to opt out of, so the master switch alone
+        gates it (see BACKEND_SUMMARY.md's "Deliberately no
+        `in_app_notifications_enabled`" for the reasoning; briefly had
+        one during development, dropped in migration `0537a87e67b9`).
+        `GET`/`PATCH /users/me/settings`. See BACKEND_SUMMARY.md's
+        "Account settings & notification preferences" — web UI not built
+        yet, see the Web section below
+  - [x] Phase C: third `IN_APP` reminder channel — writes to a new
+        `Notification` feed table (`/notifications` — list, unread-count,
+        mark-read, mark-all-read) instead of an external provider.
+        Delivery to the eventual bell UI is polling
+        (`GET /notifications/unread-count`), not real-time push — see
+        BACKEND_SUMMARY.md's "In-app notification feed" for the
+        reasoning (bounded by the beat task's own 10-minute cadence
+        regardless, and this codebase has no real-time infra yet)
+  - [x] Phase C: account settings endpoints beyond the reminder system
+        itself, added in the same pass since they share the same
+        `/users/me` surface — `PATCH /users/me` (name, timezone with a
+        new `timezone_is_manual` override flag), `POST /users/me/password`,
+        `POST`/`DELETE /users/me/avatar` (new R2 avatar path, separate
+        from documents), `DELETE /users/me` (password-confirmed, cleans
+        up owned documents' + avatar's R2 objects before the row itself
+        is deleted). No web UI yet — see the Web section below
   - [x] `device_tokens` table (`user_id`, `platform`, `token`,
         `last_seen_at`) — as planned, but keyed unique on `token` alone
         rather than `(user_id, token)`, so re-logging into the same
@@ -90,9 +122,11 @@
         sync logic fully decoupled from device-token state
   - [x] Android-first, iOS deferred on the Apple Developer Program
         cost — exactly as planned, unchanged
-  - [ ] Still not in scope, as originally planned: multi-lead-time UI,
-        per-user quiet hours, Celery-beat-on-multiple-nodes duplicate-
-        send protection
+  - [ ] Still not in scope: multi-lead-time *per interview* (a single
+        lead time is now per-user-configurable, as of Phase C above, but
+        still not multiple per interview, e.g. 24h *and* 1h before),
+        time-of-day quiet hours (Phase C's toggles are on/off, not
+        scheduled), Celery-beat-on-multiple-nodes duplicate-send protection
 - [x] Cross-application interviews directory endpoint (`GET /interviews`,
       read-only, paginated, filter by `result` — mirrors the Contacts
       directory endpoint below; see BACKEND_SUMMARY.md and CHANGELOG.md
@@ -226,6 +260,23 @@ Known gap, not part of this pass: `DashboardView.vue` (route `/`, the
 "Dashboard" nav item — distinct from `/analytics`) is still an empty
 placeholder card, unbuilt since the original scaffold. See
 WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
+
+### Account Settings
+
+- [ ] Web has no account settings page at all yet — no route, no nav
+      item, no store logic. Backend is fully built and ready (see
+      BACKEND_SUMMARY.md's "Account settings & notification
+      preferences" and "In-app notification feed"): `PATCH /users/me`,
+      `POST /users/me/password`, `POST`/`DELETE /users/me/avatar`,
+      `DELETE /users/me`, `GET`/`PATCH /users/me/settings`,
+      `GET /notifications` + unread-count + mark-read/read-all. Planned
+      shape (deliberately not started this pass — backend-only pass):
+      route `/settings`, actions added to the existing `stores/auth.ts`
+      (not a new store — mutations need to patch the same `user` object
+      `auth` already owns) plus a new `stores/userSettings.ts` for the
+      settings sub-resource; a header bell icon polling
+      `GET /notifications/unread-count` (not real-time — see
+      BACKEND_SUMMARY.md), backed by a new `stores/notifications.ts`.
 
 ---
 
@@ -399,12 +450,19 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       isolation, authenticated `TestClient`, `make_user`/`auth_headers`
       factories) every one of these builds on directly — every backend
       CRUD endpoint now has integration coverage
-- [ ] Backend tests for the reminder system — `sync_interview_reminders`,
-      `send_due_reminders` (both channels, including the invalid-token
-      pruning and zero-devices-marks-sent paths), and the two new
-      device-token endpoints have no test coverage yet (unit or
-      integration) — same "not included in this pass" gap as the rest of
-      this Testing section, worth closing before this ships to real users
+- [x] Backend tests for the reminder system, partially — Phase C's own
+      additions now have coverage (`tests/test_reminders.py`):
+      per-user `reminder_lead_hours` vs. the global default, all three
+      channels scheduled per interview, and send-time preference
+      enforcement (disabled channel/master switch marks a reminder
+      resolved without dispatching). Also new: `tests/test_users_endpoints.py`
+      (profile/password/avatar/settings/account-delete) and
+      `tests/test_notifications_endpoints.py`.
+  - [ ] Still no coverage for the *pre-existing* Phase A/B paths:
+        `_send_push_reminder`'s invalid-token pruning and
+        zero-devices-marks-sent branches, `_send_email_reminder`'s
+        failure path, and the `POST`/`DELETE /users/me/device-tokens`
+        endpoints — worth closing before this ships to real users
 - [ ] Mobile widget/unit tests beyond the auth smoke test (Applications,
       the nested Contacts/Interviews/Documents panels, the three
       cross-application directory screens, and the new push-notification/

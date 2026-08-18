@@ -61,7 +61,20 @@ ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
+# Separate allow-list for avatar uploads (app/api/v1/endpoints/users.py) -
+# images, not resume/cover-letter documents.
+AVATAR_ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
 _PRESIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
+# An avatar backs a persistent <img> tag, not a one-shot download link, so
+# it needs to stay valid meaningfully longer than a document download URL.
+# An avatar is also much lower-sensitivity than a resume, so the longer
+# life is an acceptable trade - see BACKEND_SUMMARY.md/plan notes.
+_AVATAR_URL_EXPIRY_SECONDS = 3600  # 1 hour
 
 
 def _r2_client():
@@ -82,11 +95,26 @@ def _build_object_key(user_id: uuid.UUID, filename: str) -> str:
     return f"users/{user_id}/documents/{safe_suffix}-{filename}"
 
 
+def _build_avatar_object_key(user_id: uuid.UUID) -> str:
+    # Fixed per user (no random suffix, unlike documents) - an avatar is
+    # 1:1 with a user, so a re-upload should just overwrite the same
+    # object rather than leaving the previous one to separately clean up.
+    return f"users/{user_id}/avatar"
+
+
 def validate_upload(file: UploadFile) -> None:
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Only PDF and Word documents are supported",
+        )
+
+
+def validate_avatar_upload(file: UploadFile) -> None:
+    if file.content_type not in AVATAR_ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only JPEG, PNG, and WebP images are supported",
         )
 
 
@@ -137,6 +165,65 @@ def upload_document(
     return object_key, file.filename or "upload"
 
 
+def upload_avatar(file: UploadFile, user_id: uuid.UUID) -> str:
+    """
+    Streams `file` to R2 under a fixed per-user key, enforcing
+    MAX_AVATAR_SIZE_MB. Returns the object_key. A re-upload silently
+    overwrites the previous avatar (same key every time - see
+    _build_avatar_object_key) rather than needing a separate
+    delete-the-old-one step.
+    """
+    validate_avatar_upload(file)
+
+    max_bytes = settings.MAX_AVATAR_SIZE_MB * 1024 * 1024
+    object_key = _build_avatar_object_key(user_id)
+
+    chunk_size = 1024 * 1024
+    total_bytes = 0
+    buffer = bytearray()
+    while True:
+        chunk = file.file.read(chunk_size)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Image exceeds the {settings.MAX_AVATAR_SIZE_MB}MB limit",
+            )
+        buffer.extend(chunk)
+
+    try:
+        _r2_client().put_object(
+            Bucket=settings.R2_BUCKET,
+            Key=object_key,
+            Body=bytes(buffer),
+            ContentType=file.content_type,
+        )
+    except (BotoCoreError, ClientError):
+        logger.exception("R2 avatar upload failed for key=%s", object_key)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store image. Please try again.",
+        )
+
+    return object_key
+
+
+def delete_avatar(user_id: uuid.UUID) -> None:
+    try:
+        _r2_client().delete_object(
+            Bucket=settings.R2_BUCKET, Key=_build_avatar_object_key(user_id)
+        )
+    except (BotoCoreError, ClientError):
+        # Same fire-and-log-don't-fail pattern as delete_document - the
+        # DB's User.avatar_url is the source of truth for "does this user
+        # have an avatar" from the client's perspective.
+        logger.exception(
+            "Failed to delete R2 avatar for user_id=%s (orphaned)", user_id
+        )
+
+
 def delete_document(object_key: str) -> None:
     try:
         _r2_client().delete_object(Bucket=settings.R2_BUCKET, Key=object_key)
@@ -163,12 +250,14 @@ def download_document(object_key: str) -> bytes:
         )
 
 
-def generate_download_url(object_key: str) -> str:
+def generate_download_url(
+    object_key: str, expires_in: int = _PRESIGNED_URL_EXPIRY_SECONDS
+) -> str:
     try:
         return _r2_client().generate_presigned_url(
             "get_object",
             Params={"Bucket": settings.R2_BUCKET, "Key": object_key},
-            ExpiresIn=_PRESIGNED_URL_EXPIRY_SECONDS,
+            ExpiresIn=expires_in,
         )
     except (BotoCoreError, ClientError):
         logger.exception("Failed to presign download URL for key=%s", object_key)
@@ -179,3 +268,4 @@ def generate_download_url(object_key: str) -> str:
 
 
 PRESIGNED_URL_EXPIRY_SECONDS = _PRESIGNED_URL_EXPIRY_SECONDS
+AVATAR_URL_EXPIRY_SECONDS = _AVATAR_URL_EXPIRY_SECONDS
