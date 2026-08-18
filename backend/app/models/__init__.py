@@ -14,3 +14,5 @@ from app.models.device_token import DeviceToken  # noqa: F401
 from app.models.application_status_history import ApplicationStatusHistory  # noqa: F401
 from app.models.resume_analysis import ResumeAnalysis  # noqa: F401
 from app.models.ats_score import AtsScore  # noqa: F401
+from app.models.user_settings import UserSettings  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
