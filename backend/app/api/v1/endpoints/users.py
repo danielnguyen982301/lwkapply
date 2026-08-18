@@ -17,6 +17,7 @@ from app.api.deps import get_current_user, get_db
 from app.core.cookies import clear_auth_cookies
 from app.core.security import hash_password, verify_password
 from app.models.device_token import DeviceToken, DevicePlatform
+from app.models.document import Document
 from app.models.user import User
 from app.models.user_settings import UserSettings
 from app.schemas.device_token import DeviceTokenRegister
@@ -144,11 +145,21 @@ def delete_account(
         raise HTTPException(status_code=400, detail="Incorrect password")
 
     # The DB cascade (User's relationships - applications, device_tokens,
-    # settings, notifications) cleans up Postgres rows once the user row
+    # settings, notifications - plus Document.user_id's own
+    # ondelete="CASCADE" FK) cleans up Postgres rows once the user row
     # itself is deleted below, but does nothing about files actually
     # sitting in R2. Clean those up first - skipping this would
     # permanently orphan every uploaded resume (real PII) in the bucket.
-    for document in current_user.documents:
+    # Queried directly rather than via a User.documents relationship
+    # (there isn't one - see app/models/document.py) so this doesn't have
+    # to fight the ORM's default child-disassociation behavior (nulling
+    # documents.user_id, a NOT NULL column) when the parent is deleted.
+    documents = (
+        db.execute(select(Document).where(Document.user_id == current_user.id))
+        .scalars()
+        .all()
+    )
+    for document in documents:
         r2.delete_document(document.file_url)
     if current_user.avatar_url:
         r2.delete_avatar(current_user.id)

@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     # would create a circular import, since Application imports User back.
     from app.models.application import Application
     from app.models.device_token import DeviceToken
-    from app.models.document import Document
     from app.models.notification import Notification
     from app.models.user_settings import UserSettings
 
@@ -62,12 +61,6 @@ class User(Base, UUIDMixin, TimestampMixin):
     device_tokens: Mapped[list["DeviceToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    # Documents don't cascade-delete through the ORM (Document.user has no
-    # back_populates on this side historically) - DELETE /users/me still
-    # needs this collection to clean up each document's R2 object before
-    # the row itself is deleted (see app/api/v1/endpoints/users.py), so
-    # it's declared read-only-in-practice here, not relied on for cascade.
-    documents: Mapped[list["Document"]] = relationship(back_populates="user")
     settings: Mapped["UserSettings"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )

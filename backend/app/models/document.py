@@ -48,7 +48,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
         server_default=DocumentType.OTHER,
     )
 
-    user: Mapped["User"] = relationship(back_populates="documents")
+    user: Mapped["User"] = relationship()
     # Deleting a document should drop its application links, not the
     # applications themselves - delete-orphan only, no cascade onto
     # Application (mirrors the ondelete="CASCADE" FK on
