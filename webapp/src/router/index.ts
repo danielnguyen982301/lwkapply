@@ -87,6 +87,11 @@ const router = createRouter({
           name: 'ats-scores',
           component: () => import('@/views/ai/AtsScoresView.vue'),
         },
+        {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/settings/AccountSettingsView.vue'),
+        },
       ],
     },
     {
