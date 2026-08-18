@@ -64,6 +64,9 @@ class Settings(BaseSettings):
 
     # --- Rate limiting / misc ---
     MAX_UPLOAD_SIZE_MB: int = 10
+    # Smaller than MAX_UPLOAD_SIZE_MB - a profile photo doesn't need
+    # resume-sized headroom. See app/services/r2.py's avatar helpers.
+    MAX_AVATAR_SIZE_MB: int = 2
 
     # --- Email (interview reminders, Phase A - see TODO.md) ---
     # "smtp" is for local dev against MailHog (docker-compose's `mailhog`
