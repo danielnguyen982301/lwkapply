@@ -70,13 +70,18 @@
         per-user `reminder_lead_hours` override (falls back to the
         global `REMINDER_LEAD_HOURS`), plus a master
         `notifications_enabled` switch and per-channel
-        `email_notifications_enabled`/`push_notifications_enabled`/
-        `in_app_notifications_enabled` toggles, all enforced at
-        *send* time in `send_due_reminders` (not at scheduling time —
-        so flipping a preference takes effect immediately for
-        already-scheduled interviews). `GET`/`PATCH /users/me/settings`.
-        See BACKEND_SUMMARY.md's "Account settings & notification
-        preferences" — web UI not built yet, see the Web section below
+        `email_notifications_enabled`/`push_notifications_enabled`
+        toggles, all enforced at *send* time in `send_due_reminders`
+        (not at scheduling time — so flipping a preference takes effect
+        immediately for already-scheduled interviews). Deliberately no
+        per-channel toggle for `IN_APP` — it's pull-based with no
+        external interruption to opt out of, so the master switch alone
+        gates it (see BACKEND_SUMMARY.md's "Deliberately no
+        `in_app_notifications_enabled`" for the reasoning; briefly had
+        one during development, dropped in migration `0537a87e67b9`).
+        `GET`/`PATCH /users/me/settings`. See BACKEND_SUMMARY.md's
+        "Account settings & notification preferences" — web UI not built
+        yet, see the Web section below
   - [x] Phase C: third `IN_APP` reminder channel — writes to a new
         `Notification` feed table (`/notifications` — list, unread-count,
         mark-read, mark-all-read) instead of an external provider.

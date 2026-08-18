@@ -725,9 +725,21 @@ setting, accepted as cheap relative to the alternative.
 every other model rather than making `user_id` the primary key itself.
 Fields: `reminder_lead_hours` (nullable — `NULL` means "use the global
 `settings.REMINDER_LEAD_HOURS`"), `notifications_enabled` (master switch),
-`email_notifications_enabled`, `push_notifications_enabled`,
-`in_app_notifications_enabled` (all default `True`, so existing accounts'
-behavior is unchanged until they opt out).
+`email_notifications_enabled`, `push_notifications_enabled` (all default
+`True`, so existing accounts' behavior is unchanged until they opt out).
+
+**Deliberately no `in_app_notifications_enabled`.** Email and push both
+reach the user *outside* this app (an inbox, a device buzz/badge), so
+opting out of that intrusion independently of "notifications at all" is
+a real, distinct choice — worth its own flag. The in-app feed is purely
+pull-based (a list you only see if you open the bell), with no external
+interruption to opt out of, so it's on whenever `notifications_enabled`
+(the master switch) is, with no finer-grained control — same pattern
+GitHub/Slack use (their notification center has no independent opt-out;
+only email/push do). A `user_settings.in_app_notifications_enabled`
+column existed briefly during development and was dropped in a follow-up
+migration (`0537a87e67b9`) once this reasoning held up — flagged here so
+it isn't re-added without re-deriving why it was removed.
 
 **Every user always has exactly one row** — created in
 `POST /auth/register` alongside the new `User`, and backfilled for every

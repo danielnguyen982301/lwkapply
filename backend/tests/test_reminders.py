@@ -200,31 +200,6 @@ class TestSendDueRemindersInApp:
         assert notification.application_id == interview.application_id
         assert "Technical" in notification.title
 
-    def test_disabled_in_app_channel_marks_sent_without_creating_a_notification(
-        self, client, db_session, make_user, auth_headers, patch_reminders_task_session
-    ):
-        user = make_user()
-        client.patch(
-            "/api/v1/users/me/settings",
-            json={"in_app_notifications_enabled": False},
-            headers=auth_headers(user),
-        )
-        interview, reminder = _make_due_interview_reminder(
-            db_session, user, ReminderChannel.IN_APP
-        )
-
-        sent_count = send_due_reminders()
-
-        assert sent_count == 1
-        db_session.refresh(reminder)
-        assert reminder.sent_at is not None
-        assert (
-            db_session.query(Notification)
-            .filter(Notification.interview_id == interview.id)
-            .first()
-            is None
-        )
-
     def test_master_switch_off_suppresses_every_channel(
         self, client, db_session, make_user, auth_headers, patch_reminders_task_session
     ):

@@ -108,7 +108,14 @@ def _application_url(application_id) -> str:
 def _channel_enabled(user: User, channel: ReminderChannel) -> bool:
     """Whether `user` has this delivery channel turned on
     (app/models/user_settings.py). Checked at send time, not schedule
-    time - see app/services/reminders.py's module docstring for why."""
+    time - see app/services/reminders.py's module docstring for why.
+
+    IN_APP has no per-channel flag of its own, only EMAIL/PUSH do - both
+    of those reach the user *outside* this app (an inbox, a device buzz/
+    badge), so opting out of that intrusion independently of
+    "notifications at all" is a real, distinct choice. The in-app feed is
+    purely pull-based (a list you only see if you open the bell), so it's
+    on whenever `notifications_enabled` (the master switch) is."""
     settings_row = user.settings
     if settings_row is None:
         # Fail-open only on a genuinely missing row (shouldn't happen -
@@ -122,7 +129,7 @@ def _channel_enabled(user: User, channel: ReminderChannel) -> bool:
         return settings_row.email_notifications_enabled
     if channel == ReminderChannel.PUSH:
         return settings_row.push_notifications_enabled
-    return settings_row.in_app_notifications_enabled
+    return True
 
 
 def _send_in_app_reminder(db: Session, reminder: InterviewReminder) -> bool:

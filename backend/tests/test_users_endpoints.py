@@ -225,7 +225,6 @@ class TestSettings:
         assert body["notifications_enabled"] is True
         assert body["email_notifications_enabled"] is True
         assert body["push_notifications_enabled"] is True
-        assert body["in_app_notifications_enabled"] is True
 
     def test_patch_updates_reminder_lead_hours(
         self, client, db_session, make_user, auth_headers
@@ -284,7 +283,6 @@ class TestSettings:
                 "notifications_enabled": False,
                 "email_notifications_enabled": False,
                 "push_notifications_enabled": False,
-                "in_app_notifications_enabled": False,
             },
             headers=auth_headers(user),
         )
@@ -294,7 +292,6 @@ class TestSettings:
         assert body["notifications_enabled"] is False
         assert body["email_notifications_enabled"] is False
         assert body["push_notifications_enabled"] is False
-        assert body["in_app_notifications_enabled"] is False
 
 
 class TestDeleteAccount:

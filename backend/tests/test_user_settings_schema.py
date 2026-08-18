@@ -15,7 +15,6 @@ class TestUserSettingsUpdateValidation:
         assert payload.notifications_enabled is None
         assert payload.email_notifications_enabled is None
         assert payload.push_notifications_enabled is None
-        assert payload.in_app_notifications_enabled is None
 
     def test_reminder_lead_hours_below_minimum_is_rejected(self):
         with pytest.raises(ValidationError):

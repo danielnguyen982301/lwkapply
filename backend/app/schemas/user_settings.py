@@ -8,7 +8,6 @@ class UserSettingsRead(BaseModel):
     notifications_enabled: bool
     email_notifications_enabled: bool
     push_notifications_enabled: bool
-    in_app_notifications_enabled: bool
 
 
 class UserSettingsUpdate(BaseModel):
@@ -22,4 +21,3 @@ class UserSettingsUpdate(BaseModel):
     notifications_enabled: bool | None = None
     email_notifications_enabled: bool | None = None
     push_notifications_enabled: bool | None = None
-    in_app_notifications_enabled: bool | None = None
