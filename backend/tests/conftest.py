@@ -48,15 +48,20 @@ import app.models.application_document  # noqa: F401
 import app.models.application_status_history  # noqa: F401
 import app.models.ats_score  # noqa: F401
 import app.models.contact  # noqa: F401
+import app.models.device_token  # noqa: F401
 import app.models.document  # noqa: F401
 import app.models.interview  # noqa: F401
+import app.models.interview_reminder  # noqa: F401
+import app.models.notification  # noqa: F401
 import app.models.resume_analysis  # noqa: F401
 import app.models.user  # noqa: F401
+import app.models.user_settings  # noqa: F401
 from app.core.security import create_access_token, hash_password
 from app.db.base_class import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User
+from app.models.user_settings import UserSettings
 
 
 @pytest.fixture(scope="session")
@@ -131,6 +136,13 @@ def make_user(db_session: Session):
             last_name="User",
         )
         db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+        # Mirrors POST /auth/register's own behavior (app/api/v1/endpoints/
+        # auth.py) - every user should always have exactly one settings
+        # row (see app/models/user_settings.py's module docstring), and
+        # this fixture bypasses that endpoint entirely.
+        db_session.add(UserSettings(user_id=user.id))
         db_session.commit()
         db_session.refresh(user)
         return user
