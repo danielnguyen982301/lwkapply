@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+import NotificationBell from '@/components/notifications/NotificationBell.vue'
 
 type NavItem = {
   name: string
@@ -12,6 +15,7 @@ type NavItem = {
 }
 
 const auth = useAuthStore()
+const notifications = useNotificationsStore()
 const router = useRouter()
 
 const navItems: NavItem[] = [
@@ -22,9 +26,22 @@ const navItems: NavItem[] = [
   { name: 'documents', label: 'Documents', to: '/documents' },
   { name: 'analytics', label: 'Analytics', to: '/analytics' },
   { name: 'ai-tools', label: 'AI Tools', to: '/resume-analyses' },
+  { name: 'settings', label: 'Settings', to: '/settings' },
 ]
 
+// AppLayout stays mounted for the whole authenticated session (only its
+// RouterView child swaps between pages), so one poll loop here covers the
+// header bell on every page rather than each view starting its own.
+onMounted(() => {
+  notifications.startPolling()
+})
+
+onBeforeUnmount(() => {
+  notifications.stopPolling()
+})
+
 async function handleLogout() {
+  notifications.stopPolling()
   await auth.logout()
   await router.push({ name: 'login' })
 }
@@ -60,7 +77,10 @@ async function handleLogout() {
         <h1 class="font-display text-base font-medium">
           Welcome back{{ auth.user ? `, ${auth.user.first_name}` : '' }}
         </h1>
-        <Button label="Log out" link size="small" @click="handleLogout" />
+        <div class="flex items-center gap-2">
+          <NotificationBell />
+          <Button label="Log out" link size="small" @click="handleLogout" />
+        </div>
       </header>
 
       <main class="min-w-0 flex-1 overflow-x-hidden p-6">
