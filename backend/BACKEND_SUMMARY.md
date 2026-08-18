@@ -525,11 +525,20 @@ so there was no data to migrate, only the client/config layer:
 
 - S3 service and config still remain but unused (for fallback and study purpose)
 
-## Interview reminder system (Phase A: email, Phase B: push)
+## Interview reminder system (Phase A: email, Phase B: push, Phase C: per-user preferences + in-app feed)
 
 Implements the plan from TODO.md's "Reminder system" entry. Celery/Redis
 (already wired up in Docker Compose) now run one real periodic task;
 this is the first thing to actually use them.
+
+**Phase C** (this pass) makes two changes on top of Phases A/B: the
+reminder lead time is now per-user-configurable instead of one hardcoded
+global value, and every reminder gets a third channel — `IN_APP` — that
+writes to a new `Notification` feed (`/notifications`) instead of calling
+an external provider. Both preferences and the new channel are covered
+in their own sections below ("`UserSettings`..." and "In-app notification
+feed..."); this section's existing subsections are updated in place
+rather than duplicated.
 
 ### Data model
 
@@ -537,14 +546,19 @@ this is the first thing to actually use them.
   `interview_id` (FK, cascade delete), `remind_at`, `sent_at` (nullable
   — the idempotency guard: the beat task only ever selects
   `remind_at <= now() AND sent_at IS NULL`, so a re-run can't
-  double-send), `channel` (`email` / `push`, `server_default` — not a
-  Python-side `default` — matching `Interview.result`'s precedent, since
-  this column needs to be correct even for a row inserted outside the
-  ORM's one ordinary code path; see the migration note below for why
-  this specific choice mattered enough to redo once). One row per
-  `(interview, channel)` pending reminder — see `sync_interview_reminders`
-  below for why both channels always get a row regardless of whether the
-  user has push set up yet.
+  double-send), `channel` (`email` / `push` / `in_app` as of Phase C,
+  `server_default` — not a Python-side `default` — matching
+  `Interview.result`'s precedent, since this column needs to be correct
+  even for a row inserted outside the ORM's one ordinary code path; see
+  the migration note below for why this specific choice mattered enough
+  to redo once). `in_app` was added to the existing Postgres enum via
+  `ALTER TYPE ... ADD VALUE` in its own migration, separate from the one
+  introducing `UserSettings`/`Notification` — Postgres forbids using a
+  newly-added enum value in the same transaction that added it. One row
+  per `(interview, channel)` pending reminder — see
+  `sync_interview_reminders` below for why every channel always gets a
+  row regardless of whether the user has push set up (or any preference
+  turned off) yet.
 - **`User.timezone`** (nullable `String`, IANA name e.g.
   `America/New_York`, UTC fallback everywhere it's read): populated from
   the _client's own reported timezone_ (web: `Intl.DateTimeFormat`,
@@ -566,23 +580,30 @@ this is the first thing to actually use them.
 `sync_interview_reminders(db, interview)`, called from the interview
 create/update endpoints (same transaction, no extra commit boundary
 beyond the one already needed to get `interview.id`): computes
-`remind_at = scheduled_at - settings.REMINDER_LEAD_HOURS` (hardcoded
-single lead time for this pass, per TODO.md — the table itself doesn't
-assume one, multi-lead-time UI is explicitly deferred) and
-creates/moves/deletes **one pending row per channel** (`EMAIL` and
-`PUSH`, both, unconditionally):
+`remind_at = scheduled_at - lead_hours`, where `lead_hours` is
+`interview.application.user.settings.reminder_lead_hours` if the user has
+set one, else `settings.REMINDER_LEAD_HOURS` (the global default — every
+account keeps its current behavior until it opts into an override; the
+table itself still doesn't assume a single lead time, multi-lead-time
+_per interview_ is still deferred — see "Not yet implemented" below) —
+and creates/moves/deletes **one pending row per channel** (`EMAIL`,
+`PUSH`, and `IN_APP`, all three, unconditionally):
 
 - Cancelled interview, or a `remind_at` that's already in the past
   (same-day scheduling, or a reschedule that moved it closer than the
-  lead time) → no pending reminder on either channel. Deliberately not
+  lead time) → no pending reminder on any channel. Deliberately not
   sending an immediate "starting soon" variant in the too-late case;
   revisit if product wants that later.
-- Push gets a row **even if the user has zero registered devices** —
-  this was a deliberate scope decision (Option A of two considered):
+- Push gets a row **even if the user has zero registered devices**, and
+  as of Phase C every channel gets a row **even if the user has turned
+  that channel, or notifications overall, off** — this is a deliberate,
+  now-generalized scope decision (originally Option A for push alone):
   keeps this function's only responsibility "does this interview need a
-  reminder", with zero knowledge of device-token state. Whether there's
-  actually anything to push to is a _send-time_ concern, handled by the
-  task below, not a scheduling-time one.
+  reminder", with zero knowledge of device-token *or preference* state.
+  Whether there's actually anything to send/write is a _send-time_
+  concern, handled by the task below, not a scheduling-time one — so
+  flipping a preference takes effect immediately for interviews already
+  scheduled, not just ones synced after the change.
 
 ### `app/tasks/reminders.py` — the Celery beat task
 
@@ -590,8 +611,13 @@ creates/moves/deletes **one pending row per channel** (`EMAIL` and
 (`app/core/celery_app.py`, comfortably inside TODO.md's "every 5-15 min"
 target — idempotency is what actually makes a late/duplicate tick
 harmless, not the schedule's precision). Queries every
-`remind_at <= now() AND sent_at IS NULL` row regardless of channel, then
-dispatches per-row:
+`remind_at <= now() AND sent_at IS NULL` row regardless of channel
+(eager-loading `interview.application.user.settings` to avoid an N+1 per
+row), then for each due reminder first checks `_channel_enabled(user,
+channel)` against `UserSettings` (master switch, then the per-channel
+flag) — disabled → mark `sent_at` without dispatching anything, same
+"nothing to send, nothing to retry" shape push already used for zero
+devices, just gated on a preference instead. Otherwise dispatches per-row:
 
 - **`channel == EMAIL`**: builds a subject/html/text via
   `_build_email`, sends through `app/services/email.py`.
@@ -602,6 +628,13 @@ dispatches per-row:
   there, so one dead install can't cause every future reminder to retry
   against it forever. A transient failure (`PushResult.FAILED`) leaves
   the reminder unsent, retried next tick.
+- **`channel == IN_APP`** (Phase C): builds a `(title, body)` via
+  `_build_in_app` (same `_interview_summary` pieces the other two
+  builders use) and writes a `Notification` row — see "In-app
+  notification feed" below. No external provider, so unlike email/push
+  this always succeeds once the DB write does; a DB error propagates and
+  leaves the reminder unsent for retry next tick, same as any other
+  exception in this loop.
 
 Each reminder commits independently (`sent_at` stamped per-row, not
 batched at the end of the loop) — one bad send shouldn't leave every
@@ -663,7 +696,156 @@ round-trip for a no-op). **`RefreshRequest`'s body is no longer
 mobile-only** — web's refresh call now also sends an optional body
 (previously none at all) purely to carry `timezone`; `refresh_token`
 itself is still mobile-only, per the original cookie-vs-explicit-token
-split.
+split. As of Phase C, `_maybe_update_timezone()` first checks
+`user.timezone_is_manual` (`User`, new column) and no-ops entirely when
+`True` — otherwise an explicit `PATCH /users/me` timezone choice (see
+below) would get silently overwritten by this same auto-detect on the
+user's very next login. Only `PATCH /users/me` ever sets the flag; an
+explicit `{"timezone": null}` there releases it again without touching
+the stored value, letting auto-detect resume.
+
+## Account settings & notification preferences
+
+Everything in this section is **backend only** — no web UI calls any of
+it yet (see "Not yet implemented" below). Mobile has its own separate,
+even more minimal "Settings screen" (logout only) — see MOBILE_SUMMARY.md.
+
+### `app/models/user_settings.py` — `UserSettings`, a dedicated preferences table
+
+Deliberately **not** columns bolted onto `User`: `users` is read on every
+authenticated request (`get_current_user`) and stays focused on
+identity/auth, while preferences are a separate, independently-growing
+concern — same "separate table per concern" instinct as
+`Document`/`ApplicationDocument` or `Interview`/`InterviewReminder`.
+Typed columns throughout (no JSONB blob, no key-value/EAV table), matching
+every other model in this codebase; the cost is a migration per new
+setting, accepted as cheap relative to the alternative.
+
+1:1 with `User` (`user_id` FK, `unique=True`), own `id`/timestamps like
+every other model rather than making `user_id` the primary key itself.
+Fields: `reminder_lead_hours` (nullable — `NULL` means "use the global
+`settings.REMINDER_LEAD_HOURS`"), `notifications_enabled` (master switch),
+`email_notifications_enabled`, `push_notifications_enabled`,
+`in_app_notifications_enabled` (all default `True`, so existing accounts'
+behavior is unchanged until they opt out).
+
+**Every user always has exactly one row** — created in
+`POST /auth/register` alongside the new `User`, and backfilled for every
+pre-existing account by the migration that introduced the table. Code
+that reads it (`app/tasks/reminders.py::_channel_enabled`,
+`app/services/reminders.py::_compute_remind_at`) still fails open on a
+genuinely missing row rather than trusting that invariant blindly.
+
+`GET`/`PATCH /users/me/settings` (`app/api/v1/endpoints/users.py`) read/
+update it — `PATCH` applies via `exclude_unset`, so an explicit
+`{"reminder_lead_hours": null}` resets to the global default while an
+*omitted* field is left untouched, same distinction `documents.py`'s
+`PATCH` already relies on. `reminder_lead_hours` is bounded `1..168`
+(1 hour to 1 week) at the schema level.
+
+### Profile, password, avatar, and account-deletion endpoints (`app/api/v1/endpoints/users.py`)
+
+All bearer-authenticated (`get_current_user`) — none of these need CSRF,
+since that only guards the two cookie-authenticated endpoints
+(`/auth/refresh`, `/auth/logout`).
+
+- **`PATCH /users/me`** (`UserProfileUpdate`: `first_name`/`last_name`/
+  `timezone`) — a schema deliberately separate from the pre-existing,
+  previously-unwired `UserUpdate`, which also has `avatar_url`; a client
+  must never be able to set that field directly (only the avatar
+  endpoints below control it, since they own the underlying R2 key).
+- **`POST /users/me/password`** (`current_password`/`new_password`) —
+  requires the current password even though the request is already
+  bearer-authenticated; a change like this shouldn't be possible from
+  just a leaked access token alone. `400` (not `401`) on mismatch — this
+  is a bad form input on an authenticated request, not a credentials
+  failure.
+- **`POST /users/me/avatar`** / **`DELETE /users/me/avatar`** — see the
+  R2 section below.
+- **`DELETE /users/me`** (`password`) — same re-proof-of-password
+  reasoning as the password change, for an irreversible action. Before
+  deleting the row: queries `Document` directly (`Document.user_id ==
+  current_user.id`) — **not** via a `User.documents` relationship, which
+  doesn't exist — and calls `r2.delete_document()` per row, plus
+  `r2.delete_avatar()` if set. This matters: the DB-level cascade
+  (`ondelete="CASCADE"` on the various FKs, plus `cascade="all,
+  delete-orphan"` on `User.applications`/`device_tokens`/`settings`/
+  `notifications`) cleans up Postgres rows once `db.delete(user)` runs,
+  but does nothing about files actually sitting in R2 — skipping this
+  would permanently orphan every uploaded resume (real PII) in the
+  bucket. (A `User.documents` *relationship* was tried first and
+  reverted — see the git history around
+  `fix(backend): avoid ORM cascade-null error...` — iterating it caused
+  SQLAlchemy to try nulling `documents.user_id`, a `NOT NULL` column, on
+  flush, since the relationship had no delete-cascade configured; a
+  direct query sidesteps the ORM's child-disassociation behavior
+  entirely instead of fighting it.) Finishes with `clear_auth_cookies()`,
+  the same helper `/auth/logout` uses.
+
+### Avatar upload (`app/services/r2.py`)
+
+Mirrors `upload_document`/`delete_document`/`generate_download_url`, but
+simpler because an avatar is 1:1 with a user, not a list:
+`AVATAR_ALLOWED_CONTENT_TYPES` (`image/jpeg`/`png`/`webp`, a separate
+allow-list from documents' PDF/Word one), a **fixed** per-user object key
+(`users/{user_id}/avatar`, no random suffix) so a re-upload just
+overwrites the same object — no separate "delete the old one" step ever
+needed — and a new `settings.MAX_AVATAR_SIZE_MB` (2, vs. documents' 10).
+`generate_download_url` gained an optional `expires_in` param (existing
+document call sites unaffected): avatars presign for `AVATAR_URL_EXPIRY_SECONDS`
+(1 hour, vs. documents' 5 minutes) since they back a persistent `<img>`
+tag rather than a one-shot download link, and are far lower-sensitivity
+than a resume. `GET/PATCH/POST/DELETE /users/me*`'s responses all swap
+the stored object key for a presigned URL via a shared `_serialize_user()`
+helper before returning `UserRead`.
+
+## In-app notification feed ("bell icon" backend)
+
+A distinct concept from `UserSettings` above: that table holds delivery
+*preferences*, this is the actual feed of notification *events* a user
+sees. **Backend only** — no bell icon exists in the web UI yet (see
+"Not yet implemented").
+
+### `app/models/notification.py` — `Notification`
+
+`user_id` (FK, cascade delete), `type` (`NotificationType` enum — just
+`INTERVIEW_REMINDER` today, the only producer; add more values as real
+producers appear, not speculatively), `title`/`body` (plain strings,
+pre-rendered at write time — same approach the email/push builders in
+`tasks/reminders.py` already use), optional `application_id`/
+`interview_id` (nullable deep-link targets for the eventual bell UI —
+independent FKs rather than one polymorphic "entity_id", since only
+these two exist so far), `read_at` (nullable — `NULL` = unread).
+Composite index on `(user_id, read_at)`: both the unread-count query and
+the list view's `unread_only` filter filter on exactly this pair.
+
+The only producer is `app/tasks/reminders.py::send_due_reminders`'s
+`IN_APP` branch (see above) — this module itself never creates rows, only
+reads/marks them read.
+
+### `/notifications` endpoints (`app/api/v1/endpoints/notifications.py`)
+
+Top-level, user-owned, read-mostly — same shape as `documents.py`:
+`GET /notifications` (paginated, `unread_only` filter, newest first),
+`GET /notifications/unread-count` (a cheap, dedicated count query for a
+bell badge to poll), `POST /notifications/{id}/read` (ownership-checked,
+idempotent), `POST /notifications/read-all` (bulk `UPDATE`, not a loop of
+loaded instances — same reasoning `users.py::delete_device_token` uses
+for its bulk `DELETE`).
+
+### Delivery mechanism: polling, not real-time push
+
+Deliberately **not** WebSockets/SSE. The eventual bell UI is expected to
+poll `GET /notifications/unread-count` on an interval plus on page
+load/focus — matching an existing precedent in the web frontend
+(`stores/resumeAnalyses.ts`/`atsScores.ts` already poll for async AI-tool
+status). Also bounded by reality: `send_due_reminders` itself only runs
+every 10 minutes, so a `Notification` row is never created more often
+than that regardless of delivery mechanism — real-time push would add
+first-of-its-kind infrastructure to this codebase (a Celery-worker→web-
+process pub/sub bridge over Redis) to shave latency off a signal that's
+already on a 10-minute cadence. Purely a frontend decision either way;
+nothing here changes because of it.
 
 ### Two decisions worth remembering if this file gets extended
 
@@ -1035,12 +1217,17 @@ per-request-dispatched task, including eventually testing
 - Password-reset support in the mobile client (backend endpoints already
   exist and are unaffected by the mobile-client changes above; no mobile
   UI calls them yet — see MOBILE_SUMMARY.md)
-- A combined account/settings screen (password reset + timezone override
-  - notification preferences) — noted as a natural future grouping since
-    all three already have backend support waiting on a UI; not started
-- Multi-lead-time / per-user reminder preferences (`REMINDER_LEAD_HOURS`
-  is a single hardcoded value for every user) — explicitly deferred per
-  TODO.md's original plan
+- **Web UI for account settings and the notification feed** — the full
+  backend now exists (profile update, password change, avatar upload/
+  delete, account deletion, per-user notification preferences, and the
+  in-app notification feed — see "Account settings & notification
+  preferences" and "In-app notification feed" below) but no web screen
+  calls any of it yet. Password-reset-by-email UI is a separate,
+  still-open gap (see the mobile-client note just above).
+- Multi-lead-time reminders (more than one reminder per interview, e.g.
+  24h *and* 1h before) — still deferred per TODO.md's original plan; a
+  single lead time is now per-user-configurable (`UserSettings.reminder_lead_hours`),
+  just not yet per-interview-multiple.
 - Celery-beat-on-multiple-nodes duplicate-send protection — not needed
   at current scale (single beat instance); would need a single
   scheduler or a Redis lock if ever run horizontally scaled
