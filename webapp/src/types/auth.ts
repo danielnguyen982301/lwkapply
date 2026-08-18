@@ -31,3 +31,26 @@ export interface RegisterPayload {
 export interface ApiError {
   detail: string | Array<{ loc: (string | number)[]; msg: string; type: string }>
 }
+
+// Body for PATCH /users/me. `timezone: null` is an explicit "go back to
+// auto-detect" (see app/schemas/user.py::UserProfileUpdate) — omit the key
+// entirely to leave it untouched instead.
+export interface ProfileUpdatePayload {
+  first_name?: string
+  last_name?: string
+  timezone?: string | null
+}
+
+// Body for POST /users/me/password. Requires the current password even
+// though the request is already bearer-authenticated (see
+// PasswordChangeRequest in app/schemas/user.py).
+export interface PasswordChangePayload {
+  current_password: string
+  new_password: string
+}
+
+// Body for DELETE /users/me — same re-prove-the-password reasoning as
+// PasswordChangePayload above.
+export interface AccountDeletePayload {
+  password: string
+}
