@@ -766,6 +766,10 @@ since that only guards the two cookie-authenticated endpoints
   previously-unwired `UserUpdate`, which also has `avatar_url`; a client
   must never be able to set that field directly (only the avatar
   endpoints below control it, since they own the underlying R2 key).
+  `UserRead` now returns `timezone`/`timezone_is_manual` too (previously
+  write-only from a client's perspective — `User.timezone` existed since
+  the original auto-detect work, but no response ever included it) — a
+  client can now actually show/edit the stored value instead of guessing.
 - **`POST /users/me/password`** (`current_password`/`new_password`) —
   requires the current password even though the request is already
   bearer-authenticated; a change like this shouldn't be possible from
@@ -815,8 +819,9 @@ helper before returning `UserRead`.
 
 A distinct concept from `UserSettings` above: that table holds delivery
 *preferences*, this is the actual feed of notification *events* a user
-sees. **Backend only** — no bell icon exists in the web UI yet (see
-"Not yet implemented").
+sees. Web has a bell icon consuming this (`NotificationBell.vue` — see
+WEBAPP_SUMMARY.md's "Account settings & notifications"); mobile doesn't
+yet.
 
 ### `app/models/notification.py` — `Notification`
 
@@ -829,7 +834,8 @@ pre-rendered at write time — same approach the email/push builders in
 independent FKs rather than one polymorphic "entity_id", since only
 these two exist so far), `read_at` (nullable — `NULL` = unread).
 Composite index on `(user_id, read_at)`: both the unread-count query and
-the list view's `unread_only` filter filter on exactly this pair.
+the list view's `status=unread`/`status=read` filter filter on exactly
+this pair.
 
 The only producer is `app/tasks/reminders.py::send_due_reminders`'s
 `IN_APP` branch (see above) — this module itself never creates rows, only
@@ -838,7 +844,11 @@ reads/marks them read.
 ### `/notifications` endpoints (`app/api/v1/endpoints/notifications.py`)
 
 Top-level, user-owned, read-mostly — same shape as `documents.py`:
-`GET /notifications` (paginated, `unread_only` filter, newest first),
+`GET /notifications` (paginated, `status=all|unread|read` filter —
+originally a plain `unread_only: bool`, widened once the web bell
+popover needed a Read tab too, with no way to express "read-only"
+otherwise; additive query-shape change, nothing else called this
+endpoint yet — see CHANGELOG.md), newest first,
 `GET /notifications/unread-count` (a cheap, dedicated count query for a
 bell badge to poll), `POST /notifications/{id}/read` (ownership-checked,
 idempotent), `POST /notifications/read-all` (bulk `UPDATE`, not a loop of
@@ -1229,13 +1239,9 @@ per-request-dispatched task, including eventually testing
 - Password-reset support in the mobile client (backend endpoints already
   exist and are unaffected by the mobile-client changes above; no mobile
   UI calls them yet — see MOBILE_SUMMARY.md)
-- **Web UI for account settings and the notification feed** — the full
-  backend now exists (profile update, password change, avatar upload/
-  delete, account deletion, per-user notification preferences, and the
-  in-app notification feed — see "Account settings & notification
-  preferences" and "In-app notification feed" below) but no web screen
-  calls any of it yet. Password-reset-by-email UI is a separate,
-  still-open gap (see the mobile-client note just above).
+- Password-reset-by-email UI (web or mobile) — a separate, still-open
+  gap from the account-settings/notifications web UI, which has since
+  shipped (see WEBAPP_SUMMARY.md's "Account settings & notifications").
 - Multi-lead-time reminders (more than one reminder per interview, e.g.
   24h *and* 1h before) — still deferred per TODO.md's original plan; a
   single lead time is now per-user-configurable (`UserSettings.reminder_lead_hours`),
