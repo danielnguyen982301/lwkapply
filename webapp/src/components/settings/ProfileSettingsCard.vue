@@ -5,10 +5,11 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { useConfirm } from 'primevue/useconfirm'
 import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
-import { useForm } from 'vee-validate'
+import { useField, useForm } from 'vee-validate'
 
 import { useAuthStore } from '@/stores/auth'
 import { timezoneOptions } from '@/lib/timezone'
@@ -24,13 +25,22 @@ const confirm = useConfirm()
 interface ProfileFormValues {
   first_name: string
   last_name: string
+  auto_detect_timezone: boolean
+  timezone: string | null
 }
 
 const profileValidationSchema = toTypedSchema(
-  z.object({
-    first_name: z.string().trim().min(1, 'First name is required.').max(100),
-    last_name: z.string().trim().min(1, 'Last name is required.').max(100),
-  }),
+  z
+    .object({
+      first_name: z.string().trim().min(1, 'First name is required.').max(100),
+      last_name: z.string().trim().min(1, 'Last name is required.').max(100),
+      auto_detect_timezone: z.boolean(),
+      timezone: z.string().nullable(),
+    })
+    .refine((values) => values.auto_detect_timezone || !!values.timezone, {
+      message: 'Choose a timezone, or turn auto-detect back on.',
+      path: ['timezone'],
+    }),
 )
 
 const {
@@ -40,26 +50,44 @@ const {
   resetForm: resetProfileForm,
 } = useForm<ProfileFormValues>({
   validationSchema: profileValidationSchema,
-  initialValues: { first_name: '', last_name: '' },
+  initialValues: {
+    first_name: '',
+    last_name: '',
+    auto_detect_timezone: true,
+    timezone: null,
+  },
 })
 
-// Timezone is plain state, not part of the vee-validate form above - it's
-// nullable (clearing the Select means "resume auto-detecting", not "this
-// field is invalid"), and only gets sent when actually changed from what's
-// saved (see onProfileSubmit) - a shape that doesn't fit useField() any
-// more cleanly than NotificationSettingsCard.vue's own toggles did.
-const timezoneValue = ref<string | null>(null)
-const savedTimezone = ref<string | null>(null)
-const timezoneDirty = computed(() => timezoneValue.value !== savedTimezone.value)
+// Called directly (not through a Custom*.vue wrapper) so both fields join
+// the same form/schema above as first_name/last_name - CustomSelect.vue's
+// useField<string>() has no `null` in its type, which auto_detect_timezone
+// off/no-selection-yet needs. Each field's own `meta.dirty` (not the
+// top-level form's) is what decides whether to actually include `timezone`
+// in the PATCH payload below - PATCH /users/me flips timezone_is_manual
+// purely from the *presence* of that key, so resaving the name fields
+// alone must never resend an unchanged timezone and silently re-lock it.
+const { value: autoDetectTimezone, meta: autoDetectMeta } =
+  useField<boolean>('auto_detect_timezone')
+const {
+  value: timezoneValue,
+  meta: timezoneFieldMeta,
+  errorMessage: timezoneError,
+} = useField<string | null>('timezone')
+const timezoneSectionDirty = computed(() => autoDetectMeta.dirty || timezoneFieldMeta.dirty)
 const timezoneOptionsList = timezoneOptions()
 
 watch(
   () => auth.user,
   (user) => {
     if (!user) return
-    resetProfileForm({ values: { first_name: user.first_name, last_name: user.last_name } })
-    timezoneValue.value = user.timezone
-    savedTimezone.value = user.timezone
+    resetProfileForm({
+      values: {
+        first_name: user.first_name,
+        last_name: user.last_name,
+        auto_detect_timezone: !user.timezone_is_manual,
+        timezone: user.timezone,
+      },
+    })
   },
   { immediate: true },
 )
@@ -73,14 +101,11 @@ const onProfileSubmit = handleProfileSubmit(async (formValues) => {
       first_name: formValues.first_name.trim(),
       last_name: formValues.last_name.trim(),
     }
-    // Omitted entirely when unchanged - PATCH /users/me only touches
-    // timezone_is_manual when the "timezone" key is present at all (see
-    // UserProfileUpdate), so resaving the name fields alone must never
-    // silently re-lock an auto-detected timezone.
-    if (timezoneDirty.value) payload.timezone = timezoneValue.value
+    if (timezoneSectionDirty.value) {
+      payload.timezone = formValues.auto_detect_timezone ? null : formValues.timezone
+    }
 
     await auth.updateProfile(payload)
-    savedTimezone.value = timezoneValue.value
     profileSuccess.value = true
   } catch {
     // auth.profileError is already set and rendered below.
@@ -219,30 +244,36 @@ function confirmRemoveAvatar() {
         />
       </div>
 
-      <div class="flex flex-col gap-1">
-        <label for="settings-timezone" class="text-sm font-medium text-ink">Timezone</label>
-        <Select
-          v-model="timezoneValue"
-          input-id="settings-timezone"
-          :options="timezoneOptionsList"
-          option-label="label"
-          option-value="value"
-          filter
-          show-clear
-          placeholder="Auto-detect from browser"
-          class="w-full"
-        />
-        <p class="text-xs text-slate">
-          <template v-if="auth.user?.timezone_is_manual">
-            Manually set — used to localize interview reminder times. Clear the field to resume
-            auto-detecting from your browser.
-          </template>
-          <template v-else-if="auth.user?.timezone">
-            Auto-detected from your browser ({{ auth.user.timezone }}) — used to localize interview
-            reminder times.
-          </template>
-          <template v-else> Used to localize interview reminder times. </template>
-        </p>
+      <div class="flex flex-col gap-2 border-t border-slate/10 pt-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-ink">Auto-detect timezone</p>
+            <p class="text-sm text-slate">
+              Kept in sync with your browser on login — used to localize interview reminder times.
+            </p>
+          </div>
+          <ToggleSwitch v-model="autoDetectTimezone" aria-label="Auto-detect timezone" />
+        </div>
+
+        <div v-if="!autoDetectTimezone" class="flex flex-col gap-1 pl-1">
+          <label for="settings-timezone" class="text-sm font-medium text-ink">
+            Choose your own timezone
+          </label>
+          <Select
+            v-model="timezoneValue"
+            input-id="settings-timezone"
+            :options="timezoneOptionsList"
+            option-label="label"
+            option-value="value"
+            filter
+            placeholder="Select a timezone"
+            :invalid="!!timezoneError"
+            class="w-full"
+          />
+          <Message v-if="timezoneError" severity="error" variant="simple" size="small">
+            {{ timezoneError }}
+          </Message>
+        </div>
       </div>
 
       <div class="flex justify-end border-t border-slate/10 pt-4">
@@ -250,7 +281,7 @@ function confirmRemoveAvatar() {
           type="submit"
           :label="auth.profileStatus === 'loading' ? 'Saving…' : 'Save profile'"
           :loading="auth.profileStatus === 'loading'"
-          :disabled="(!profileMeta.dirty && !timezoneDirty) || auth.profileStatus === 'loading'"
+          :disabled="!profileMeta.dirty || auth.profileStatus === 'loading'"
         />
       </div>
     </form>

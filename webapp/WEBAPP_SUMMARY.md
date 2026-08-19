@@ -598,17 +598,27 @@ matching every other feature's "one store per resource" convention.
   `deleteAvatar`) rather than a separate store, so anything reading
   `auth.user` sees the update with no extra sync step. Email is shown
   read-only (`UserProfileUpdate` has no email field server-side).
-  **Timezone**: a searchable, clearable PrimeVue `Select`
-  (`lib/timezone.ts`'s `timezoneOptions()`, backed by
+  **Timezone**: an explicit "Auto-detect timezone" `ToggleSwitch`
+  (`auto_detect_timezone`, mapped onto `timezone_is_manual` — off means
+  the app keeps overwriting `User.timezone` from the browser on every
+  login/refresh, on means it's locked to what's picked below) plus a
+  "Choose your own timezone" `Select` that only appears once the toggle
+  is off (`lib/timezone.ts`'s `timezoneOptions()`, backed by
   `Intl.supportedValuesOf('timeZone')` with a browser-detected fallback
   for environments without it — not in this project's ES2020 `lib`
-  target, so it's called through a local type rather than `any`).
-  Clearing the field sends an explicit `timezone: null`, matching
-  `PATCH /users/me`'s "go back to auto-detect" semantics. Kept out of
-  the section's vee-validate form — nullable, and only sent when
-  actually changed from the saved value (its own `ref` + dirty-check),
-  since resending the initial value on every name-only save would
-  otherwise silently re-lock an auto-detected timezone as manual
+  target, so it's called through a local type rather than `any`). Both
+  fields join the same `useForm<ProfileFormValues>()` as first/last name
+  — called via `useField()` directly rather than through
+  `CustomSelect.vue` (whose `useField<string>()` has no `null` in its
+  type, which "off, nothing picked yet" needs), with a `.refine()`
+  requiring a selection whenever auto-detect is off. `PATCH /users/me`
+  only sets `timezone_is_manual` from the *presence* of a `timezone` key
+  in the request body, not its value, so the payload only ever includes
+  `timezone` (`null` when auto-detect is on, otherwise the picked zone)
+  when `auto_detect_timezone`'s or `timezone`'s own field-level
+  `meta.dirty` says something actually changed — otherwise resaving the
+  name fields alone would silently re-lock an auto-detected timezone as
+  manual
 - **Password**: change form (`POST /users/me/password`) — current
   password, new password, confirm — `zod`'s `.refine()` cross-field check
   for the confirm match, same vee-validate pattern as every other form
