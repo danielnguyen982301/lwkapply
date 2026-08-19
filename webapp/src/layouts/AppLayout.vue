@@ -75,6 +75,13 @@ const userMenuItems: MenuItem[] = [
   {
     label: 'Log out',
     icon: 'pi pi-sign-out',
+    // `!` (Tailwind's important modifier) is required here, not optional —
+    // PrimeVue's own itemLink class sets `color` directly on this same `<a>`
+    // (see the #item slot below), and a plain utility class loses to that
+    // on source order alone (same specificity). Same reasoning
+    // WEBAPP_SUMMARY.md notes for ApplicationFormView's `.p-inputtext`
+    // override.
+    class: '!text-coral',
     command: handleLogout,
   },
 ]
@@ -131,13 +138,17 @@ const userMenuItems: MenuItem[] = [
       </div>
     </aside>
 
-    <Menu ref="userMenu" :model="userMenuItems" :popup="true" />
+    <Menu ref="userMenu" :model="userMenuItems" :popup="true">
+      <template #item="{ item, props }">
+        <a v-bind="props.action" :class="item.class">
+          <span v-if="item.icon" v-bind="props.icon" />
+          <span v-bind="props.label">{{ item.label }}</span>
+        </a>
+      </template>
+    </Menu>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex items-center justify-between border-b border-slate/10 bg-white px-6 py-3">
-        <h1 class="font-display text-base font-medium">
-          Welcome back{{ auth.user ? `, ${auth.user.first_name}` : '' }}
-        </h1>
+      <header class="flex items-center justify-end border-b border-slate/10 bg-white px-6 py-3">
         <NotificationBell />
       </header>
 
