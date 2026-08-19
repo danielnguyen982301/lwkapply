@@ -1,6 +1,71 @@
 # Changelog
 
-## v0.13.0 (in progress)
+## v0.15.0 (in progress)
+
+### Added
+
+- **Notification bell: Unread/Read tabs + infinite scroll** — the web
+  bell popover (v0.14.0) only ever showed a flat "most recent" list;
+  this pass adds real paging behind two tabs. `stores/notifications.ts`
+  now tracks a single active status tab with its own page/total,
+  scrolling near the bottom of the popover's list appends the next page.
+  Needed a backend change: `GET /notifications` only had
+  `unread_only: bool`, with no way to ask for read-only — replaced with
+  `status: Literal["all", "unread", "read"] = "all"` (additive query
+  shape; nothing else called this endpoint yet, mobile hasn't
+  implemented notifications).
+- **Timezone control in Account Settings** — `UserRead` now returns
+  `timezone`/`timezone_is_manual` (both existed on `User` already, just
+  never returned to a client). Web's Profile section gets a searchable,
+  clearable timezone `Select`; clearing it sends an explicit
+  `timezone: null`, matching `PATCH /users/me`'s existing "go back to
+  auto-detect" semantics. Only sent when actually changed from the saved
+  value — resending the initial value on every name-only save would
+  otherwise silently re-lock an auto-detected timezone as manual.
+
+## v0.14.0
+
+### Added
+
+- **Account settings + notifications, web UI** — v0.13.0 shipped every
+  backend endpoint this needed but no web UI; this pass builds it. Full
+  detail in WEBAPP_SUMMARY.md's "Account settings & notifications"
+  section; summary here:
+  - **`/settings` route** (`AccountSettingsView.vue`), split into
+    independent section components — `ProfileSettingsCard.vue` (avatar
+    upload/remove, first/last name; email read-only), `PasswordSettingsCard.vue`
+    (current/new/confirm, a `zod` `.refine()` cross-field
+    match check), `NotificationSettingsCard.vue` (master + per-channel
+    email/push toggles, a custom reminder-lead-time control that falls
+    back to the server default when unset), and `DeleteAccountDialog.vue`
+    (danger zone, re-confirms the password before the irreversible
+    `DELETE /users/me` — matches the backend's own re-auth requirement)
+  - **Header notification bell** (`NotificationBell.vue`) — unread-count
+    badge, a popover listing the most recent notifications, mark-one-read
+    and mark-all-read. `stores/notifications.ts` polls
+    `GET /notifications/unread-count` every 30s (delivery is polling, not
+    real-time push, per the backend's own design) — started/stopped from
+    `AppLayout.vue`'s mount/unmount so one poll loop covers every
+    authenticated page
+- **Sidebar nav overhaul** (`AppLayout.vue`) — sticky while page content
+  scrolls; a new account menu at the bottom (avatar, name, "· Free" —
+  hardcoded, no plan/tier field on `User` yet) opening a popup with
+  "Account settings" and a red "Log out". Replaces the old standalone
+  header "Log out" button, the "Welcome back" greeting, and the
+  sidebar's own "Settings" link — each action now has exactly one place
+  to find it.
+
+### Fixed
+
+- **Avatar photo never actually rendered, anywhere it was used** —
+  PrimeVue's `Avatar` renders `label > icon > image`, in that priority
+  order; both usages (`ProfileSettingsCard.vue`, `AppLayout.vue`'s
+  account menu) hardcoded `icon="pi pi-user"` unconditionally, so the
+  icon branch always won and the `image` branch (a real `avatar_url`)
+  never rendered regardless. `icon` is now only bound when there's
+  neither an image nor initials to fall back on.
+
+## v0.13.0
 
 ### Added
 
