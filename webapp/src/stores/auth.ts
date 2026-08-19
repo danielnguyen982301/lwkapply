@@ -1,7 +1,17 @@
 import { defineStore } from 'pinia'
 import { api, extractErrorMessage } from '@/lib/api'
 import { getBrowserTimezone } from '@/lib/timezone'
-import type { AccessTokenResponse, LoginPayload, RegisterPayload, User } from '@/types/auth'
+import type {
+  AccessTokenResponse,
+  AccountDeletePayload,
+  LoginPayload,
+  PasswordChangePayload,
+  ProfileUpdatePayload,
+  RegisterPayload,
+  User,
+} from '@/types/auth'
+
+type RequestStatus = 'idle' | 'loading' | 'error'
 
 interface AuthState {
   user: User | null
@@ -12,6 +22,22 @@ interface AuthState {
    * not, so the router guard and App shell know whether "not logged in"
    * is a confirmed fact yet or still pending. */
   bootstrapped: boolean
+
+  // Separate status/error per settings-page mutation, not reuse of
+  // `status`/`error` above — those are login/register-flow only, and
+  // e.g. a failed avatar upload shouldn't make LoginView think a login
+  // attempt errored.
+  profileStatus: RequestStatus
+  profileError: string | null
+
+  avatarStatus: RequestStatus
+  avatarError: string | null
+
+  passwordStatus: RequestStatus
+  passwordError: string | null
+
+  deleteAccountStatus: RequestStatus
+  deleteAccountError: string | null
 }
 
 // The access token lives in memory only (this store's state) — never
@@ -29,6 +55,18 @@ export const useAuthStore = defineStore('auth', {
     status: 'idle',
     error: null,
     bootstrapped: false,
+
+    profileStatus: 'idle',
+    profileError: null,
+
+    avatarStatus: 'idle',
+    avatarError: null,
+
+    passwordStatus: 'idle',
+    passwordError: null,
+
+    deleteAccountStatus: 'idle',
+    deleteAccountError: null,
   }),
 
   getters: {
@@ -107,6 +145,89 @@ export const useAuthStore = defineStore('auth', {
       }
       this.user = null
       this.accessToken = null
+    },
+
+    // --- Account settings ------------------------------------------------
+    // These all mutate `this.user` in place on success rather than living
+    // in a separate settings store — the account-settings screen and
+    // anywhere else `auth.user` is read (e.g. AppLayout.vue's greeting)
+    // need to see the update immediately, with no extra sync step.
+
+    async updateProfile(payload: ProfileUpdatePayload) {
+      this.profileStatus = 'loading'
+      this.profileError = null
+      try {
+        const { data } = await api.patch<User>('/users/me', payload)
+        this.user = data
+        this.profileStatus = 'idle'
+      } catch (err) {
+        this.profileStatus = 'error'
+        this.profileError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    async uploadAvatar(file: File) {
+      this.avatarStatus = 'loading'
+      this.avatarError = null
+      const formData = new FormData()
+      formData.append('file', file)
+      try {
+        const { data } = await api.post<User>('/users/me/avatar', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        this.user = data
+        this.avatarStatus = 'idle'
+      } catch (err) {
+        this.avatarStatus = 'error'
+        this.avatarError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    async deleteAvatar() {
+      this.avatarStatus = 'loading'
+      this.avatarError = null
+      try {
+        const { data } = await api.delete<User>('/users/me/avatar')
+        this.user = data
+        this.avatarStatus = 'idle'
+      } catch (err) {
+        this.avatarStatus = 'error'
+        this.avatarError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    async changePassword(payload: PasswordChangePayload) {
+      this.passwordStatus = 'loading'
+      this.passwordError = null
+      try {
+        await api.post('/users/me/password', payload)
+        this.passwordStatus = 'idle'
+      } catch (err) {
+        this.passwordStatus = 'error'
+        this.passwordError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    /** Permanently deletes the account. Clears local session state on
+     * success — the backend already cleared the refresh-token cookie —
+     * so the caller just needs to redirect to /login afterward. */
+    async deleteAccount(payload: AccountDeletePayload) {
+      this.deleteAccountStatus = 'loading'
+      this.deleteAccountError = null
+      try {
+        await api.delete('/users/me', { data: payload })
+        this.user = null
+        this.accessToken = null
+        this.deleteAccountStatus = 'idle'
+      } catch (err) {
+        this.deleteAccountStatus = 'error'
+        this.deleteAccountError = extractErrorMessage(err)
+        throw err
+      }
     },
   },
 })

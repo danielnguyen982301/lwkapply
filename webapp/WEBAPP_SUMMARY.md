@@ -13,7 +13,10 @@ same `DataTable`/`Paginator` skeleton — see each section below. Phase 5's
 Analytics dashboard is implemented as of this pass — see Analytics below.
 Phase 7's Resume Parser and ATS Score (backend already existed) now have
 a web UI too — see AI Tools below, the first async/polling flow in this
-frontend.
+frontend. The Account Settings screen and the header notification bell
+(backend already existed too — see TODO.md's former "Account Settings"
+gap) are implemented as of this pass — see Account settings &
+notifications below.
 
 ## What's here
 
@@ -574,15 +577,67 @@ matching every other feature's "one store per resource" convention.
   of the resume analysis that score was run against), both reading
   straight off the server-joined field, no client-side lookup.
 
+### Account settings & notifications
+
+- **Route**: `/settings` (`AccountSettingsView.vue`), reached from a new
+  "Settings" item in `AppLayout.vue`'s sidebar nav
+- **Profile**: avatar upload/remove (`POST`/`DELETE /users/me/avatar`,
+  immediate on file-pick/confirm — not gated behind the section's own
+  Save button, same reasoning `DocumentUploadDialog.vue` doesn't
+  auto-attach) and first/last name (`PATCH /users/me`), both landing on
+  the existing `auth.user` object directly via new actions on
+  `stores/auth.ts` (`updateProfile`/`uploadAvatar`/`deleteAvatar`) rather
+  than a separate store — anything reading `auth.user` (e.g. the header's
+  "Welcome back" greeting) sees the update with no extra sync step. Email
+  is shown read-only (`UserProfileUpdate` has no email field server-side).
+  **No timezone control**: `UserRead` doesn't return the stored timezone
+  at all, so a picker here would have nothing real to prefill and could
+  silently misrepresent what's actually saved — left out rather than
+  built half-blind; still just auto-detected + re-reported on
+  login/refresh, per `AI_CONTEXT.md`
+- **Password**: change form (`POST /users/me/password`) — current
+  password, new password, confirm — `zod`'s `.refine()` cross-field check
+  for the confirm match, same vee-validate pattern as every other form
+  here
+- **Notification preferences**: `stores/userSettings.ts` (new store —
+  `GET`/`PATCH /users/me/settings`), a distinct sub-resource from `User`
+  itself so it doesn't belong on the `auth` store. Master
+  `notifications_enabled` switch plus per-channel email/push
+  `ToggleSwitch`es (visually dimmed, not disabled, when the master switch
+  is off — the backend doesn't reject sub-toggle writes either way), and
+  a reminder-lead-time control: a switch to opt into a custom value at
+  all (`InputNumber`, 1–168h) vs. sending an explicit `null` to fall back
+  to the server's global default. Plain reactive `ref`s rather than
+  vee-validate — booleans and one already-range-clamped number don't need
+  a validation layer
+- **Header notification bell** (`components/notifications/
+  NotificationBell.vue`): unread-count `Badge` + a `Popover` listing the
+  most recent notifications (`GET /notifications`, `BELL_PAGE_SIZE = 10`
+  — no separate "view all notifications" page yet, nothing in the plan
+  called for one). Clicking an unread one marks it read
+  (`POST /notifications/{id}/read`) and, if it carries an
+  `application_id`, navigates to that application's detail page; "Mark
+  all read" hits `POST /notifications/read-all`. `stores/notifications.ts`
+  polls `GET /notifications/unread-count` every 30s — delivery is polling,
+  not real-time push, matching the backend's own design (see
+  `app/api/v1/endpoints/notifications.py`'s module docstring) — started/
+  stopped from `AppLayout.vue`'s mount/unmount so one poll loop covers
+  every authenticated page rather than each view starting its own
+- **Danger zone**: `DeleteAccountDialog.vue` re-confirms the password
+  before `DELETE /users/me`, mirroring the backend's own re-auth
+  requirement for an irreversible action; success clears local session
+  state and redirects to `/login`
+
 ## What's deliberately not here yet
 
 - RBAC-aware UI — explicitly skipped per current backend scope
 - Component/store tests for Applications UI (auth tests exist; application
-  views not yet covered) — Contacts, Interviews, Documents, Analytics, and
-  AI Tools (including their directory/dashboard views/stores) are in the
-  same boat: no tests yet, matching this frontend's existing convention of
-  shipping new feature UI without test coverage (only `LoginView`/
-  `authGuard`/`api.ts` have any)
+  views not yet covered) — Contacts, Interviews, Documents, Analytics, AI
+  Tools, and Account settings & notifications (including their
+  directory/dashboard/settings views and stores) are in the same boat: no
+  tests yet, matching this frontend's existing convention of shipping new
+  feature UI without test coverage (only `LoginView`/`authGuard`/`api.ts`
+  have any)
 - Analytics reporting (CSV/PDF export) — the dashboard itself (charts,
   summary cards) is done; exporting it isn't
 

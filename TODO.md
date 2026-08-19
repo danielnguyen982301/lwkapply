@@ -263,20 +263,21 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ### Account Settings
 
-- [ ] Web has no account settings page at all yet — no route, no nav
-      item, no store logic. Backend is fully built and ready (see
-      BACKEND_SUMMARY.md's "Account settings & notification
-      preferences" and "In-app notification feed"): `PATCH /users/me`,
-      `POST /users/me/password`, `POST`/`DELETE /users/me/avatar`,
-      `DELETE /users/me`, `GET`/`PATCH /users/me/settings`,
-      `GET /notifications` + unread-count + mark-read/read-all. Planned
-      shape (deliberately not started this pass — backend-only pass):
-      route `/settings`, actions added to the existing `stores/auth.ts`
-      (not a new store — mutations need to patch the same `user` object
-      `auth` already owns) plus a new `stores/userSettings.ts` for the
-      settings sub-resource; a header bell icon polling
-      `GET /notifications/unread-count` (not real-time — see
-      BACKEND_SUMMARY.md), backed by a new `stores/notifications.ts`.
+- [x] Web account settings page — route `/settings`
+      (`AccountSettingsView.vue`) + nav item, built against the backend
+      endpoints listed above (`PATCH /users/me`, `POST /users/me/password`,
+      `POST`/`DELETE /users/me/avatar`, `DELETE /users/me`,
+      `GET`/`PATCH /users/me/settings`, `GET /notifications` +
+      unread-count + mark-read/read-all). Built per the planned shape:
+      actions added to the existing `stores/auth.ts` (not a new store —
+      mutations patch the same `user` object `auth` already owns) plus a
+      new `stores/userSettings.ts` for the settings sub-resource; a header
+      bell icon (`NotificationBell.vue`) polling
+      `GET /notifications/unread-count` every 30s (not real-time), backed
+      by a new `stores/notifications.ts`. See WEBAPP_SUMMARY.md's
+      "Account settings & notifications" for the full shape — including
+      why there's no timezone control (`UserRead` doesn't expose the
+      stored value to prefill one).
 
 ---
 
