@@ -5,7 +5,6 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
-import ToggleSwitch from 'primevue/toggleswitch'
 import { useConfirm } from 'primevue/useconfirm'
 import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
@@ -14,6 +13,7 @@ import { useField, useForm } from 'vee-validate'
 import { useAuthStore } from '@/stores/auth'
 import { timezoneOptions } from '@/lib/timezone'
 import CustomInputText from '@/components/custom_form_fields/CustomInputText.vue'
+import CustomToggleSwitch from '@/components/custom_form_fields/CustomToggleSwitch.vue'
 import type { ProfileUpdatePayload } from '@/types/auth'
 
 // first_name/last_name/avatar/timezone are editable here — email isn't
@@ -58,14 +58,18 @@ const {
   },
 })
 
-// Called directly (not through a Custom*.vue wrapper) so both fields join
-// the same form/schema above as first_name/last_name - CustomSelect.vue's
-// useField<string>() has no `null` in its type, which auto_detect_timezone
-// off/no-selection-yet needs. Each field's own `meta.dirty` (not the
-// top-level form's) is what decides whether to actually include `timezone`
-// in the PATCH payload below - PATCH /users/me flips timezone_is_manual
-// purely from the *presence* of that key, so resaving the name fields
-// alone must never resend an unchanged timezone and silently re-lock it.
+// auto_detect_timezone renders through CustomToggleSwitch.vue below (its
+// own internal useField() call shares this same field's state - vee-validate
+// keys field state by name within a form, same as CustomInputText.vue
+// already does for first_name/last_name), but is also read here directly
+// for its current value/meta. `timezone` stays a direct useField() call
+// with no Custom*.vue wrapper - CustomSelect.vue's useField<string>() has
+// no `null` in its type, which "off, nothing picked yet" needs. Each
+// field's own `meta.dirty` (not the top-level form's) is what decides
+// whether to actually include `timezone` in the PATCH payload below -
+// PATCH /users/me flips timezone_is_manual purely from the *presence* of
+// that key, so resaving the name fields alone must never resend an
+// unchanged timezone and silently re-lock it.
 const { value: autoDetectTimezone, meta: autoDetectMeta } =
   useField<boolean>('auto_detect_timezone')
 const {
@@ -252,7 +256,7 @@ function confirmRemoveAvatar() {
               Kept in sync with your browser on login — used to localize interview reminder times.
             </p>
           </div>
-          <ToggleSwitch v-model="autoDetectTimezone" aria-label="Auto-detect timezone" />
+          <CustomToggleSwitch name="auto_detect_timezone" aria-label="Auto-detect timezone" />
         </div>
 
         <div v-if="!autoDetectTimezone" class="flex flex-col gap-1 pl-1">
