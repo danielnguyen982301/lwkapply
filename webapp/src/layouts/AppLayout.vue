@@ -125,7 +125,7 @@ const userMenuItems: MenuItem[] = [
           <Avatar
             :image="auth.user?.avatar_url ?? undefined"
             :label="auth.user?.avatar_url ? undefined : userInitials"
-            icon="pi pi-user"
+            :icon="auth.user?.avatar_url || userInitials ? undefined : 'pi pi-user'"
             shape="circle"
             class="shrink-0"
           />

@@ -136,7 +136,9 @@ function confirmRemoveAvatar() {
       <Avatar
         :image="avatarPreviewUrl ?? auth.user?.avatar_url ?? undefined"
         :label="avatarPreviewUrl || auth.user?.avatar_url ? undefined : avatarInitials"
-        icon="pi pi-user"
+        :icon="
+          avatarPreviewUrl || auth.user?.avatar_url || avatarInitials ? undefined : 'pi pi-user'
+        "
         shape="circle"
         size="xlarge"
         class="shrink-0"
