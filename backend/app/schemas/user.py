@@ -48,6 +48,16 @@ class UserRead(UserBase):
     id: uuid.UUID
     avatar_url: str | None = None
     is_active: bool
+    # NULL until the first register/login/refresh auto-detects one (see
+    # app/utils/timezone.py / _maybe_update_timezone in
+    # app/api/v1/endpoints/auth.py). timezone_is_manual distinguishes
+    # "auto-detected" from "the user explicitly picked this in Account
+    # Settings" - PATCH /users/me sets it True on an explicit non-null
+    # timezone, and back to False on an explicit null (see
+    # UserProfileUpdate.timezone / the endpoint) - so a client can tell
+    # whether re-detecting will silently overwrite this value.
+    timezone: str | None = None
+    timezone_is_manual: bool
 
 
 class UserUpdate(BaseModel):
