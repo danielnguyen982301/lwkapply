@@ -4,19 +4,20 @@ import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Select from 'primevue/select'
 import { useConfirm } from 'primevue/useconfirm'
 import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
 import { useForm } from 'vee-validate'
 
 import { useAuthStore } from '@/stores/auth'
+import { timezoneOptions } from '@/lib/timezone'
 import CustomInputText from '@/components/custom_form_fields/CustomInputText.vue'
+import type { ProfileUpdatePayload } from '@/types/auth'
 
-// Only first_name/last_name/avatar are editable here — email isn't
+// first_name/last_name/avatar/timezone are editable here — email isn't
 // client-settable (UserProfileUpdate has no email field on the backend),
-// so it's shown read-only. There's no timezone control either: UserRead
-// doesn't return the stored timezone, so a picker here would have nothing
-// real to prefill and could silently misrepresent what's actually saved.
+// so it's shown read-only.
 const auth = useAuthStore()
 const confirm = useConfirm()
 
@@ -42,11 +43,23 @@ const {
   initialValues: { first_name: '', last_name: '' },
 })
 
+// Timezone is plain state, not part of the vee-validate form above - it's
+// nullable (clearing the Select means "resume auto-detecting", not "this
+// field is invalid"), and only gets sent when actually changed from what's
+// saved (see onProfileSubmit) - a shape that doesn't fit useField() any
+// more cleanly than NotificationSettingsCard.vue's own toggles did.
+const timezoneValue = ref<string | null>(null)
+const savedTimezone = ref<string | null>(null)
+const timezoneDirty = computed(() => timezoneValue.value !== savedTimezone.value)
+const timezoneOptionsList = timezoneOptions()
+
 watch(
   () => auth.user,
   (user) => {
-    if (user)
-      resetProfileForm({ values: { first_name: user.first_name, last_name: user.last_name } })
+    if (!user) return
+    resetProfileForm({ values: { first_name: user.first_name, last_name: user.last_name } })
+    timezoneValue.value = user.timezone
+    savedTimezone.value = user.timezone
   },
   { immediate: true },
 )
@@ -56,10 +69,18 @@ const profileSuccess = ref(false)
 const onProfileSubmit = handleProfileSubmit(async (formValues) => {
   profileSuccess.value = false
   try {
-    await auth.updateProfile({
+    const payload: ProfileUpdatePayload = {
       first_name: formValues.first_name.trim(),
       last_name: formValues.last_name.trim(),
-    })
+    }
+    // Omitted entirely when unchanged - PATCH /users/me only touches
+    // timezone_is_manual when the "timezone" key is present at all (see
+    // UserProfileUpdate), so resaving the name fields alone must never
+    // silently re-lock an auto-detected timezone.
+    if (timezoneDirty.value) payload.timezone = timezoneValue.value
+
+    await auth.updateProfile(payload)
+    savedTimezone.value = timezoneValue.value
     profileSuccess.value = true
   } catch {
     // auth.profileError is already set and rendered below.
@@ -198,12 +219,38 @@ function confirmRemoveAvatar() {
         />
       </div>
 
+      <div class="flex flex-col gap-1">
+        <label for="settings-timezone" class="text-sm font-medium text-ink">Timezone</label>
+        <Select
+          v-model="timezoneValue"
+          input-id="settings-timezone"
+          :options="timezoneOptionsList"
+          option-label="label"
+          option-value="value"
+          filter
+          show-clear
+          placeholder="Auto-detect from browser"
+          class="w-full"
+        />
+        <p class="text-xs text-slate">
+          <template v-if="auth.user?.timezone_is_manual">
+            Manually set — used to localize interview reminder times. Clear the field to resume
+            auto-detecting from your browser.
+          </template>
+          <template v-else-if="auth.user?.timezone">
+            Auto-detected from your browser ({{ auth.user.timezone }}) — used to localize interview
+            reminder times.
+          </template>
+          <template v-else> Used to localize interview reminder times. </template>
+        </p>
+      </div>
+
       <div class="flex justify-end border-t border-slate/10 pt-4">
         <Button
           type="submit"
           :label="auth.profileStatus === 'loading' ? 'Saving…' : 'Save profile'"
           :loading="auth.profileStatus === 'loading'"
-          :disabled="!profileMeta.dirty || auth.profileStatus === 'loading'"
+          :disabled="(!profileMeta.dirty && !timezoneDirty) || auth.profileStatus === 'loading'"
         />
       </div>
     </form>

@@ -5,6 +5,11 @@ export interface User {
   last_name: string
   avatar_url: string | null
   role: string
+  // NULL until the first register/login/refresh auto-detects one.
+  // timezone_is_manual distinguishes "auto-detected" from "explicitly
+  // set in Account Settings" (see ProfileUpdatePayload.timezone below).
+  timezone: string | null
+  timezone_is_manual: boolean
 }
 
 // The refresh token never appears here anymore — it lives only in the
