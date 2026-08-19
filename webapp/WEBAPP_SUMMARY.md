@@ -579,22 +579,36 @@ matching every other feature's "one store per resource" convention.
 
 ### Account settings & notifications
 
-- **Route**: `/settings` (`AccountSettingsView.vue`), reached from a new
-  "Settings" item in `AppLayout.vue`'s sidebar nav
+- **Route**: `/settings` (`AccountSettingsView.vue`), reached from the
+  account menu at the bottom of `AppLayout.vue`'s sidebar (avatar, name,
+  "· Free" — hardcoded, no plan/tier field on `User` yet — opening a
+  popup `Menu` with "Account settings" and a red "Log out"; replaced the
+  old header "Log out" button, the "Welcome back" greeting, and a plain
+  sidebar "Settings" link, so each action now has exactly one place to
+  find it). Split into independent section components, each owning its
+  own form state and store calls: `ProfileSettingsCard.vue`,
+  `PasswordSettingsCard.vue`, `NotificationSettingsCard.vue`, plus
+  `DeleteAccountDialog.vue` for the danger zone
 - **Profile**: avatar upload/remove (`POST`/`DELETE /users/me/avatar`,
   immediate on file-pick/confirm — not gated behind the section's own
   Save button, same reasoning `DocumentUploadDialog.vue` doesn't
-  auto-attach) and first/last name (`PATCH /users/me`), both landing on
-  the existing `auth.user` object directly via new actions on
-  `stores/auth.ts` (`updateProfile`/`uploadAvatar`/`deleteAvatar`) rather
-  than a separate store — anything reading `auth.user` (e.g. the header's
-  "Welcome back" greeting) sees the update with no extra sync step. Email
-  is shown read-only (`UserProfileUpdate` has no email field server-side).
-  **No timezone control**: `UserRead` doesn't return the stored timezone
-  at all, so a picker here would have nothing real to prefill and could
-  silently misrepresent what's actually saved — left out rather than
-  built half-blind; still just auto-detected + re-reported on
-  login/refresh, per `AI_CONTEXT.md`
+  auto-attach), first/last name (`PATCH /users/me`), and a timezone
+  picker — all landing on the existing `auth.user` object directly via
+  actions on `stores/auth.ts` (`updateProfile`/`uploadAvatar`/
+  `deleteAvatar`) rather than a separate store, so anything reading
+  `auth.user` sees the update with no extra sync step. Email is shown
+  read-only (`UserProfileUpdate` has no email field server-side).
+  **Timezone**: a searchable, clearable PrimeVue `Select`
+  (`lib/timezone.ts`'s `timezoneOptions()`, backed by
+  `Intl.supportedValuesOf('timeZone')` with a browser-detected fallback
+  for environments without it — not in this project's ES2020 `lib`
+  target, so it's called through a local type rather than `any`).
+  Clearing the field sends an explicit `timezone: null`, matching
+  `PATCH /users/me`'s "go back to auto-detect" semantics. Kept out of
+  the section's vee-validate form — nullable, and only sent when
+  actually changed from the saved value (its own `ref` + dirty-check),
+  since resending the initial value on every name-only save would
+  otherwise silently re-lock an auto-detected timezone as manual
 - **Password**: change form (`POST /users/me/password`) — current
   password, new password, confirm — `zod`'s `.refine()` cross-field check
   for the confirm match, same vee-validate pattern as every other form
@@ -611,16 +625,27 @@ matching every other feature's "one store per resource" convention.
   vee-validate — booleans and one already-range-clamped number don't need
   a validation layer
 - **Header notification bell** (`components/notifications/
-  NotificationBell.vue`): unread-count `Badge` + a `Popover` listing the
-  most recent notifications (`GET /notifications`, `BELL_PAGE_SIZE = 10`
-  — no separate "view all notifications" page yet, nothing in the plan
-  called for one). Clicking an unread one marks it read
-  (`POST /notifications/{id}/read`) and, if it carries an
-  `application_id`, navigates to that application's detail page; "Mark
-  all read" hits `POST /notifications/read-all`. `stores/notifications.ts`
-  polls `GET /notifications/unread-count` every 30s — delivery is polling,
-  not real-time push, matching the backend's own design (see
-  `app/api/v1/endpoints/notifications.py`'s module docstring) — started/
+  NotificationBell.vue`): unread-count `Badge` + a `Popover` with two
+  PrimeVue `Tabs` — Unread and Read, backed by `GET /notifications?
+  status=unread|read`. `stores/notifications.ts` holds a single active
+  tab's `items`/`page`/`total` at a time (reset on every tab switch, no
+  dual-list caching); scrolling near the bottom of the popover's list
+  calls `loadMore()`, which appends the next page. Needed a backend
+  change: `GET /notifications` only had `unread_only: bool`, with no way
+  to ask for read-only, so it's now `status: Literal["all", "unread",
+  "read"] = "all"` (additive; the frontend only ever sends `unread`/
+  `read`, never `all`, since there's no "All" tab). Clicking an unread
+  notification marks it read (`POST /notifications/{id}/read`) — dropped
+  from the Unread tab's list rather than patched in place, since it no
+  longer belongs to that filter (offset pagination against a list
+  that's shrinking underneath it can in rare cases skip/repeat an item
+  on the next `loadMore()`, an accepted tradeoff for a small "recent
+  notifications" popover) — and, if it carries an `application_id`,
+  navigates to that application's detail page. "Mark all read" (Unread
+  tab only) hits `POST /notifications/read-all`. Delivery is still
+  polling, not real-time push (`GET /notifications/unread-count` every
+  30s, matching the backend's own design — see
+  `app/api/v1/endpoints/notifications.py`'s module docstring), started/
   stopped from `AppLayout.vue`'s mount/unmount so one poll loop covers
   every authenticated page rather than each view starting its own
 - **Danger zone**: `DeleteAccountDialog.vue` re-confirms the password

@@ -264,20 +264,21 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 ### Account Settings
 
 - [x] Web account settings page — route `/settings`
-      (`AccountSettingsView.vue`) + nav item, built against the backend
-      endpoints listed above (`PATCH /users/me`, `POST /users/me/password`,
+      (`AccountSettingsView.vue`), reached from the account menu at the
+      bottom of the sidebar, built against the backend endpoints listed
+      above (`PATCH /users/me`, `POST /users/me/password`,
       `POST`/`DELETE /users/me/avatar`, `DELETE /users/me`,
       `GET`/`PATCH /users/me/settings`, `GET /notifications` +
       unread-count + mark-read/read-all). Built per the planned shape:
       actions added to the existing `stores/auth.ts` (not a new store —
       mutations patch the same `user` object `auth` already owns) plus a
       new `stores/userSettings.ts` for the settings sub-resource; a header
-      bell icon (`NotificationBell.vue`) polling
-      `GET /notifications/unread-count` every 30s (not real-time), backed
-      by a new `stores/notifications.ts`. See WEBAPP_SUMMARY.md's
-      "Account settings & notifications" for the full shape — including
-      why there's no timezone control (`UserRead` doesn't expose the
-      stored value to prefill one).
+      bell icon (`NotificationBell.vue`) with Unread/Read tabs and
+      infinite scroll, polling `GET /notifications/unread-count` every
+      30s (not real-time), backed by a new `stores/notifications.ts`. A
+      timezone picker (`UserRead` now exposes the stored value) rounds
+      out the Profile section. See WEBAPP_SUMMARY.md's "Account settings
+      & notifications" for the full shape.
 
 ---
 
