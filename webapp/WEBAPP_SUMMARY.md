@@ -625,15 +625,23 @@ matching every other feature's "one store per resource" convention.
   here
 - **Notification preferences**: `stores/userSettings.ts` (new store —
   `GET`/`PATCH /users/me/settings`), a distinct sub-resource from `User`
-  itself so it doesn't belong on the `auth` store. Master
-  `notifications_enabled` switch plus per-channel email/push
-  `ToggleSwitch`es (visually dimmed, not disabled, when the master switch
-  is off — the backend doesn't reject sub-toggle writes either way), and
-  a reminder-lead-time control: a switch to opt into a custom value at
-  all (`InputNumber`, 1–168h) vs. sending an explicit `null` to fall back
-  to the server's global default. Plain reactive `ref`s rather than
-  vee-validate — booleans and one already-range-clamped number don't need
-  a validation layer
+  itself so it doesn't belong on the `auth` store. A `useForm<NotificationSettingsFormValues>`
+  (matching `ProfileSettingsCard.vue`'s shape — `CustomToggleSwitch.vue`/
+  `CustomInputNumber.vue` for every field, `useField()` called directly
+  alongside them for the two values the template needs to branch on)
+  rather than one standalone `ref` per setting, on the expectation that
+  more preferences land here over time. Master `notifications_enabled`
+  switch plus per-channel email/push toggles (dimmed *and* disabled when
+  the master switch is off — the backend doesn't reject sub-toggle
+  writes either way, this is purely a UI nudge), and a reminder-lead-time
+  control: a switch to opt into a custom value at all (`CustomInputNumber`,
+  1–168h) vs. sending an explicit `null` to fall back to the server's
+  global default. Unlike `ProfileSettingsCard.vue`'s timezone fields,
+  `PATCH /users/me/settings` applies every field uniformly via
+  `exclude_unset` (no per-field side effect to dodge), so the submit
+  handler just resends the full current form state — no per-field
+  dirty-checking needed, only the whole form's `meta.dirty` to gate the
+  Save button
 - **Header notification bell** (`components/notifications/
   NotificationBell.vue`): unread-count `Badge` + a `Popover` with two
   PrimeVue `Tabs` — Unread and Read, backed by `GET /notifications?
