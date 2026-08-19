@@ -50,7 +50,8 @@ async function handleNotificationClick(notification: Notification) {
     store.markRead(notification.id).catch(() => {})
   }
   if (notification.application_id) {
-    popover.value?.hide()
+    // Deliberately doesn't close the popover - navigating to check one
+    // notification shouldn't lose your place in the list underneath it.
     await router.push({ name: 'application-detail', params: { id: notification.application_id } })
   }
 }
@@ -79,22 +80,25 @@ function handleMarkAllRead() {
   </span>
 
   <Popover ref="popover" class="w-80">
-    <div class="flex items-center justify-between gap-2 px-1 pb-2">
-      <Tabs :value="store.activeStatus" @update:value="handleTabChange">
-        <TabList>
-          <Tab value="unread">Unread</Tab>
-          <Tab value="read">Read</Tab>
+    <div class="px-1 pb-2">
+      <Tabs :value="store.activeStatus" class="w-full" @update:value="handleTabChange">
+        <TabList class="w-full">
+          <Tab value="unread" class="flex-1 justify-center">Unread</Tab>
+          <Tab value="read" class="flex-1 justify-center">Read</Tab>
         </TabList>
       </Tabs>
-      <Button
+      <div
         v-if="store.activeStatus === 'unread' && store.unreadCount > 0"
-        label="Mark all read"
-        link
-        size="small"
-        class="shrink-0"
-        :loading="store.mutationStatus === 'loading'"
-        @click="handleMarkAllRead"
-      />
+        class="flex justify-end pt-2"
+      >
+        <Button
+          label="Mark all read"
+          link
+          size="small"
+          :loading="store.mutationStatus === 'loading'"
+          @click="handleMarkAllRead"
+        />
+      </div>
     </div>
 
     <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
