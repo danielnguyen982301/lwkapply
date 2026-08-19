@@ -141,7 +141,7 @@ const userMenuItems: MenuItem[] = [
     <Menu ref="userMenu" :model="userMenuItems" :popup="true">
       <template #item="{ item, props }">
         <a v-bind="props.action" :class="item.class">
-          <span v-if="item.icon" v-bind="props.icon" />
+          <span v-if="item.icon" v-bind="props.icon" :class="item.class" />
           <span v-bind="props.label">{{ item.label }}</span>
         </a>
       </template>
