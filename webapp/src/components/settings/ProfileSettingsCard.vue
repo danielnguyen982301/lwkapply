@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -74,6 +74,24 @@ const avatarInitials = computed(() => {
 
 const avatarFileInput = ref<HTMLInputElement | null>(null)
 
+// Local object-URL preview of the just-picked file, shown immediately
+// instead of the stale avatar while uploadAvatar()'s request is in
+// flight — the server-presigned avatar_url only lands once the round
+// trip finishes. Cleared (and revoked, to avoid leaking the blob) once
+// the request settles either way: on success the real avatar_url takes
+// over, on failure the pre-upload avatar shows again alongside the error
+// message below.
+const avatarPreviewUrl = ref<string | null>(null)
+
+function clearAvatarPreview() {
+  if (avatarPreviewUrl.value) {
+    URL.revokeObjectURL(avatarPreviewUrl.value)
+    avatarPreviewUrl.value = null
+  }
+}
+
+onBeforeUnmount(clearAvatarPreview)
+
 function triggerAvatarPicker() {
   avatarFileInput.value?.click()
 }
@@ -83,7 +101,17 @@ async function onAvatarFileChange(event: Event) {
   const file = target.files?.[0] ?? null
   target.value = ''
   if (!file) return
-  await auth.uploadAvatar(file).catch(() => {})
+
+  clearAvatarPreview()
+  avatarPreviewUrl.value = URL.createObjectURL(file)
+
+  try {
+    await auth.uploadAvatar(file)
+  } catch {
+    // auth.avatarError is already set and rendered below.
+  } finally {
+    clearAvatarPreview()
+  }
 }
 
 function confirmRemoveAvatar() {
@@ -106,8 +134,8 @@ function confirmRemoveAvatar() {
 
     <div class="mt-4 flex items-center gap-4">
       <Avatar
-        :image="auth.user?.avatar_url ?? undefined"
-        :label="auth.user?.avatar_url ? undefined : avatarInitials"
+        :image="avatarPreviewUrl ?? auth.user?.avatar_url ?? undefined"
+        :label="avatarPreviewUrl || auth.user?.avatar_url ? undefined : avatarInitials"
         icon="pi pi-user"
         shape="circle"
         size="xlarge"
