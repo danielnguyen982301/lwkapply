@@ -4,32 +4,43 @@ import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Select from 'primevue/select'
 import { useConfirm } from 'primevue/useconfirm'
 import { toTypedSchema } from '@vee-validate/zod'
 import z from 'zod'
-import { useForm } from 'vee-validate'
+import { useField, useForm } from 'vee-validate'
 
 import { useAuthStore } from '@/stores/auth'
+import { timezoneOptions } from '@/lib/timezone'
 import CustomInputText from '@/components/custom_form_fields/CustomInputText.vue'
+import CustomToggleSwitch from '@/components/custom_form_fields/CustomToggleSwitch.vue'
+import type { ProfileUpdatePayload } from '@/types/auth'
 
-// Only first_name/last_name/avatar are editable here — email isn't
+// first_name/last_name/avatar/timezone are editable here — email isn't
 // client-settable (UserProfileUpdate has no email field on the backend),
-// so it's shown read-only. There's no timezone control either: UserRead
-// doesn't return the stored timezone, so a picker here would have nothing
-// real to prefill and could silently misrepresent what's actually saved.
+// so it's shown read-only.
 const auth = useAuthStore()
 const confirm = useConfirm()
 
 interface ProfileFormValues {
   first_name: string
   last_name: string
+  auto_detect_timezone: boolean
+  timezone: string | null
 }
 
 const profileValidationSchema = toTypedSchema(
-  z.object({
-    first_name: z.string().trim().min(1, 'First name is required.').max(100),
-    last_name: z.string().trim().min(1, 'Last name is required.').max(100),
-  }),
+  z
+    .object({
+      first_name: z.string().trim().min(1, 'First name is required.').max(100),
+      last_name: z.string().trim().min(1, 'Last name is required.').max(100),
+      auto_detect_timezone: z.boolean(),
+      timezone: z.string().nullable(),
+    })
+    .refine((values) => values.auto_detect_timezone || !!values.timezone, {
+      message: 'Choose a timezone, or turn auto-detect back on.',
+      path: ['timezone'],
+    }),
 )
 
 const {
@@ -39,14 +50,48 @@ const {
   resetForm: resetProfileForm,
 } = useForm<ProfileFormValues>({
   validationSchema: profileValidationSchema,
-  initialValues: { first_name: '', last_name: '' },
+  initialValues: {
+    first_name: '',
+    last_name: '',
+    auto_detect_timezone: true,
+    timezone: null,
+  },
 })
+
+// auto_detect_timezone renders through CustomToggleSwitch.vue below (its
+// own internal useField() call shares this same field's state - vee-validate
+// keys field state by name within a form, same as CustomInputText.vue
+// already does for first_name/last_name), but is also read here directly
+// for its current value/meta. `timezone` stays a direct useField() call
+// with no Custom*.vue wrapper - CustomSelect.vue's useField<string>() has
+// no `null` in its type, which "off, nothing picked yet" needs. Each
+// field's own `meta.dirty` (not the top-level form's) is what decides
+// whether to actually include `timezone` in the PATCH payload below -
+// PATCH /users/me flips timezone_is_manual purely from the *presence* of
+// that key, so resaving the name fields alone must never resend an
+// unchanged timezone and silently re-lock it.
+const { value: autoDetectTimezone, meta: autoDetectMeta } =
+  useField<boolean>('auto_detect_timezone')
+const {
+  value: timezoneValue,
+  meta: timezoneFieldMeta,
+  errorMessage: timezoneError,
+} = useField<string | null>('timezone')
+const timezoneSectionDirty = computed(() => autoDetectMeta.dirty || timezoneFieldMeta.dirty)
+const timezoneOptionsList = timezoneOptions()
 
 watch(
   () => auth.user,
   (user) => {
-    if (user)
-      resetProfileForm({ values: { first_name: user.first_name, last_name: user.last_name } })
+    if (!user) return
+    resetProfileForm({
+      values: {
+        first_name: user.first_name,
+        last_name: user.last_name,
+        auto_detect_timezone: !user.timezone_is_manual,
+        timezone: user.timezone,
+      },
+    })
   },
   { immediate: true },
 )
@@ -56,10 +101,15 @@ const profileSuccess = ref(false)
 const onProfileSubmit = handleProfileSubmit(async (formValues) => {
   profileSuccess.value = false
   try {
-    await auth.updateProfile({
+    const payload: ProfileUpdatePayload = {
       first_name: formValues.first_name.trim(),
       last_name: formValues.last_name.trim(),
-    })
+    }
+    if (timezoneSectionDirty.value) {
+      payload.timezone = formValues.auto_detect_timezone ? null : formValues.timezone
+    }
+
+    await auth.updateProfile(payload)
     profileSuccess.value = true
   } catch {
     // auth.profileError is already set and rendered below.
@@ -196,6 +246,38 @@ function confirmRemoveAvatar() {
           aria-readonly="true"
           class="w-full"
         />
+      </div>
+
+      <div class="flex flex-col gap-2 border-t border-slate/10 pt-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-ink">Auto-detect timezone</p>
+            <p class="text-sm text-slate">
+              Kept in sync with your browser on login — used to localize interview reminder times.
+            </p>
+          </div>
+          <CustomToggleSwitch name="auto_detect_timezone" aria-label="Auto-detect timezone" />
+        </div>
+
+        <div v-if="!autoDetectTimezone" class="flex flex-col gap-1 pl-1">
+          <label for="settings-timezone" class="text-sm font-medium text-ink">
+            Choose your own timezone
+          </label>
+          <Select
+            v-model="timezoneValue"
+            input-id="settings-timezone"
+            :options="timezoneOptionsList"
+            option-label="label"
+            option-value="value"
+            filter
+            placeholder="Select a timezone"
+            :invalid="!!timezoneError"
+            class="w-full"
+          />
+          <Message v-if="timezoneError" severity="error" variant="simple" size="small">
+            {{ timezoneError }}
+          </Message>
+        </div>
       </div>
 
       <div class="flex justify-end border-t border-slate/10 pt-4">

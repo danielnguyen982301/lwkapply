@@ -26,3 +26,9 @@ export interface NotificationListResponse {
 export interface UnreadCountResponse {
   unread_count: number
 }
+
+// Mirrors GET /notifications' `status` query param (backend/app/api/v1/
+// endpoints/notifications.py). The backend also accepts "all", but the
+// bell popover only ever shows two tabs — Unread and Read — so the
+// frontend-facing type is narrower than the full backend contract.
+export type NotificationStatusFilter = 'unread' | 'read'

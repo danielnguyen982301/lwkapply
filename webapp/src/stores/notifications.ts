@@ -3,6 +3,7 @@ import { api, extractErrorMessage } from '@/lib/api'
 import type {
   Notification,
   NotificationListResponse,
+  NotificationStatusFilter,
   UnreadCountResponse,
 } from '@/types/notification'
 
@@ -13,16 +14,24 @@ type RequestStatus = 'idle' | 'loading' | 'error'
 // bell badge just re-checks the unread count on this interval rather than
 // holding a socket open.
 const POLL_INTERVAL_MS = 30_000
-const BELL_PAGE_SIZE = 10
+const PAGE_SIZE = 15
 
 interface NotificationsState {
-  // The bell dropdown's own short list — not a full paginated "all
-  // notifications" view (nothing in the plan calls for one yet), so this
-  // only ever holds the single most-recent page.
+  // The bell popover's two tabs (GET /notifications?status=unread|read) —
+  // no "all" tab, so there's exactly one items/page/total set at a time,
+  // reset on every tab switch rather than keeping both lists warm.
+  activeStatus: NotificationStatusFilter
   items: Notification[]
+  page: number
   total: number
   listStatus: RequestStatus
   listError: string | null
+
+  // Separate from listStatus so infinite-scroll's "fetch the next page"
+  // doesn't fight with a tab switch's "replace everything" for the same
+  // loading flag.
+  loadMoreStatus: RequestStatus
+  loadMoreError: string | null
 
   unreadCount: number
   pollHandle: ReturnType<typeof setInterval> | null
@@ -33,10 +42,15 @@ interface NotificationsState {
 
 export const useNotificationsStore = defineStore('notifications', {
   state: (): NotificationsState => ({
+    activeStatus: 'unread',
     items: [],
+    page: 1,
     total: 0,
     listStatus: 'idle',
     listError: null,
+
+    loadMoreStatus: 'idle',
+    loadMoreError: null,
 
     unreadCount: 0,
     pollHandle: null,
@@ -45,20 +59,50 @@ export const useNotificationsStore = defineStore('notifications', {
     mutationError: null,
   }),
 
+  getters: {
+    hasMore: (state) => state.items.length < state.total,
+  },
+
   actions: {
-    async fetchNotifications() {
+    /** Replaces `items` with page 1 of the given (or current) status —
+     * used both for the initial popover-open fetch and for switching
+     * tabs. */
+    async fetchNotifications(status?: NotificationStatusFilter) {
+      this.activeStatus = status ?? this.activeStatus
       this.listStatus = 'loading'
       this.listError = null
       try {
         const { data } = await api.get<NotificationListResponse>('/notifications', {
-          params: { page: 1, page_size: BELL_PAGE_SIZE },
+          params: { status: this.activeStatus, page: 1, page_size: PAGE_SIZE },
         })
         this.items = data.items
         this.total = data.total
+        this.page = data.page
         this.listStatus = 'idle'
       } catch (err) {
         this.listStatus = 'error'
         this.listError = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    /** Infinite scroll: appends the next page for the current tab. */
+    async loadMore() {
+      if (this.loadMoreStatus === 'loading' || !this.hasMore) return
+      this.loadMoreStatus = 'loading'
+      this.loadMoreError = null
+      try {
+        const nextPage = this.page + 1
+        const { data } = await api.get<NotificationListResponse>('/notifications', {
+          params: { status: this.activeStatus, page: nextPage, page_size: PAGE_SIZE },
+        })
+        this.items = [...this.items, ...data.items]
+        this.total = data.total
+        this.page = data.page
+        this.loadMoreStatus = 'idle'
+      } catch (err) {
+        this.loadMoreStatus = 'error'
+        this.loadMoreError = extractErrorMessage(err)
         throw err
       }
     },
@@ -77,7 +121,20 @@ export const useNotificationsStore = defineStore('notifications', {
         const { data } = await api.post<Notification>(`/notifications/${notificationId}/read`)
         const index = this.items.findIndex((item) => item.id === notificationId)
         const wasUnread = index !== -1 && this.items[index].read_at === null
-        if (index !== -1) this.items[index] = data
+        if (index !== -1) {
+          if (this.activeStatus === 'unread') {
+            // No longer belongs in this tab's filter — drop it rather than
+            // patch it in place. (Offset pagination against a list that's
+            // shrinking underneath it can in rare cases skip/repeat an item
+            // on the next loadMore() — an acceptable tradeoff for a small
+            // "recent notifications" popover, not worth a cursor-based
+            // rewrite of the list endpoint for.)
+            this.items.splice(index, 1)
+            this.total = Math.max(0, this.total - 1)
+          } else {
+            this.items[index] = data
+          }
+        }
         if (wasUnread) this.unreadCount = Math.max(0, this.unreadCount - 1)
       } catch (err) {
         this.mutationError = extractErrorMessage(err)
@@ -90,9 +147,11 @@ export const useNotificationsStore = defineStore('notifications', {
       this.mutationError = null
       try {
         await api.post('/notifications/read-all')
-        const now = new Date().toISOString()
-        this.items = this.items.map((item) => (item.read_at ? item : { ...item, read_at: now }))
         this.unreadCount = 0
+        if (this.activeStatus === 'unread') {
+          this.items = []
+          this.total = 0
+        }
         this.mutationStatus = 'idle'
       } catch (err) {
         this.mutationStatus = 'error'

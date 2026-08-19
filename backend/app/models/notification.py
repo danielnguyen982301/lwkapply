@@ -36,9 +36,9 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "notifications"
     __table_args__ = (
         # The bell badge's unread-count query and the list view's
-        # unread_only filter both filter on exactly this pair - a plain
-        # user_id index alone would still need a filter scan over every
-        # already-read notification too.
+        # status=unread/read filter both filter on exactly this pair - a
+        # plain user_id index alone would still need a filter scan over
+        # every already-/not-yet-read notification too.
         Index("ix_notifications_user_id_read_at", "user_id", "read_at"),
     )
 

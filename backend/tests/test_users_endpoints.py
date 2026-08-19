@@ -57,6 +57,16 @@ class TestUsersAuth:
         response = client.get(f"{USERS_URL}/me")
         assert response.status_code == 401
 
+    def test_read_me_exposes_timezone_fields(self, client, make_user, auth_headers):
+        user = make_user()
+
+        response = client.get(f"{USERS_URL}/me", headers=auth_headers(user))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["timezone"] is None
+        assert body["timezone_is_manual"] is False
+
 
 class TestUpdateProfile:
     def test_updates_first_and_last_name(self, client, make_user, auth_headers):
@@ -85,6 +95,9 @@ class TestUpdateProfile:
         )
 
         assert response.status_code == 200
+        body = response.json()
+        assert body["timezone"] == "America/New_York"
+        assert body["timezone_is_manual"] is True
         db_session.refresh(user)
         assert user.timezone == "America/New_York"
         assert user.timezone_is_manual is True
@@ -101,6 +114,9 @@ class TestUpdateProfile:
         )
 
         assert response.status_code == 200
+        body = response.json()
+        assert body["timezone"] is None
+        assert body["timezone_is_manual"] is False
         db_session.refresh(user)
         assert user.timezone is None
         assert user.timezone_is_manual is False
@@ -120,9 +136,12 @@ class TestUpdateProfile:
         )
 
         assert response.status_code == 200
-        db_session.refresh(user)
+        body = response.json()
         # The stored value is untouched - only the manual lock is released,
         # so the next login/refresh's auto-detect can resume writing it.
+        assert body["timezone"] == "America/New_York"
+        assert body["timezone_is_manual"] is False
+        db_session.refresh(user)
         assert user.timezone == "America/New_York"
         assert user.timezone_is_manual is False
 

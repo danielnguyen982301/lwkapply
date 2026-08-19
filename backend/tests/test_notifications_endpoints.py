@@ -67,7 +67,7 @@ class TestListNotifications:
         titles = [item["title"] for item in response.json()["items"]]
         assert titles == ["Newer", "Older"]
 
-    def test_unread_only_filter(self, client, db_session, make_user, auth_headers):
+    def test_status_unread_filter(self, client, db_session, make_user, auth_headers):
         user = make_user()
         _make_notification(db_session, user, title="Unread")
         _make_notification(
@@ -78,12 +78,55 @@ class TestListNotifications:
         )
 
         response = client.get(
-            f"{NOTIFICATIONS_URL}?unread_only=true", headers=auth_headers(user)
+            f"{NOTIFICATIONS_URL}?status=unread", headers=auth_headers(user)
         )
 
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["title"] == "Unread"
+
+    def test_status_read_filter(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        _make_notification(db_session, user, title="Unread")
+        _make_notification(
+            db_session,
+            user,
+            title="Already read",
+            read_at=datetime.now(timezone.utc),
+        )
+
+        response = client.get(
+            f"{NOTIFICATIONS_URL}?status=read", headers=auth_headers(user)
+        )
+
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Already read"
+
+    def test_status_all_is_the_default(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        _make_notification(db_session, user, title="Unread")
+        _make_notification(
+            db_session,
+            user,
+            title="Already read",
+            read_at=datetime.now(timezone.utc),
+        )
+
+        response = client.get(NOTIFICATIONS_URL, headers=auth_headers(user))
+
+        assert response.json()["total"] == 2
+
+    def test_invalid_status_is_rejected(self, client, make_user, auth_headers):
+        user = make_user()
+
+        response = client.get(
+            f"{NOTIFICATIONS_URL}?status=bogus", headers=auth_headers(user)
+        )
+
+        assert response.status_code == 422
 
 
 class TestUnreadCount:

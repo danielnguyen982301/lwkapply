@@ -1,37 +1,84 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
-import InputNumber from 'primevue/inputnumber'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import ToggleSwitch from 'primevue/toggleswitch'
+import { toTypedSchema } from '@vee-validate/zod'
+import z from 'zod'
+import { useField, useForm } from 'vee-validate'
 
 import { useUserSettingsStore } from '@/stores/userSettings'
+import CustomInputNumber from '@/components/custom_form_fields/CustomInputNumber.vue'
+import CustomToggleSwitch from '@/components/custom_form_fields/CustomToggleSwitch.vue'
 
 const settingsStore = useUserSettingsStore()
 
-// Plain reactive state rather than vee-validate — three booleans and one
-// bounded number (enforced by InputNumber's own min/max) don't need a
-// validation layer, and mixing ToggleSwitch into a vee-validate form would
-// mean giving every toggle its own useField() for no real benefit.
-
-const notificationsEnabled = ref(true)
-const emailNotificationsEnabled = ref(true)
-const pushNotificationsEnabled = ref(true)
-const useCustomReminderLeadHours = ref(false)
-const reminderLeadHours = ref<number | null>(24)
-
 const DEFAULT_REMINDER_LEAD_HOURS = 24
+
+// A real vee-validate form now, not a pile of standalone booleans - this
+// only has one number field today (reminder_lead_hours), but it won't
+// stay that way as more preferences land here, and every one of them
+// would otherwise need its own single-purpose ref. PATCH
+// /users/me/settings applies every field uniformly via exclude_unset
+// (no per-field side effect like ProfileSettingsCard.vue's
+// timezone_is_manual), so unlike that form, there's no need to track
+// which individual field changed - the whole form's own `meta.dirty`
+// is enough to gate the Save button, and every submit just resends the
+// full current state.
+interface NotificationSettingsFormValues {
+  notifications_enabled: boolean
+  email_notifications_enabled: boolean
+  push_notifications_enabled: boolean
+  use_custom_reminder_lead_hours: boolean
+  reminder_lead_hours: number
+}
+
+const notificationSettingsValidationSchema = toTypedSchema(
+  z.object({
+    notifications_enabled: z.boolean(),
+    email_notifications_enabled: z.boolean(),
+    push_notifications_enabled: z.boolean(),
+    use_custom_reminder_lead_hours: z.boolean(),
+    reminder_lead_hours: z.number().min(1).max(168),
+  }),
+)
+
+const {
+  handleSubmit: handleSettingsSubmit,
+  meta: settingsMeta,
+  resetForm: resetSettingsForm,
+} = useForm<NotificationSettingsFormValues>({
+  validationSchema: notificationSettingsValidationSchema,
+  initialValues: {
+    notifications_enabled: true,
+    email_notifications_enabled: true,
+    push_notifications_enabled: true,
+    use_custom_reminder_lead_hours: false,
+    reminder_lead_hours: DEFAULT_REMINDER_LEAD_HOURS,
+  },
+})
+
+// Read directly (alongside the CustomToggleSwitch.vue below that also
+// binds them) purely for template conditionals - disabling the
+// email/push toggles, and showing the lead-time InputNumber. Same
+// shared-field-state pattern ProfileSettingsCard.vue uses for
+// auto_detect_timezone.
+const { value: notificationsEnabled } = useField<boolean>('notifications_enabled')
+const { value: useCustomReminderLeadHours } = useField<boolean>('use_custom_reminder_lead_hours')
 
 watch(
   () => settingsStore.settings,
   (settings) => {
     if (!settings) return
-    notificationsEnabled.value = settings.notifications_enabled
-    emailNotificationsEnabled.value = settings.email_notifications_enabled
-    pushNotificationsEnabled.value = settings.push_notifications_enabled
-    useCustomReminderLeadHours.value = settings.reminder_lead_hours !== null
-    reminderLeadHours.value = settings.reminder_lead_hours ?? DEFAULT_REMINDER_LEAD_HOURS
+    resetSettingsForm({
+      values: {
+        notifications_enabled: settings.notifications_enabled,
+        email_notifications_enabled: settings.email_notifications_enabled,
+        push_notifications_enabled: settings.push_notifications_enabled,
+        use_custom_reminder_lead_hours: settings.reminder_lead_hours !== null,
+        reminder_lead_hours: settings.reminder_lead_hours ?? DEFAULT_REMINDER_LEAD_HOURS,
+      },
+    })
   },
   { immediate: true },
 )
@@ -42,20 +89,22 @@ onMounted(() => {
 
 const settingsSuccess = ref(false)
 
-async function handleSettingsSubmit() {
+const onSettingsSubmit = handleSettingsSubmit(async (formValues) => {
   settingsSuccess.value = false
   try {
     await settingsStore.updateSettings({
-      notifications_enabled: notificationsEnabled.value,
-      email_notifications_enabled: emailNotificationsEnabled.value,
-      push_notifications_enabled: pushNotificationsEnabled.value,
-      reminder_lead_hours: useCustomReminderLeadHours.value ? reminderLeadHours.value : null,
+      notifications_enabled: formValues.notifications_enabled,
+      email_notifications_enabled: formValues.email_notifications_enabled,
+      push_notifications_enabled: formValues.push_notifications_enabled,
+      reminder_lead_hours: formValues.use_custom_reminder_lead_hours
+        ? formValues.reminder_lead_hours
+        : null,
     })
     settingsSuccess.value = true
   } catch {
     // settingsStore.mutationError is already set and rendered below.
   }
-}
+})
 </script>
 
 <template>
@@ -86,7 +135,7 @@ async function handleSettingsSubmit() {
       />
     </Message>
 
-    <form v-else class="mt-4 space-y-4" @submit.prevent="handleSettingsSubmit">
+    <form v-else class="mt-4 space-y-4" @submit.prevent="onSettingsSubmit">
       <Message v-if="settingsStore.mutationStatus === 'error'" severity="error" :closable="false">
         {{ settingsStore.mutationError }}
       </Message>
@@ -104,7 +153,7 @@ async function handleSettingsSubmit() {
           <p class="text-sm font-medium text-ink">Notifications</p>
           <p class="text-sm text-slate">Master switch for interview reminders.</p>
         </div>
-        <ToggleSwitch v-model="notificationsEnabled" aria-label="Enable notifications" />
+        <CustomToggleSwitch name="notifications_enabled" aria-label="Enable notifications" />
       </div>
 
       <div
@@ -115,8 +164,8 @@ async function handleSettingsSubmit() {
           <p class="text-sm font-medium text-ink">Email</p>
           <p class="text-sm text-slate">Send reminders by email.</p>
         </div>
-        <ToggleSwitch
-          v-model="emailNotificationsEnabled"
+        <CustomToggleSwitch
+          name="email_notifications_enabled"
           :disabled="!notificationsEnabled"
           aria-label="Enable email notifications"
         />
@@ -130,8 +179,8 @@ async function handleSettingsSubmit() {
           <p class="text-sm font-medium text-ink">Push</p>
           <p class="text-sm text-slate">Send reminders to your mobile device.</p>
         </div>
-        <ToggleSwitch
-          v-model="pushNotificationsEnabled"
+        <CustomToggleSwitch
+          name="push_notifications_enabled"
           :disabled="!notificationsEnabled"
           aria-label="Enable push notifications"
         />
@@ -146,14 +195,14 @@ async function handleSettingsSubmit() {
               {{ DEFAULT_REMINDER_LEAD_HOURS }} hours.
             </p>
           </div>
-          <ToggleSwitch
-            v-model="useCustomReminderLeadHours"
+          <CustomToggleSwitch
+            name="use_custom_reminder_lead_hours"
             aria-label="Use a custom reminder lead time"
           />
         </div>
         <div v-if="useCustomReminderLeadHours" class="mt-3 flex items-center gap-2">
-          <InputNumber
-            v-model="reminderLeadHours"
+          <CustomInputNumber
+            name="reminder_lead_hours"
             input-id="settings-reminder-lead-hours"
             :min="1"
             :max="168"
@@ -169,6 +218,7 @@ async function handleSettingsSubmit() {
           type="submit"
           :label="settingsStore.mutationStatus === 'loading' ? 'Saving…' : 'Save preferences'"
           :loading="settingsStore.mutationStatus === 'loading'"
+          :disabled="!settingsMeta.dirty || settingsStore.mutationStatus === 'loading'"
         />
       </div>
     </form>

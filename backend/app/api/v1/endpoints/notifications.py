@@ -12,6 +12,7 @@ planning notes. That's a frontend concern; nothing here changes because of it.
 
 import uuid
 from datetime import datetime, timezone as dt_timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, update
@@ -51,15 +52,19 @@ def _get_owned_notification(
 
 @router.get("", response_model=NotificationListResponse)
 def list_notifications(
-    unread_only: bool = False,
+    status_filter: Literal["all", "unread", "read"] = Query(
+        default="all", alias="status"
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
     stmt = select(Notification).where(Notification.user_id == current_user.id)
-    if unread_only:
+    if status_filter == "unread":
         stmt = stmt.where(Notification.read_at.is_(None))
+    elif status_filter == "read":
+        stmt = stmt.where(Notification.read_at.is_not(None))
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = (
