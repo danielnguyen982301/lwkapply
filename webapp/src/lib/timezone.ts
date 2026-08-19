@@ -35,6 +35,32 @@ type IntlWithSupportedValuesOf = typeof Intl & {
   supportedValuesOf?: (key: 'timeZone') => string[]
 }
 
+// Also missing from the ES2020 `lib` target - `timeZoneName: 'shortOffset'`
+// (e.g. "GMT+7") is a later addition to Intl.DateTimeFormatOptions than
+// this project's lib covers. Same reasoning/pattern as
+// IntlWithSupportedValuesOf above.
+type ShortOffsetFormatOptions = Intl.DateTimeFormatOptions & { timeZoneName?: 'shortOffset' }
+
+/** "UTC+7"/"UTC-5"/"UTC+5:30" for the given IANA zone, or `null` if the
+ * zone name is bad or the runtime can't format it (older Safari doesn't
+ * support `timeZoneName: 'shortOffset'`, though it does support the zone
+ * names themselves). Reflects the offset *right now*, not a fixed
+ * standard-time value - the only sane choice for zones that observe DST,
+ * and matches how e.g. Google Calendar's own timezone picker labels them. */
+function formatUtcOffset(zone: string): string | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      timeZoneName: 'shortOffset',
+    } as ShortOffsetFormatOptions).formatToParts(new Date())
+    const offset = parts.find((part) => part.type === 'timeZoneName')?.value
+    // "GMT" (not "GMT+0") for zero-offset zones - normalize to "UTC" either way.
+    return offset ? offset.replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+0') : null
+  } catch {
+    return null
+  }
+}
+
 export function timezoneOptions(): TimezoneOption[] {
   if (cachedTimezoneOptions) return cachedTimezoneOptions
 
@@ -45,9 +71,10 @@ export function timezoneOptions(): TimezoneOption[] {
   const fallback = getBrowserTimezone()
   const zones = supportedValuesOf?.('timeZone') ?? (fallback ? [fallback] : [])
 
-  cachedTimezoneOptions = zones.map((zone) => ({
-    label: zone.replace(/_/g, ' '),
-    value: zone,
-  }))
+  cachedTimezoneOptions = zones.map((zone) => {
+    const offset = formatUtcOffset(zone)
+    const name = zone.replace(/_/g, ' ')
+    return { label: offset ? `${name} (${offset})` : name, value: zone }
+  })
   return cachedTimezoneOptions
 }
