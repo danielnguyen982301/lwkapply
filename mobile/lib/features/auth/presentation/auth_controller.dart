@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../notifications/data/push_service.dart';
+import '../../notifications/presentation/notifications_controller.dart';
 import '../../settings/data/user_api.dart';
 import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
@@ -50,12 +51,14 @@ class AuthController extends StateNotifier<AuthState> {
     state = AuthState.authenticated(user: user, accessToken: accessToken);
     _ref.read(accessTokenProvider.notifier).state = accessToken;
     _ref.read(currentUserProvider.notifier).state = user;
+    _ref.read(notificationsControllerProvider.notifier).startPolling();
   }
 
   void _setUnauthenticated({String? errorMessage}) {
     state = AuthState.unauthenticated(errorMessage: errorMessage);
     _ref.read(accessTokenProvider.notifier).state = null;
     _ref.read(currentUserProvider.notifier).state = null;
+    _ref.read(notificationsControllerProvider.notifier).stopPolling();
   }
 
   /// Updates `state.user`/`currentUserProvider` together after a
@@ -154,6 +157,7 @@ class AuthController extends StateNotifier<AuthState> {
       errorMessage: 'Your session expired. Please log in again.',
     );
     _ref.read(currentUserProvider.notifier).state = null;
+    _ref.read(notificationsControllerProvider.notifier).stopPolling();
   }
 
   // --- Account settings -------------------------------------------------
