@@ -23,8 +23,11 @@ The bottom nav shrank from 4 tabs to 2 (Applications + a card-grid
 the tab bar further — see "Navigation shell" below for the full
 reasoning. Settings has grown from a logout-only screen into the full
 account-settings screen (profile/avatar, password, timezone,
-notification preferences, account deletion) — see "Settings screen"
-below. Analytics is implemented — see "Analytics feature" below.
+notification preferences, account deletion), and a new in-app
+notification feed (bell icon + Unread/Read list) exists alongside the
+push notifications already implemented — see "Settings screen" and
+"Notifications feed" below. Analytics is implemented — see "Analytics
+feature" below.
 
 AI Tools (Resume Parser + ATS Score) is implemented — the backend and
 web UI already existed; this is the mobile client for both, including a
@@ -269,6 +272,46 @@ place instead of five.
   auth-state `redirect` (see `app/router.dart`) sends the user to
   `/login` afterward on its own, same as a plain logout — the dialog
   itself doesn't navigate anywhere.
+
+### Notifications feed
+
+New ground on mobile — no in-app notification list/bell UI existed
+before this pass (push notifications for interview reminders already
+did, see "Push notifications" below; this is the separate in-app feed
+of notification *events*, mirroring the backend's `Notification`
+model/`/notifications` endpoints and web's `NotificationBell.vue`).
+
+- **`NotificationBellButton`**
+  (`lib/features/notifications/presentation/notification_bell_button.dart`)
+  — same `AppBar.actions` placement convention as `SettingsIconButton`,
+  a `Badge`-wrapped bell icon showing `NotificationsController`'s
+  `unreadCount`, pushing `/notifications` on tap.
+- **`NotificationsScreen`** — a full pushed screen, not a popover
+  (mobile has no hover/click popover equivalent) — with a full-width
+  Unread/Read `SegmentedButton` and an infinite-scroll `ListView`
+  (`ScrollController` threshold, same pattern
+  `ApplicationsListScreen`'s `_onScroll` uses), "Mark all read" on the
+  Unread tab. Tapping an unread item marks it read and, if it carries an
+  `application_id`, **pushes** (not replaces) into that application's
+  edit screen — backing out returns to the feed rather than to whatever
+  screen originally opened it.
+- **`NotificationsController`** (`StateNotifier`, mirrors
+  `stores/notifications.ts`) — deliberately **not** `.autoDispose` and
+  does **not** fetch anything on construction, unlike
+  `ApplicationsListController`: the unread-count badge has to keep
+  polling on every authenticated screen, not just while
+  `NotificationsScreen` happens to be open. `startPolling()`/
+  `stopPolling()` are called from `AuthController` on
+  login/register/silent-restore and logout respectively — the exact
+  same lifecycle `PushService.registerCurrentDevice()`/
+  `deregisterCurrentDevice()` already follow. Poll interval (30s)
+  matches `webapp/src/stores/notifications.ts`'s own constant, for
+  consistency across clients.
+- Backend needed a small change to support the Unread/Read tabs:
+  `GET /notifications` used to take a plain `unread_only: bool`, with no
+  way to ask for read-only. It's now `status: "all"|"unread"|"read"` —
+  additive, and this is the first client to depend on the new shape
+  (see `backend/BACKEND_SUMMARY.md`'s "In-app notification feed").
 
 ### Analytics feature (`lib/features/analytics/`)
 

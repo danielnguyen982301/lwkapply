@@ -22,6 +22,18 @@
   `timezoneIsManual` (mirrors `UserRead`, previously fetched but never
   exposed on the mobile client). Full detail in
   `mobile/MOBILE_SUMMARY.md`'s "Settings screen".
+- **In-app notification feed, mobile** — new ground on mobile (only
+  push notifications existed before): `NotificationBellButton` (unread
+  badge in `AppBar.actions`, same placement convention as
+  `SettingsIconButton`) and `NotificationsScreen` (a full pushed
+  screen, not a popover — full-width Unread/Read `SegmentedButton` +
+  infinite scroll). `NotificationsController` polls
+  `GET /notifications/unread-count` every 30s — deliberately not
+  `.autoDispose`, started/stopped from `AuthController` on the same
+  login/restore/logout lifecycle `PushService`'s device-token
+  registration already follows, so the badge keeps polling on every
+  authenticated screen rather than only while the feed is open. Full
+  detail in `mobile/MOBILE_SUMMARY.md`'s "Notifications feed".
 
 ## v0.15.0
 

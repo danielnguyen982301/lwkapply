@@ -300,6 +300,15 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       (master + per-channel toggles, custom reminder lead time), and
       `DeleteAccountDialog` (password-reconfirmed) — see
       MOBILE_SUMMARY.md's "Settings screen"
+- [x] In-app notification feed (bell icon + Unread/Read list) —
+      `NotificationBellButton`/`NotificationsScreen`, full-width tabs +
+      infinite scroll, polling `GET /notifications/unread-count` every
+      30s via `NotificationsController` (mirrors `stores/
+      notifications.ts`). New ground on mobile — distinct from the push
+      notifications already implemented below. Needed a small backend
+      change: `GET /notifications`'s `unread_only: bool` became
+      `status: "all"|"unread"|"read"` — see MOBILE_SUMMARY.md's
+      "Notifications feed"
 - [x] Bottom navigation shell — restructured this pass from 4 tabs
       (Applications/Interviews/Contacts/Documents) to 2
       (Applications + a card-grid "Home" hub holding Interviews/
