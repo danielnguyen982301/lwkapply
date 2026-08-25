@@ -2,28 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../data/contacts_api.dart';
+import '../data/application_contacts_api.dart';
+import '../data/contact_directory_api.dart';
 import '../domain/contact.dart';
-import '../domain/contact_draft.dart';
+import 'contact_attach_sheet.dart';
 import 'contact_form_sheet.dart';
-
-enum _ListStatus { loading, idle, error }
+import 'contacts_list_controller.dart';
+import 'contacts_list_state.dart';
 
 /// Contacts tab content on the application form screen — mobile
 /// equivalent of webapp's ContactsPanel.vue, rendered inside
 /// ApplicationFormScreen once an application exists (same
-/// `!isNew && applicationId` gating the web panel uses).
+/// `!isNew && applicationId` gating the other panels use).
 ///
-/// Unlike the webapp, which keeps this list in a Pinia store so a
-/// stale fetch for a previous application can't clobber it after
-/// navigating away, mobile doesn't need that guard: this widget is
-/// instantiated fresh per `applicationId` (ApplicationFormScreen isn't
-/// reused across different applications — editing a different one
-/// means a new route push), so there's no cross-application state to
-/// leak between. All list/mutation state lives locally in this
-/// widget's State rather than a Riverpod controller — nothing else on
-/// screen needs to observe it, same reasoning
-/// ApplicationFormScreen gives for keeping its own submit state local.
+/// **Attach/detach, not create/delete** — a contact is a top-level,
+/// user-owned resource now (see contact.dart's doc comment), so this
+/// panel no longer creates a contact scoped to this application
+/// directly. Two ways a contact ends up attached here: "Attach existing"
+/// (picks an already-created directory contact via `ContactAttachSheet`)
+/// or "Add new" (creates in the directory via `ContactDirectoryApi.create`,
+/// then attaches the result — two sequential calls where there used to
+/// be one; either exception propagates rather than silently swallowing a
+/// partial success). "Remove from this application" only detaches the
+/// link (`ApplicationContactsApi.detach`) — the contact itself, and any
+/// of its other applications' attachments, are untouched.
+///
+/// Same infinite-scroll shape as DocumentsPanel (paginated backend,
+/// `.family`-scoped controller) — see `ContactsListController`'s doc
+/// comment for why this replaced the old plain local `State`.
 class ContactsPanel extends ConsumerStatefulWidget {
   const ContactsPanel({super.key, required this.applicationId});
 
@@ -34,89 +40,139 @@ class ContactsPanel extends ConsumerStatefulWidget {
 }
 
 class _ContactsPanelState extends ConsumerState<ContactsPanel> {
-  _ListStatus _status = _ListStatus.loading;
-  String? _listError;
-  List<Contact> _contacts = [];
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _scrollController.addListener(_onScroll);
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _status = _ListStatus.loading;
-      _listError = null;
-    });
-    try {
-      final response =
-          await ref.read(contactsApiProvider).list(widget.applicationId);
-      if (!mounted) return;
-      setState(() {
-        _contacts = response.items;
-        _status = _ListStatus.idle;
-      });
-    } on ContactsException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _status = _ListStatus.error;
-        _listError = e.message;
-      });
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final threshold = _scrollController.position.maxScrollExtent - 200;
+    if (_scrollController.position.pixels >= threshold) {
+      ref
+          .read(contactsListControllerProvider(widget.applicationId).notifier)
+          .loadNextPage();
     }
   }
 
-  Future<void> _openAddSheet() async {
-    await _openSheet(
-      existing: null,
-      onSubmit: (draft) async {
-        final created = await ref
-            .read(contactsApiProvider)
-            .create(widget.applicationId, draft);
-        if (!mounted) return;
-        setState(() => _contacts = [created, ..._contacts]);
-      },
+  ContactsListController get _controller =>
+      ref.read(contactsListControllerProvider(widget.applicationId).notifier);
+
+  Future<void> _openAddContactSheet() async {
+    final choice = await showModalBottomSheet<_AddContactChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('Attach existing contact'),
+              onTap: () =>
+                  Navigator.pop(context, _AddContactChoice.attachExisting),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1_outlined),
+              title: const Text('Add new contact'),
+              onTap: () => Navigator.pop(context, _AddContactChoice.addNew),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _AddContactChoice.attachExisting:
+        await _openAttachSheet();
+      case _AddContactChoice.addNew:
+        await _openCreateSheet();
+    }
+  }
+
+  Future<void> _openAttachSheet() async {
+    final state =
+        ref.read(contactsListControllerProvider(widget.applicationId));
+    final alreadyAttachedIds = {for (final contact in state.items) contact.id};
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => ContactAttachSheet(
+        alreadyAttachedIds: alreadyAttachedIds,
+        onSelected: (contact) async {
+          try {
+            final attached = await ref
+                .read(applicationContactsApiProvider)
+                .attach(widget.applicationId, contact.id);
+            if (mounted) _controller.prepend(attached);
+          } on ContactsException catch (e) {
+            if (!sheetContext.mounted) return;
+            ScaffoldMessenger.of(
+              sheetContext,
+            ).showSnackBar(SnackBar(content: Text(e.message)));
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _openCreateSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => ContactFormSheet(
+        existing: null,
+        onSubmit: (draft) async {
+          final created =
+              await ref.read(contactDirectoryApiProvider).create(draft);
+          final attached = await ref
+              .read(applicationContactsApiProvider)
+              .attach(widget.applicationId, created.id);
+          if (mounted) _controller.prepend(attached);
+        },
+      ),
     );
   }
 
   Future<void> _openEditSheet(Contact contact) async {
-    await _openSheet(
-      existing: contact,
-      onSubmit: (draft) async {
-        final updated = await ref
-            .read(contactsApiProvider)
-            .update(widget.applicationId, contact.id, draft);
-        if (!mounted) return;
-        setState(() {
-          _contacts = [
-            for (final c in _contacts)
-              if (c.id == updated.id) updated else c,
-          ];
-        });
-      },
-    );
-  }
-
-  Future<void> _openSheet({
-    required Contact? existing,
-    required Future<void> Function(ContactDraft draft) onSubmit,
-  }) {
-    return showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) =>
-          ContactFormSheet(existing: existing, onSubmit: onSubmit),
+      builder: (context) => ContactFormSheet(
+        existing: contact,
+        onSubmit: (draft) async {
+          final updated = await ref
+              .read(contactDirectoryApiProvider)
+              .update(contact.id, draft);
+          if (mounted) _controller.replaceById(updated);
+        },
+      ),
     );
   }
 
-  Future<void> _confirmDelete(Contact contact) async {
+  /// Detaches only — the contact itself stays in the user's directory,
+  /// and any of its other applications' attachments are untouched.
+  /// Mirrors webapp/src/components/applications/ContactsPanel.vue's
+  /// `confirmDetach()` copy, explicit that this isn't a delete.
+  Future<void> _confirmDetach(Contact contact) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove contact?'),
+        title: const Text('Remove from this application?'),
         content: Text(
-          "Remove ${contact.name} from this application's contacts? "
-          "This can't be undone.",
+          'Remove ${contact.name} from this application? The contact '
+          "itself won't be deleted - it stays in your contact directory.",
         ),
         actions: [
           TextButton(
@@ -137,12 +193,10 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
 
     try {
       await ref
-          .read(contactsApiProvider)
-          .delete(widget.applicationId, contact.id);
+          .read(applicationContactsApiProvider)
+          .detach(widget.applicationId, contact.id);
       if (!mounted) return;
-      setState(() {
-        _contacts = _contacts.where((c) => c.id != contact.id).toList();
-      });
+      _controller.removeById(contact.id);
     } on ContactsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -164,17 +218,20 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final state =
+        ref.watch(contactsListControllerProvider(widget.applicationId));
+
     return Stack(
       children: [
         RefreshIndicator(
-          onRefresh: _load,
-          child: _buildBody(context),
+          onRefresh: _controller.refresh,
+          child: _buildBody(context, state),
         ),
         Positioned(
           right: 16,
           bottom: 16,
           child: FloatingActionButton.extended(
-            onPressed: _openAddSheet,
+            onPressed: _openAddContactSheet,
             icon: const Icon(Icons.person_add_alt_1_outlined),
             label: const Text('Add contact'),
           ),
@@ -183,12 +240,8 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
     );
   }
 
-  Widget _buildBody(BuildContext context) {
-    if (_status == _ListStatus.loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_status == _ListStatus.error) {
+  Widget _buildBody(BuildContext context, ContactsListState state) {
+    if (state.status == RequestStatus.error && state.items.isEmpty) {
       return ListView(
         // ListView (not a bare Center) so RefreshIndicator's
         // pull-to-refresh still works from the error state.
@@ -198,11 +251,14 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
             child: Column(
               children: [
                 Text(
-                  _listError ?? "Couldn't load contacts.",
+                  state.errorMessage ?? "Couldn't load contacts.",
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                FilledButton(onPressed: _load, child: const Text('Retry')),
+                FilledButton(
+                  onPressed: _controller.refresh,
+                  child: const Text('Retry'),
+                ),
               ],
             ),
           ),
@@ -210,18 +266,20 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
       );
     }
 
-    if (_contacts.isEmpty) {
+    if (state.isInitialLoad) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.items.isEmpty) {
       return ListView(
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 64),
             child: Text(
-              'No contacts yet. Add recruiters, hiring managers, or '
-              'interviewers tied to this application.',
+              'No contacts attached yet. Add a new one or attach one '
+              'already in your contact directory.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           ),
         ],
@@ -229,11 +287,15 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
     }
 
     return ListView.separated(
+      controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-      itemCount: _contacts.length,
+      itemCount: state.items.length + 1,
       separatorBuilder: (context, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final contact = _contacts[index];
+        if (index == state.items.length) {
+          return _buildFooter(context, state);
+        }
+        final contact = state.items[index];
         return Card(
           margin: EdgeInsets.zero,
           child: ListTile(
@@ -277,10 +339,10 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
                   onPressed: () => _openEditSheet(contact),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Remove contact',
+                  icon: const Icon(Icons.link_off),
+                  tooltip: 'Remove from this application',
                   color: Theme.of(context).colorScheme.error,
-                  onPressed: () => _confirmDelete(contact),
+                  onPressed: () => _confirmDetach(contact),
                 ),
               ],
             ),
@@ -290,4 +352,38 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
       },
     );
   }
+
+  Widget _buildFooter(BuildContext context, ContactsListState state) {
+    if (state.status == RequestStatus.loadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (state.status == RequestStatus.error && state.items.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: TextButton(
+            onPressed: _controller.loadNextPage,
+            child: const Text('Retry loading more'),
+          ),
+        ),
+      );
+    }
+    if (!state.hasMore && state.items.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            "You've reached the end · ${state.total} total",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 }
+
+enum _AddContactChoice { attachExisting, addNew }

@@ -46,8 +46,9 @@ class ApplicationSummary {
 /// InterviewWithApplicationRead (backend/app/schemas/interview.py) and
 /// webapp/src/types/interview.ts::InterviewWithApplication.
 ///
-/// Composition over inheritance, same reasoning as
-/// ContactWithApplication: holds an `Interview` plus the extra
+/// Composition over inheritance — the old `ContactWithApplication` used
+/// this same shape before Contact became a top-level resource (see
+/// contacts/domain/contact.dart): holds an `Interview` plus the extra
 /// `application` summary rather than duplicating every `Interview` field
 /// onto a subclass, so `Interview.fromJson` stays the single source of
 /// truth for parsing an interview's own fields.
@@ -73,7 +74,7 @@ class InterviewWithApplication {
 /// Mirrors InterviewWithApplicationListResponse
 /// (backend/app/schemas/interview.py) — the paginated envelope GET
 /// /interviews returns, same page/page_size/total shape as
-/// InterviewListResponse and ContactWithApplicationListResponse.
+/// InterviewListResponse.
 class InterviewWithApplicationListResponse {
   const InterviewWithApplicationListResponse({
     required this.items,

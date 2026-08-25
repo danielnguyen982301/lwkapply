@@ -1,3 +1,12 @@
+"""
+Top-level, user-owned resource - like Document (see its module docstring
+for the parallel rationale). A contact can be attached to zero, one, or
+several applications (see ApplicationContact); ownership is therefore a
+direct user_id FK rather than derived through an application join, since
+a contact kept around after its only application was deleted has no
+application left to derive it from.
+"""
+
 import uuid
 from typing import TYPE_CHECKING
 
@@ -8,15 +17,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
-    from app.models.application import Application
+    from app.models.application_contact import ApplicationContact
+    from app.models.user import User
 
 
 class Contact(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "contacts"
 
-    application_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("applications.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -25,4 +35,11 @@ class Contact(Base, UUIDMixin, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    application: Mapped["Application"] = relationship(back_populates="contacts")
+    user: Mapped["User"] = relationship()
+    # Deleting a contact should drop its application links, not the
+    # applications themselves - delete-orphan only, no cascade onto
+    # Application (mirrors the ondelete="CASCADE" FK on
+    # ApplicationContact.contact_id).
+    application_contacts: Mapped[list["ApplicationContact"]] = relationship(
+        back_populates="contact", cascade="all, delete-orphan"
+    )

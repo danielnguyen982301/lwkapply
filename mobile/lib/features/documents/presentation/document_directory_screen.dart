@@ -223,7 +223,8 @@ class _DocumentDirectoryScreenState
         title: const Text('Delete document?'),
         content: Text(
           'Permanently delete "${document.fileName}"? This removes it from '
-          'every application it\'s attached to, and can\'t be undone.',
+          'every application it\'s attached to and permanently deletes any '
+          'AI analyses and ATS scores run against it, and can\'t be undone.',
         ),
         actions: [
           TextButton(

@@ -1,6 +1,63 @@
 # Changelog
 
-## v0.16.0 (in progress)
+## v0.17.0 (in progress)
+
+### Changed
+
+- **Contacts decoupled from a single Application** — the same rework
+  Documents got in v0.11.0/v0.12.0, applied to `Contact` this time, and
+  shipped across backend/web/mobile together in one pass rather than
+  staggered. Full detail in `backend/BACKEND_SUMMARY.md`'s "A note on
+  Contact / ApplicationContact", `webapp/WEBAPP_SUMMARY.md`'s "Contacts"
+  section, and `mobile/MOBILE_SUMMARY.md`'s "Contacts, Interviews, and
+  Documents"/"Cross-application directory screens" sections; summary
+  here:
+  - **The trigger was product, not a data-integrity gap** (unlike
+    Document's `AtsScore` trigger): deleting an application used to
+    cascade-delete every contact attached to it, with no way to keep a
+    recruiter or hiring manager around after the application was
+    deleted, or reuse the same contact across a second application.
+  - **`Contact` became a top-level, user-owned resource** (`user_id`
+    direct FK, like `Document`), reachable at `/contacts` — no longer
+    nested under `/applications/{id}/contacts`, no longer owned by
+    exactly one application. Reusable across zero, one, or several
+    applications via a new many-to-many join, `ApplicationContact`
+    (`POST`/`GET`/`DELETE /applications/{application_id}/contacts`
+    attaches/lists/detaches). Deleting an application no longer deletes
+    its contacts — only the join rows; deleting a contact still
+    cascades its `ApplicationContact` links. Migration split into three
+    small, chained files, same backfill-then-drop sequencing Document's
+    used
+  - **Web**: `stores/contacts.ts` became the top-level contact
+    directory store (list/search/create/update/delete); a new
+    `stores/applicationContacts.ts` handles one application's
+    attached-contacts list/attach/detach. `stores/contactDirectory.ts`
+    retired. `ContactFormDialog.vue` is reused for both create and edit,
+    no longer application-scoped; new `ContactAttachDialog.vue` mirrors
+    `DocumentAttachDialog.vue`. `ContactDirectoryView.vue` is no longer
+    read-only — it's now the primary place to add/edit/delete contacts
+  - **Mobile**: same split — `ContactDirectoryApi` gained full
+    `/contacts` CRUD, new `ApplicationContactsApi` handles
+    `list`/`attach`/`detach` against `/applications/{id}/contacts`.
+    `contacts_panel.dart` reworked from create/delete to **attach/detach**
+    ("Attach existing" via new `contact_attach_sheet.dart`, "Add new" via
+    create-then-attach), and its nested list moved from a plain local
+    `State` to a new paginated `contacts_list_controller.dart`, since the
+    backend now paginates this endpoint too. `contact_directory_screen.dart`
+    (the bottom-nav Contacts tab) is no longer read-only — it's now the
+    primary place to manage the whole directory. The old
+    `contacts_api.dart`/`contact_with_application.dart` were deleted
+
+### Fixed
+
+- Deleting a document's confirm dialog only warned that it would be
+  removed from every application it's attached to — it also permanently
+  cascades-deletes any `ResumeAnalysis`/`AtsScore` rows scored against
+  it (`resume_analyses.document_id`/`ats_scores.resume_analysis_id` are
+  both `ondelete="CASCADE"`), which the copy didn't mention. Fixed on
+  both web and mobile.
+
+## v0.16.0
 
 ### Added
 

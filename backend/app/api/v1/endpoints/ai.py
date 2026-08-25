@@ -9,10 +9,10 @@ per-request-dispatched Celery tasks in this codebase - see that file's
 own docstring.
 
 Both are top-level, user-owned resources (like Application), not nested
-under /applications/{id}/ the way Interview/Contact/Document are - see
+under /applications/{id}/ the way Interview is - see
 app/models/resume_analysis.py's module docstring for why ownership here
 is a direct user_id equality check rather than a join through
-Document/Application.
+Application.
 
 Both POST routes are also rate-limited (_enforce_ai_rate_limit, below) -
 a shared free-tier daily budget (app/services/rate_limit.py) across both

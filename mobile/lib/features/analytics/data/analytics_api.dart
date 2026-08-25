@@ -75,9 +75,8 @@ class AnalyticsApi {
     }
   }
 
-  /// Same shape as InterviewDirectoryApi._messageFor — kept as its own
-  /// copy per this codebase's existing precedent (see ContactsApi's doc
-  /// comment on the same method).
+  /// Same shape as the other resource APIs' `_messageFor` — kept as its
+  /// own copy per this codebase's existing precedent.
   String _messageFor(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

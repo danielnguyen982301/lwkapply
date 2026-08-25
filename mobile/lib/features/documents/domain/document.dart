@@ -67,8 +67,7 @@ class Document {
   }
 }
 
-/// Mirrors DocumentListResponse. Paginated, like Interviews (unlike
-/// Contacts' nested list).
+/// Mirrors DocumentListResponse. Paginated, like Interviews/Contacts.
 class DocumentListResponse {
   const DocumentListResponse({
     required this.items,

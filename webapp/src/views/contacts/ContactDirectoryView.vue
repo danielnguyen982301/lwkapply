@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
@@ -10,52 +9,94 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Paginator from 'primevue/paginator'
 import ProgressSpinner from 'primevue/progressspinner'
+import { useConfirm } from 'primevue/useconfirm'
 
-import { useContactDirectoryStore } from '@/stores/contactDirectory'
-import ApplicationStatusTag from '@/components/applications/ApplicationStatusTag.vue'
+import { useContactsStore } from '@/stores/contacts'
 import TruncatedText from '@/components/common/TruncatedText.vue'
-import { useApplicationRowClick } from '@/lib/row-click'
-import type { ContactWithApplication } from '@/types/contact'
+import ContactFormDialog from '@/components/contacts/ContactFormDialog.vue'
+import { tooltip } from '@/lib/tooltip'
+import { formatDate } from '@/lib/date-utils'
+import type { Contact } from '@/types/contact'
 
-const store = useContactDirectoryStore()
-const handleRowClick = useApplicationRowClick<ContactWithApplication>(
-  (contact) => contact.application.id,
-)
+// The user's whole contact directory - a contact is a top-level, standalone
+// resource now (see stores/contacts.ts / BACKEND_SUMMARY.md's "A note on
+// Contact / ApplicationContact"), so add/edit/delete all live here rather
+// than only on an application's Contacts panel. Attaching an already-added
+// contact to a specific application still happens from that application's
+// detail page (components/applications/ContactsPanel.vue).
+const store = useContactsStore()
+const confirm = useConfirm()
 
-// Seeded from the store so returning to this view keeps whatever search
-// was active, same convention as ApplicationListView.vue.
+// Debounced text search, same shape as DocumentDirectoryView.vue's search
+// box - the store itself stays synchronous (fetch-on-call), debouncing is
+// purely a view-level concern so it doesn't leak into every other caller
+// of fetchContacts().
 const searchInput = ref(store.search)
-
-const hasActiveSearch = computed(() => !!store.search)
-
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 
 function handleSearchInput() {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
     store.setSearch(searchInput.value).catch(() => {})
-  }, 350)
-}
-
-function clearSearch() {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  searchInput.value = ''
-  store.setSearch('').catch(() => {})
+  }, 300)
 }
 
 onBeforeUnmount(() => {
   if (debounceTimer) clearTimeout(debounceTimer)
 })
 
+const hasActiveSearch = computed(() => store.search !== '')
+
+function clearSearch() {
+  searchInput.value = ''
+  if (debounceTimer) clearTimeout(debounceTimer)
+  store.fetchContacts({ search: null, page: 1 }).catch(() => {})
+}
+
+function loadContacts(page = 1) {
+  store.fetchContacts({ page }).catch(() => {})
+}
+
 onMounted(() => {
-  store.fetchContacts().catch(() => {})
+  loadContacts()
 })
 
 const paginatorFirst = computed(() => (store.page - 1) * store.pageSize)
 
 async function onPageChange(event: { first: number; rows: number }) {
-  const page = Math.floor(event.first / event.rows) + 1
-  await store.fetchContacts({ page }).catch(() => {})
+  await store.fetchContacts({ page: Math.floor(event.first / event.rows) + 1 }).catch(() => {})
+}
+
+// --- Add / edit dialog ---------------------------------------------------
+// Extracted into components/contacts/ so ContactsPanel.vue (application-
+// scoped) can reuse the same add/edit UX - see that file for why the
+// directory store owns both, regardless of which view opened the dialog.
+const dialogVisible = ref(false)
+const editingContact = ref<Contact | null>(null)
+
+function openAddDialog() {
+  editingContact.value = null
+  dialogVisible.value = true
+}
+
+function openEditDialog(contact: Contact) {
+  editingContact.value = contact
+  dialogVisible.value = true
+}
+
+function confirmDelete(contact: Contact) {
+  confirm.require({
+    message: `Permanently delete ${contact.name}? This removes them from every application they're attached to, and can't be undone.`,
+    header: 'Confirm deletion',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Delete',
+    rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true },
+    acceptProps: { label: 'Delete', severity: 'danger' },
+    accept: () => {
+      store.deleteContact(contact.id).catch(() => {})
+    },
+  })
 }
 </script>
 
@@ -63,11 +104,12 @@ async function onPageChange(event: { first: number; rows: number }) {
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h1 class="font-display text-xl font-semibold text-ink">Contacts</h1>
+      <Button label="Add contact" icon="pi pi-plus" size="small" @click="openAddDialog" />
     </div>
 
     <p class="max-w-2xl text-sm text-slate">
-      Every recruiter, hiring manager, and interviewer across all your applications, in one place.
-      To add or edit a contact, open the application they belong to.
+      Every recruiter, hiring manager, and interviewer you've added, independent of any application.
+      Attach a contact to as many applications as you like from that application's detail page.
     </p>
 
     <div class="flex flex-wrap items-center gap-3">
@@ -76,9 +118,9 @@ async function onPageChange(event: { first: number; rows: number }) {
         <InputText
           v-model="searchInput"
           type="search"
-          placeholder="Search by name or company…"
+          placeholder="Search by name…"
           class="w-full"
-          aria-label="Search contacts by name or company"
+          aria-label="Search contacts by name"
           @input="handleSearchInput"
         />
       </IconField>
@@ -86,13 +128,7 @@ async function onPageChange(event: { first: number; rows: number }) {
 
     <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
       <span>{{ store.listError }}</span>
-      <Button
-        label="Retry"
-        link
-        size="small"
-        class="ml-2"
-        @click="store.fetchContacts().catch(() => {})"
-      />
+      <Button label="Retry" link size="small" class="ml-2" @click="loadContacts(store.page)" />
     </Message>
 
     <div
@@ -111,13 +147,11 @@ async function onPageChange(event: { first: number; rows: number }) {
         {{ hasActiveSearch ? 'No matching contacts' : 'No contacts yet' }}
       </h2>
       <p class="mx-auto mt-2 max-w-sm text-sm text-slate">
-        <template v-if="hasActiveSearch">Try a different name or company.</template>
-        <template v-else>
-          Add recruiters, hiring managers, or interviewers from within an application's detail page
-          and they'll show up here.
-        </template>
+        <template v-if="hasActiveSearch">Try a different name.</template>
+        <template v-else>Add a recruiter, hiring manager, or interviewer to get started.</template>
       </p>
       <Button v-if="hasActiveSearch" label="Clear search" link class="mt-4" @click="clearSearch" />
+      <Button v-else label="Add contact" link class="mt-4" @click="openAddDialog" />
     </div>
 
     <div v-else class="space-y-0">
@@ -126,47 +160,24 @@ async function onPageChange(event: { first: number; rows: number }) {
         :loading="store.listStatus === 'loading'"
         size="small"
         striped-rows
-        selection-mode="single"
         aria-label="All your contacts"
-        @row-click="handleRowClick"
       >
-        <Column field="name" header="Name">
-          <template #body="{ data }: { data: ContactWithApplication }">
-            <TruncatedText :text="data.name" max-width="10rem" class="font-medium text-ink" />
+        <Column header="Name">
+          <template #body="{ data }: { data: Contact }">
+            <TruncatedText :text="data.name" max-width="12rem" class="font-medium text-ink" />
           </template>
         </Column>
-        <Column header="Company">
-          <template #body="{ data }: { data: ContactWithApplication }">
-            <RouterLink
-              :to="{ name: 'application-detail', params: { id: data.application.id } }"
-              class="block max-w-[10rem] truncate text-ink hover:underline"
-              :title="data.application.company"
-            >
-              {{ data.application.company }}
-            </RouterLink>
-          </template>
-        </Column>
-        <Column header="Position">
-          <template #body="{ data }: { data: ContactWithApplication }">
-            <TruncatedText :text="data.application.position" max-width="10rem" />
-          </template>
-        </Column>
-        <Column header="Status">
-          <template #body="{ data }: { data: ContactWithApplication }">
-            <ApplicationStatusTag :status="data.application.status" />
-          </template>
-        </Column>
-        <Column field="title" header="Title">
-          <template #body="{ data }: { data: ContactWithApplication }">
+        <Column header="Title">
+          <template #body="{ data }: { data: Contact }">
             <TruncatedText :text="data.title" max-width="10rem" />
           </template>
         </Column>
         <Column header="Email">
-          <template #body="{ data }: { data: ContactWithApplication }">
+          <template #body="{ data }: { data: Contact }">
             <a
               v-if="data.email"
               :href="`mailto:${data.email}`"
-              class="block max-w-[12rem] truncate text-slate hover:text-ink hover:underline"
+              class="block max-w-[14rem] truncate text-slate hover:text-ink hover:underline"
               :title="data.email"
             >
               {{ data.email }}
@@ -175,7 +186,7 @@ async function onPageChange(event: { first: number; rows: number }) {
           </template>
         </Column>
         <Column header="LinkedIn">
-          <template #body="{ data }: { data: ContactWithApplication }">
+          <template #body="{ data }: { data: Contact }">
             <a
               v-if="data.linkedin_url"
               :href="data.linkedin_url"
@@ -188,9 +199,32 @@ async function onPageChange(event: { first: number; rows: number }) {
             <span v-else>—</span>
           </template>
         </Column>
-        <Column header="Application Name">
-          <template #body="{ data }: { data: ContactWithApplication }">
-            <TruncatedText :text="data.application.application_name" max-width="10rem" />
+        <Column header="Added">
+          <template #body="{ data }: { data: Contact }">
+            {{ formatDate(data.created_at) }}
+          </template>
+        </Column>
+        <Column header="" style="width: 7rem">
+          <template #body="{ data }: { data: Contact }">
+            <div class="flex justify-end gap-1">
+              <Button
+                v-tooltip.bottom="tooltip('Edit contact')"
+                icon="pi pi-pencil"
+                aria-label="Edit contact"
+                link
+                size="small"
+                @click="openEditDialog(data)"
+              />
+              <Button
+                v-tooltip.bottom="tooltip('Delete contact')"
+                icon="pi pi-trash"
+                aria-label="Delete contact"
+                text
+                severity="danger"
+                size="small"
+                @click="confirmDelete(data)"
+              />
+            </div>
           </template>
         </Column>
       </DataTable>
@@ -206,4 +240,6 @@ async function onPageChange(event: { first: number; rows: number }) {
       />
     </div>
   </div>
+
+  <ContactFormDialog v-model:visible="dialogVisible" :contact="editingContact" />
 </template>

@@ -3,8 +3,8 @@ Resume Parser (TODO.md "AI Features") - structured extraction from an
 already-uploaded resume Document, via Gemini (app/services/ai/).
 
 A top-level, user-owned resource - not nested under /applications/{id}/
-the way Interview/Contact/Document are, so ownership is a direct
-user_id FK rather than a join through Document -> Application -> User.
+the way Interview is, so ownership is a direct user_id FK rather than a
+join through Application -> User.
 Deliberate divergence from the nested-resource convention documented in
 BACKEND_SUMMARY.md: this and AtsScore aren't reached via an
 application-scoped URL, so anchoring ownership directly to user_id is

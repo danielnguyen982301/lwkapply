@@ -13,12 +13,15 @@ import 'interviews_api.dart' show InterviewsException;
 /// embedded.
 ///
 /// Deliberately a separate API class from `InterviewsApi`
-/// (interviews_api.dart), not an extension of it — same reasoning as
-/// `ContactDirectoryApi` vs `ContactsApi`: different endpoint
+/// (interviews_api.dart), not an extension of it: different endpoint
 /// (`/interviews`, not `/applications/{id}/interviews`), different
 /// response shape (embedded `application` summary), different lifecycle.
-/// Mirrors webapp/src/stores/interviewDirectory.ts being a separate
-/// store from stores/interviews.ts.
+/// `ContactDirectoryApi` vs the old `ContactsApi` used to be this same
+/// split, before Contact became a top-level resource and
+/// `ContactDirectoryApi` absorbed full CRUD instead (see
+/// contacts/data/contact_directory_api.dart). Mirrors
+/// webapp/src/stores/interviewDirectory.ts being a separate store from
+/// stores/interviews.ts.
 ///
 /// Reuses `InterviewsException` rather than declaring a new exception
 /// type: same resource, same error-shape contract, just a different
@@ -53,9 +56,9 @@ class InterviewDirectoryApi {
     }
   }
 
-  /// Same shape as InterviewsApi._messageFor — kept as its own copy per
-  /// this codebase's existing precedent (see ContactsApi's doc comment
-  /// on the same method) even though it throws the same exception type.
+  /// Same shape as the other resource APIs' `_messageFor` — kept as its
+  /// own copy per this codebase's existing precedent, even though it
+  /// throws the same exception type as InterviewsApi.
   String _messageFor(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

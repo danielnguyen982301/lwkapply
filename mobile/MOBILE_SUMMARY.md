@@ -9,11 +9,12 @@ same as on web: nested inside `ApplicationFormScreen`'s own 4-tab layout
 CRUD — see "Contacts, Interviews, and Documents" below — and as
 cross-application directory screens (mirroring `ContactDirectoryView.vue`/
 `InterviewDirectoryView.vue`/`DocumentDirectoryView.vue` on web) — see
-"Cross-application directory screens" below. Contacts'/Interviews' stay
-read-only; Documents' is now the primary place to manage the whole
-document library, since `Document` became a top-level, user-owned
-resource no longer nested under a single application (see the Documents
-bullets in both sections). The app also registers for and displays push
+"Cross-application directory screens" below. Interviews' stays
+read-only; Contacts'/Documents' are now the primary places to manage the
+whole contact directory/document library, since each became a
+top-level, user-owned resource no longer nested under a single
+application (see the Contacts/Documents bullets in both sections). The
+app also registers for and displays push
 notifications for interview reminders (Android only — see "Push
 notifications" below) and reports the device's timezone to the backend
 (see "Timezone reporting" below).
@@ -547,10 +548,12 @@ same company/position (e.g. a re-apply after rejection), same field/
 reasoning as web's (see CHANGELOG.md v0.11.0). Editable via a
 `FormBuilderTextField` on `application_form_screen.dart`'s Details tab,
 shown in `applications_list_screen.dart`'s cards, and in
-`application_picker.dart`'s results (see AI Tools above) — plus each
-directory screen's own `ApplicationSummary` (Contacts'/Interviews',
-below), since those are deliberately separate, non-shared classes that
-each needed the field added individually.
+`application_picker.dart`'s results (see AI Tools above) — plus
+Interviews' own directory-screen `ApplicationSummary` (below; Contacts'
+equivalent existed at the time this field was added but has since been
+deleted along with the rest of `contact_with_application.dart`), a
+deliberately separate, non-shared class that needed the field added
+individually.
 
 ### Contacts, Interviews, and Documents (`lib/features/{contacts,interviews,documents}/`)
 
@@ -566,16 +569,46 @@ Details form. Each feature follows the same `data`/`domain`/
 from each other and from Applications in ways worth knowing before
 touching any of them:
 
-- **Contacts** — the nested backend list
-  (`GET /applications/{id}/contacts`) is deliberately unpaginated (see
-  BACKEND_SUMMARY.md), so `ContactsPanel` keeps plain local `State`
-  (a `List<Contact>` + a loading/error enum) rather than a Riverpod
-  controller — there's nothing else on screen that needs to observe
-  it, same reasoning `ApplicationFormScreen` gives for keeping its own
-  submit state local. Add/edit is a modal bottom sheet
-  (`ContactFormSheet`); delete goes through a confirm `AlertDialog`.
-  Email and LinkedIn URL are tappable via `url_launcher`
-  (`mailto:`/`https:`) once a value is present.
+- **Contacts** — `contacts_panel.dart` is **attach/detach, not
+  create/delete**: a contact is a top-level, user-owned resource now
+  (`domain/contact.dart` has no `applicationId` at all any more — see
+  BACKEND_SUMMARY.md's "A note on Contact / ApplicationContact"), so
+  this panel no longer creates a contact scoped to this application
+  directly. Two ways a contact ends up attached: **"Attach existing"**
+  (`contact_attach_sheet.dart`, a search picker over the whole
+  directory — see AI Tools above for the shared picker shape) or **"Add
+  new"** (`ContactDirectoryApi.create` creates in the directory, then
+  `ApplicationContactsApi.attach` links it — two sequential calls where
+  there used to be one; either exception propagates rather than a
+  created-but-not-attached contact disappearing silently). "Remove from
+  this application" only detaches the link
+  (`ApplicationContactsApi.detach`) — the contact itself, and any of
+  its other applications' attachments, are untouched; the confirm
+  dialog says so explicitly. Add/edit still goes through the shared
+  `ContactFormSheet` (unchanged — its `onSubmit` callback was already
+  decoupled from which API it calls, so the same sheet now serves both
+  this panel and `ContactDirectoryScreen`, below). Email and LinkedIn
+  URL remain tappable via `url_launcher` (`mailto:`/`https:`) once a
+  value is present.
+  - `contacts_list_controller.dart`/`contacts_list_state.dart` (new)
+    replace the plain local `State` this panel used to keep back when
+    the nested backend list was deliberately unpaginated — it's
+    paginated now (a contact can be reused across applications, same
+    reason `Document` needed this shape), so the panel needs the same
+    infinite-scroll bookkeeping every other paginated panel already
+    has. Patches state locally for every mutation
+    (`prepend`/`replaceById`/`removeById`), same shape
+    `DocumentsListController` established.
+  - **`ContactDirectoryApi`** (`contacts/data/`) owns the full
+    `/contacts` CRUD now — `create`/`get`/`update`/`delete`, not just
+    the `list` it had before this rework. `ApplicationContactsApi`
+    (`contacts/data/application_contacts_api.dart`, new) owns
+    `list`/`attach`/`detach` against `/applications/{id}/contacts` —
+    the old `contacts_api.dart`'s nested create/update/delete contract
+    no longer exists on the backend at all (deleted along with
+    `contact_with_application.dart`, the domain class that used to pair
+    a `Contact` with a single owning `ApplicationSummary` — there's no
+    longer a single one to embed).
 - **Interviews** — the nested list IS paginated, so this reuses
   `ApplicationsListController`'s infinite-scroll `StateNotifier` shape
   instead, `.family`-scoped per `applicationId`
@@ -663,59 +696,70 @@ The bottom-nav Interviews/Contacts/Documents tabs (previously
 `ComingSoonScreen`), mirroring
 `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`/
 `DocumentDirectoryView.vue` — a different thing from the nested,
-per-application panels above. Contacts and Interviews are still
-read-only for the reason those web views are: uploads/edits/deletes
-still only happen from within the owning application, reached via
+per-application panels above. **Interviews is the one still read-only**,
+for the reason its web view is: uploads/edits/deletes still only happen
+from within the owning application, reached via
 `context.push('/applications/{id}/edit')` on any row (the existing
-`application-edit` route). **Documents is the one exception** — since
-`Document` became a top-level, user-owned resource (see the Documents
-bullet above), `document_directory_screen.dart` is now the primary
-place to manage the *whole* library (upload/edit/download/delete/view
-AI analysis), matching `DocumentDirectoryView.vue`'s own rework; each
-row no longer points back to "the" owning application, since a document
-can belong to zero, one, or several now.
+`application-edit` route). Documents and now Contacts are the
+exceptions — since each became a top-level, user-owned resource (see
+their bullets above), `document_directory_screen.dart` and
+`contact_directory_screen.dart` are each now the primary place to manage
+the *whole* library/directory (Documents also gets upload/download/view
+AI analysis, Contacts add/edit/delete), matching
+`DocumentDirectoryView.vue`/`ContactDirectoryView.vue`'s own rework;
+neither screen's rows point back to "the" owning application any more,
+since both resources can belong to zero, one, or several now.
 
-Each of the three follows one consistent shape, added alongside (not
-replacing) each feature's existing nested files — Contacts/Interviews
-still fit it exactly; Documents has diverged since (noted inline):
+The three no longer follow one consistent shape — Interviews still fits
+the original read-only pattern; Documents diverged first, and Contacts
+has now diverged the same way:
 
-- **`domain/*_with_application.dart`** (Contacts/Interviews only —
-  Documents' equivalent, `document_with_application.dart`, was deleted
-  once `Document` stopped having a single owning application to embed)
-  — composes the existing per-application model
-  (`Contact`/`Interview`) with a new `ApplicationSummary`
-  (id/company/position/`applicationName`/status), rather than
-  duplicating its fields. Each feature declares its own
-  `ApplicationSummary`, not a shared one — mirrors the backend's own
+- **`domain/*_with_application.dart`** (Interviews only now —
+  Contacts'/Documents' equivalents, `contact_with_application.dart`/
+  `document_with_application.dart`, were both deleted once their
+  resource stopped having a single owning application to embed) —
+  composes the existing per-application model (`Interview`) with a new
+  `ApplicationSummary` (id/company/position/`applicationName`/status),
+  rather than duplicating its fields. Mirrors the backend's own
   precedent of each directory schema owning its copy (see
-  BACKEND_SUMMARY.md); a future screen needing two directories' types
-  at once would need a prefixed import.
-- **`data/*_directory_api.dart`** — Contacts'/Interviews' call the flat
-  `GET /contacts`/`/interviews` endpoint and reuse the nested feature's
-  existing exception type (`ContactsException`/`InterviewsException`).
-  Documents' (`DocumentDirectoryApi`) is no longer just this shape — see
-  the Documents bullet above for its full CRUD.
+  BACKEND_SUMMARY.md).
+- **`data/*_directory_api.dart`** — Interviews' calls the flat
+  `GET /interviews` endpoint and reuses the nested feature's existing
+  exception type (`InterviewsException`). Contacts'/Documents' are no
+  longer just this shape — see their bullets above for the full CRUD
+  each absorbed.
 - **`presentation/*_directory_state.dart` + `*_directory_controller.dart`**
   — the same fetch/append infinite-scroll split
   `InterviewsListController` established, but as a plain (non-`.family`)
   `StateNotifierProvider`, since each is one global, cross-application
-  list rather than something scoped per application. Contacts'/
-  Interviews' stay read-only (no mutation methods). Documents'
-  (`document_directory_controller.dart`) gained the same
-  `prepend`/`replaceById`/`removeById` shape `DocumentsListController`
-  already had, once the screen itself stopped being read-only.
+  list rather than something scoped per application. Interviews' stays
+  read-only (no mutation methods). Contacts'/Documents'
+  (`contact_directory_controller.dart`/`document_directory_controller.dart`)
+  both gained the same `prepend`/`replaceById`/`removeById` shape
+  `DocumentsListController` established, once each screen itself
+  stopped being read-only.
 - **`presentation/*_directory_screen.dart`** — built from
   `ApplicationsListScreen`'s scroll/empty-state/footer conventions, with
   a filter UI that differs per resource since the backend's own filter
   support differs:
-  - **Contacts** — debounced text search only (name or company).
-    Tappable email/LinkedIn per row via `url_launcher`, same as
-    `ContactsPanel`.
+  - **Contacts** — debounced text search only (`name` — no more company
+    match, since there's no single parent application to search on).
+    **No longer read-only**: an "Add contact" FAB (reuses
+    `ContactFormSheet`, same as `ContactsPanel`), and each card's
+    edit/delete `IconButton`s (two actions is few enough to stay plain
+    buttons rather than collapsing into an overflow menu). Delete here
+    is a real, permanent, cross-application delete (confirm dialog says
+    so explicitly) — distinct from `ContactsPanel`'s detach-only
+    "Remove from this application". Tappable email/LinkedIn per row via
+    `url_launcher`, same as `ContactsPanel`. No row `onTap` to an owning
+    application any more — there isn't necessarily one.
   - **Interviews** — a `result` filter via a bottom sheet (lifted from
     `ApplicationsListScreen`'s status-filter sheet shape); no text
     search, since `Interview` has no name-like field. Cards reuse
     `interview_formatting.dart`'s `formatDateTime` and duplicate
-    `InterviewsPanel`'s private `_ResultChip` color logic.
+    `InterviewsPanel`'s private `_ResultChip` color logic. Still
+    read-only — rows do navigate to the owning application, via
+    `context.push('/applications/{id}/edit')`.
   - **Documents** — combines a debounced search (`file_name` only now —
     no more company match, since there's no single parent application
     to search on) with a `file_type` filter sheet, clearing
@@ -735,8 +779,9 @@ still fit it exactly; Documents has diverged since (noted inline):
     shared widget).
 
   Every screen also renders an `_StatusChip` for the embedded
-  application status (Contacts/Interviews only, Documents has none any
-  more), styled via `ApplicationStatus`'s own
+  application status (Interviews only now — Contacts'/Documents' both
+  have none any more, for the same reason each lost its `*_with_
+  application.dart` above), styled via `ApplicationStatus`'s own
   `backgroundColor(context)`/`foregroundColor(context)` extension —
   duplicated per file (each is private), same reasoning as the
   result/type chips above.
@@ -1147,14 +1192,24 @@ mobile/
                                        # status style, formatting (application_formatting.dart
                                        # now uses intl's DateFormat — see above)
       contacts/
-        data/                        # contacts_api.dart,
-                                       # contact_directory_api.dart (GET /contacts)
-        domain/                      # contact.dart, contact_draft.dart,
-                                       # contact_with_application.dart (+ ApplicationSummary)
-        presentation/                 # contacts_panel.dart (nested tab content),
+        data/                        # contact_directory_api.dart (full /contacts CRUD -
+                                       # create/get/update/delete/list), application_contacts_api.dart
+                                       # (list/attach/detach against /applications/{id}/contacts,
+                                       # JSON {contact_id} body - replaces the old, now-deleted
+                                       # contacts_api.dart's nested create/update/delete contract)
+        domain/                      # contact.dart (no applicationId any more - a contact has
+                                       # zero/one/many owning applications), contact_draft.dart.
+                                       # contact_with_application.dart deleted (no single
+                                       # owning application left to embed)
+        presentation/                 # contacts_list_state/controller.dart
+                                       # (infinite scroll, .family-scoped - replaces the old
+                                       # plain local State once the nested endpoint paginated),
+                                       # contacts_panel.dart (nested tab content, attach/detach),
+                                       # contact_attach_sheet.dart (search picker),
                                        # contact_form_sheet.dart (add/edit),
                                        # contact_directory_state/controller.dart,
-                                       # contact_directory_screen.dart (bottom-nav tab)
+                                       # contact_directory_screen.dart (bottom-nav tab,
+                                       # full CRUD now, not read-only)
       interviews/
         data/                        # interviews_api.dart,
                                        # interview_directory_api.dart (GET /interviews)

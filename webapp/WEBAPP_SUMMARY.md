@@ -152,9 +152,12 @@ file_name/location/title, anything that can't be trusted to fit.
 already-interactive element inside the row (a link, a button — checked
 via `event.originalEvent.target.closest('a, button')`), otherwise
 navigates to `application-detail`. Used by `ApplicationListView.vue`
-(`row => row.id`), `ContactDirectoryView.vue`/`InterviewDirectoryView.vue`
+(`row => row.id`) and `InterviewDirectoryView.vue`
 (`row => row.application.id`) so clicking anywhere in a row opens the
-application, not just its Company-column link.
+application, not just its Company-column link. `ContactDirectoryView.vue`
+used to be a third caller here too, before Contact became a top-level
+resource with no single parent application left to click through to —
+see Contacts below.
 
 **`src/lib/date-utils.ts`**'s `formatDate`/`formatDateTime` — two shared
 `Intl.DateTimeFormat` instances (date-only `'medium'`; date+time
@@ -167,51 +170,77 @@ actually tells them apart.
 
 ### Contacts
 
-Two separate pieces, backed by two separate stores — one scoped to a
-single application (CRUD), one a read-only cross-application listing:
+Reworked into a top-level contact directory, matching the backend's own
+decoupling (see BACKEND_SUMMARY.md's "A note on Contact /
+ApplicationContact") — a contact is no longer owned by exactly one
+application, so this is no longer a CRUD-panel-vs-read-only-directory
+split like Interviews still has below. Instead, **two stores split by
+relationship, not by CRUD-vs-read-only** — the same restructuring
+Documents went through first:
 
-- **Per-application panel** (`ContactsPanel.vue`): rendered inside
-  `ApplicationFormView.vue`, below the main form, only once an
-  application exists (`v-if="!isNew && applicationId"` — there's nowhere
-  to nest a contact under an application that hasn't been created yet).
-  Pinia `contacts` store (`src/stores/contacts.ts`) holds one
-  application's contact list at a time, keyed by `applicationId` so a
-  slow response can't clobber the panel after navigating to a different
-  application; `reset()` is called on unmount for the same reason. Add/edit
-  via `components/contacts/ContactFormDialog.vue` (name required,
-  client-side email-format check, title, LinkedIn URL) — one dialog for
-  both, keyed off a `contact: Contact | null` prop (`null` = add mode);
-  `createContact()`/`updateContact()` already patch the store's own
-  `items` array on success, so the panel needs no follow-up sync, no
-  emit from the dialog. Delete via the existing `ConfirmDialog` pattern.
-- **Directory view** (`ContactDirectoryView.vue`, route `/contacts`, the
-  "Contacts" nav item in `AppLayout.vue` — no longer disabled): every
-  contact across every application the user owns, with the parent
-  application's company/position/status shown per row and linking back to
-  `application-detail`. Read-only by design — the empty state and copy
-  point the user back to the relevant application to add/edit a contact,
-  rather than duplicating that form here. Pinia `contactDirectory` store
-  (`src/stores/contactDirectory.ts`) — paginated + debounced search,
-  same `DataTable`/`Paginator`/`IconField` skeleton as
-  `ApplicationListView.vue`, hitting the backend's `GET /contacts`.
-- `src/types/contact.ts` mirrors both backend response shapes: the plain
-  `Contact` (nested CRUD) and `ContactWithApplication` (directory, adds
-  the embedded `application` summary).
+- **`stores/contacts.ts`** — the user's whole contact directory:
+  paginated list (search by `name`), create, update, and permanent
+  delete. Used by `ContactDirectoryView.vue` (route `/contacts`, the
+  "Contacts" nav item — now the primary place to manage the directory,
+  not a read-only view) and, for search/add, by `ContactsPanel.vue` too.
+- **`stores/applicationContacts.ts`** — one application's *attached*
+  contacts: list, attach (`POST`, picks an existing directory contact by
+  id), detach (`DELETE`, removes the link only — never deletes the
+  contact). Used by `ContactsPanel.vue` (`components/applications/`),
+  rendered inside `ApplicationFormView.vue` same as Interviews.
+  `confirmDetach()`'s copy is explicit that this doesn't delete the
+  contact ("... stays in your contact directory").
+- **Two shared dialog components** (`components/contacts/`), used by both
+  `ContactsPanel.vue` and `ContactDirectoryView.vue`:
+  - `ContactFormDialog.vue` — one dialog for both add and edit (keyed off
+    a `contact: Contact | null` prop, `null` = add mode: name required,
+    client-side email-format check, title, LinkedIn URL), always through
+    `useContactsStore()` regardless of which view opened it. Emits
+    `created`/`updated` with the resulting `Contact`; closes itself
+    immediately on success. `ContactsPanel.vue`'s extra step — attaching a
+    newly-created contact to the current application — is deliberately
+    **not** this component's concern: the panel does that as a follow-up
+    call in its `created` handler, after the dialog has already closed,
+    surfacing any attach failure via its own `attachError` message rather
+    than inside the (by then closed) dialog. On `updated`, the panel
+    patches its own `applicationContacts.items` array too, since that's a
+    different store's array than the one the dialog itself updated
+  - `ContactAttachDialog.vue` — only used by `ContactsPanel.vue` today
+    (pulled out alongside the form dialog anyway, to keep the panel's
+    template down to just the list it owns). `AutoComplete` search
+    against the directory (already-attached contacts filtered out of the
+    suggestions client-side, since attaching one twice would just `409`);
+    suggestion rows show name (`TruncatedText`) and title
+- `src/types/contact.ts` mirrors `ContactRead`/`ContactCreate`/
+  `ContactUpdate` — no more `application_id` anywhere on `Contact`, no
+  more `ContactApplicationSummary`/`ContactWithApplication` (a contact can
+  have zero, one, or several parent applications now, so there's no
+  single one left to embed). New `ApplicationContactCreatePayload` for
+  the attach call.
+
+Table columns on `ContactDirectoryView.vue`: name, title, email,
+LinkedIn (both `TruncatedText`/links), and an "Added" date
+(`formatDate` — contacts don't share the Documents/AI-picker
+same-day-duplicate concern that pushed those toward `formatDateTime`, so
+date-only is enough here). No more company/position/status/application-
+name columns — those only made sense when a contact had exactly one
+parent application.
 
 ### Interviews
 
-Two separate pieces, backed by two separate stores — same split as
-Contacts, one scoped to a single application (CRUD), one a read-only
-cross-application listing:
+Two separate pieces, backed by two separate stores — one scoped to a
+single application (CRUD), one a read-only cross-application listing.
+Contacts used to have this identical split before it became a top-level
+directory like Documents — see Contacts above.
 
 - **Per-application panel** (`InterviewsPanel.vue`): rendered inside
   `ApplicationFormView.vue`, alongside `ContactsPanel.vue`, same
   `v-if="!isNew && applicationId"` gating. Pinia `interviews` store
   (`src/stores/interviews.ts`) — same application-scoping/`reset()`-on-
-  unmount pattern as Contacts, but unlike Contacts' nested list, this
-  backend endpoint IS paginated (see BACKEND_SUMMARY.md), so the store
-  also tracks `page`/`pageSize`/`total` like the Applications store, and
-  the panel shows a `Paginator` once there's more than one page.
+  unmount pattern as `applicationContacts`, and this backend endpoint is
+  paginated too (see BACKEND_SUMMARY.md), so the store tracks
+  `page`/`pageSize`/`total` like the Applications store, and the panel
+  shows a `Paginator` once there's more than one page.
   Schedule/edit via `components/interviews/InterviewFormDialog.vue`
   (same one-dialog-both-modes shape as `ContactFormDialog.vue`, keyed off
   an `interview: Interview | null` prop): type, date & time (`DatePicker`
@@ -226,19 +255,19 @@ cross-application listing:
   the "Interviews" nav item in `AppLayout.vue` — no longer disabled):
   every interview across every application the user owns, with the
   parent application's company/position/status shown per row and
-  linking back to `application-detail`. Read-only by design, same
-  reasoning as the Contacts directory — the empty state and copy point
-  the user back to the relevant application to schedule/edit an
-  interview. Pinia `interviewDirectory` store
+  linking back to `application-detail`. Read-only by design — the empty
+  state and copy point the user back to the relevant application to
+  schedule/edit an interview. Pinia `interviewDirectory` store
   (`src/stores/interviewDirectory.ts`) — paginated, same
   `DataTable`/`Paginator` skeleton as `ContactDirectoryView.vue`, hitting
   the backend's `GET /interviews`. One deliberate divergence from
-  Contacts: no debounced text search — `Interview` has no name-like
-  field to filter by — so this uses a PrimeVue `Select` filtering on
-  `result` (`interviewResultFilterOptions()` in `interview-ui.ts`)
-  instead of an `IconField`/`InputText` search box. Table columns show
-  scheduled date/time, type, company, position, application status, and
-  result as a `Tag` (`interviewResultSeverity()`), plus duration.
+  Contacts' directory: no debounced text search — `Interview` has no
+  name-like field to filter by — so this uses a PrimeVue `Select`
+  filtering on `result` (`interviewResultFilterOptions()` in
+  `interview-ui.ts`) instead of an `IconField`/`InputText` search box.
+  Table columns show scheduled date/time, type, company, position,
+  application status, and result as a `Tag` (`interviewResultSeverity()`),
+  plus duration.
 - `src/types/interview.ts` mirrors `InterviewRead`/`InterviewCreate`/
   `InterviewUpdate`, plus `InterviewWithApplication` (directory, adds the
   embedded `application` summary) and `InterviewDirectoryParams`.
@@ -253,8 +282,9 @@ Reworked into a top-level document library, matching the backend's own
 decoupling (see BACKEND_SUMMARY.md's "A note on Document /
 ApplicationDocument") — a document is no longer owned by exactly one
 application, so this is no longer a CRUD-panel-vs-read-only-directory
-split like Contacts/Interviews. Instead, **two stores split by
-relationship, not by CRUD-vs-read-only**:
+split like Interviews still has. Instead, **two stores split by
+relationship, not by CRUD-vs-read-only** — the same restructuring
+Contacts went through later (see Contacts above):
 
 - **`stores/documents.ts`** — the user's whole document library:
   paginated list (search by `file_name`, filter by `file_type`), upload,
@@ -320,7 +350,9 @@ parent application.
 `AppLayout.vue`, appended last per the order features were added), backed
 by one Pinia store (`src/stores/analytics.ts`) covering all four
 `GET /analytics/*` endpoints — deliberately one store, not four, unlike
-Contacts/Interviews/Documents' CRUD-vs-directory split: these four
+Interviews' CRUD-vs-directory split (Contacts and Documents both used to
+have this split too, before their own decoupling into a single
+top-level-plus-attachment shape - see those sections above): these four
 endpoints are only ever consumed together by this one screen, so a
 single store keeps that relationship visible. Each of the four sections
 (`fetchSummary`/`fetchFunnel`/`fetchActivity`/`fetchInterviews`) tracks
@@ -734,8 +766,9 @@ Beyond the pure-function `api.spec.ts` smoke test:
 **Deliberately not tested yet**: `DashboardView`, `NotFoundView`,
 `AppLayout`/`AuthLayout` (minimal placeholder/shell markup), all
 Applications views/stores, the Contacts UI (`ContactsPanel.vue`,
-`ContactFormDialog.vue`, `ContactDirectoryView.vue`, `stores/contacts.ts`,
-`stores/contactDirectory.ts`), the Interviews UI (`InterviewsPanel.vue`,
+`ContactDirectoryView.vue`, `components/contacts/ContactFormDialog.vue`,
+`ContactAttachDialog.vue`, `stores/contacts.ts`,
+`stores/applicationContacts.ts`), the Interviews UI (`InterviewsPanel.vue`,
 `InterviewFormDialog.vue`, `InterviewDirectoryView.vue`,
 `stores/interviews.ts`, `stores/interviewDirectory.ts`), the Documents UI
 (`DocumentsPanel.vue`, `DocumentDirectoryView.vue`, the three

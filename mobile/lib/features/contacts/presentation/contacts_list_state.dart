@@ -4,19 +4,19 @@ import '../domain/contact.dart';
 
 enum RequestStatus { idle, loading, loadingMore, error }
 
-/// Mirrors InterviewsListState's shape for the infinite-scroll
-/// bookkeeping, plus a `search` field — the one filter `GET /contacts`
-/// supports (name; see ContactDirectoryApi's doc comment). No `.family`
-/// scoping here: this is a single global, cross-application list, same
-/// as ApplicationsListState/DocumentDirectoryState.
+/// Mirrors DocumentsListState's shape — paginated, no in-panel filters.
+/// `GET /applications/{id}/contacts` is paginated now that `Contact` is a
+/// top-level resource attached via `ApplicationContact` (see
+/// application_contacts_api.dart's doc comment), unlike the old nested
+/// endpoint this replaced, which returned every contact for the
+/// application in one unpaginated response.
 @immutable
-class ContactDirectoryState {
-  const ContactDirectoryState({
+class ContactsListState {
+  const ContactsListState({
     this.items = const [],
     this.total = 0,
     this.page = 1,
     this.pageSize = 20,
-    this.search = '',
     this.status = RequestStatus.idle,
     this.errorMessage,
   });
@@ -25,30 +25,26 @@ class ContactDirectoryState {
   final int total;
   final int page;
   final int pageSize;
-  final String search;
   final RequestStatus status;
   final String? errorMessage;
 
   bool get hasMore => items.length < total;
   bool get isInitialLoad => status == RequestStatus.loading && items.isEmpty;
-  bool get hasActiveSearch => search.isNotEmpty;
 
-  ContactDirectoryState copyWith({
+  ContactsListState copyWith({
     List<Contact>? items,
     int? total,
     int? page,
     int? pageSize,
-    String? search,
     RequestStatus? status,
     String? errorMessage,
     bool clearError = false,
   }) {
-    return ContactDirectoryState(
+    return ContactsListState(
       items: items ?? this.items,
       total: total ?? this.total,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,
-      search: search ?? this.search,
       status: status ?? this.status,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );

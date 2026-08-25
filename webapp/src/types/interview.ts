@@ -72,8 +72,9 @@ export type InterviewUpdatePayload = Partial<InterviewCreatePayload>
 // Mirrors ApplicationSummary / InterviewWithApplicationRead /
 // InterviewWithApplicationListResponse (backend/app/schemas/interview.py),
 // returned only by GET /interviews (the flat "all my interviews" directory,
-// not the nested per-application endpoints above). Same shape as
-// ContactApplicationSummary / ContactWithApplication in types/contact.ts.
+// not the nested per-application endpoints above). Contact used to have
+// this identical shape before it became a top-level resource like
+// Document - see types/contact.ts.
 
 export interface InterviewApplicationSummary {
   id: string
@@ -94,8 +95,8 @@ export interface InterviewWithApplicationListResponse {
   page_size: number
 }
 
-// Unlike ContactDirectoryParams' `search` (Contact has a name field to
-// match against), Interview has no text field — the equivalent filter is
+// Unlike ContactListParams' `search` (Contact has a name field to match
+// against), Interview has no text field — the equivalent filter is
 // `result`, matching the backend's `?result=` query param. `null` means
 // "clear the filter" (distinct from omitting the key, which means "keep
 // whatever's already applied" — see fetchInterviews() in

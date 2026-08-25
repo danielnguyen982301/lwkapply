@@ -17,11 +17,12 @@ class InterviewsException implements Exception {
 
 /// Raw HTTP calls against `/applications/{applicationId}/interviews`.
 ///
-/// Nested-only, same as Contacts — no top-level `/interviews` call
-/// here, since this app doesn't have a cross-application Interviews
-/// directory screen yet (bottom-nav "Interviews" tab is still
-/// ComingSoonScreen). Uses the shared `apiClientProvider`, same
-/// reasoning as ApplicationsApi/ContactsApi.
+/// Nested-only (the same shape Contacts used to have, before its own
+/// decoupling into a top-level resource — see
+/// contacts/domain/contact.dart) — `InterviewDirectoryApi` is a separate
+/// class for the flat, top-level `GET /interviews` directory read; create/
+/// update/delete stay here, nested-only. Uses the shared
+/// `apiClientProvider`, same reasoning as ApplicationsApi.
 class InterviewsApi {
   InterviewsApi(this._dio);
 
@@ -87,9 +88,8 @@ class InterviewsApi {
     }
   }
 
-  /// Same shape as ApplicationsApi/ContactsApi's `_messageFor` — kept as
-  /// its own copy per this codebase's existing precedent (see
-  /// ContactsApi's doc comment on the same method).
+  /// Same shape as the other resource APIs' `_messageFor` — kept as its
+  /// own copy per this codebase's existing precedent.
   String _messageFor(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

@@ -46,11 +46,11 @@ class InterviewListResponse(BaseModel):
 # --- Cross-application interview directory --------------------------------
 # Everything below supports GET /interviews
 # (app/api/v1/endpoints/interviews.py :: directory_router), the flat "all my
-# interviews" listing, mirroring ContactWithApplicationRead /
-# ContactWithApplicationListResponse in app/schemas/contact.py. Duplicated
-# here rather than shared, matching that file's own precedent (it embeds its
-# own ApplicationSummary rather than importing one) since each directory
-# response is a different join with its own row shape.
+# interviews" listing. Interview is still nested-only (an interview only
+# ever exists in the context of one application), unlike Contact/Document,
+# which are now top-level resources reusable across applications - see
+# app/models/contact.py's module docstring for why that pair doesn't need
+# this ApplicationSummary-embedding pattern any more.
 
 
 class ApplicationSummary(BaseModel):

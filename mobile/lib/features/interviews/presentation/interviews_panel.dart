@@ -15,13 +15,13 @@ import 'interviews_list_state.dart';
 /// `!isNew && applicationId` gating the web panel uses; see
 /// ApplicationFormScreen's class doc comment).
 ///
-/// Unlike ContactsPanel (unpaginated backend, so plain local list
-/// state), the nested interviews endpoint IS paginated — this uses the
-/// same infinite-scroll `StateNotifier` shape as
+/// The nested interviews endpoint is paginated — this uses the same
+/// infinite-scroll `StateNotifier` shape as
 /// ApplicationsListController/ApplicationsListScreen instead, via the
 /// `.family`-scoped `interviewsListControllerProvider(applicationId)`.
 /// Mutations (create/update/delete) still go straight through
-/// `interviewsApiProvider` from here, same as ContactsPanel — see
+/// `interviewsApiProvider` from here, same split ContactsPanel now uses
+/// too (via `ContactDirectoryApi`/`ApplicationContactsApi`) — see
 /// InterviewsListController's doc comment for why that split mirrors
 /// ApplicationsListController's own scope.
 class InterviewsPanel extends ConsumerStatefulWidget {
