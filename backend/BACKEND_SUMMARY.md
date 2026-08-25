@@ -1274,6 +1274,54 @@ per-request-dispatched task, including eventually testing
   an AI-tools UI as designed-later; this pass is that design, at the API
   level only.
 
+## Background job execution: BackgroundTasks/cron path added alongside Celery
+
+Deployment-driven follow-up to both sections above. Render (the chosen
+backend host, see docs/DEPLOYMENT.md) has no free tier for an always-on
+background worker, so production no longer runs Celery worker/beat by
+default:
+
+- `app/tasks/ai.py` and `app/tasks/reminders.py` were renamed to
+  `ai_celery.py` / `reminders_celery.py` (and their tests likewise) -
+  unchanged otherwise, still fully wired through `docker-compose.yml`'s
+  `celery-worker`/`celery-beat` services for local dev, and kept as a
+  reference/upgrade path rather than deleted.
+- Two new modules, `app/tasks/ai_inline.py` and
+  `app/tasks/reminders_inline.py`, duplicate that same logic as plain
+  functions with no Celery decorator - deliberately duplicated rather
+  than factored into a shared helper, so the Celery versions stay
+  self-contained and untouched.
+- `app/api/v1/endpoints/ai.py`'s two POST routes now dispatch via
+  FastAPI's `BackgroundTasks.add_task(...)` against the `_inline`
+  functions instead of `.delay()`.
+- `send_due_reminders` (the `_inline` version) has no scheduler of its
+  own anymore; a new endpoint, `app/api/v1/endpoints/internal.py`'s
+  `POST /internal/reminders/run`, calls it on demand instead. Auth is a
+  shared secret (`INTERNAL_CRON_SECRET`, compared with
+  `secrets.compare_digest` the same way `verify_csrf` does) via an
+  `X-Internal-Cron-Secret` header, not `get_current_user` - the caller
+  is a scheduler, not a logged-in user. `.github/workflows/reminders-cron.yml`
+  is the default scheduler: a GitHub Actions cron workflow hitting that
+  endpoint every 15 minutes, replacing celery-beat's own every-10-minute
+  `beat_schedule` entry.
+
+Trade-offs accepted for the $0-extra-infra path: no retry if the
+in-process background task crashes mid-run (a Render redeploy mid-task
+leaves a row on `PROCESSING` forever, same exposure Celery has for an
+outright process kill, just a more routine trigger here), no separate
+worker concurrency (a burst of AI requests queues up behind
+Starlette's shared threadpool rather than scaling via Celery worker
+concurrency), and GitHub's scheduled workflows are best-effort (can run
+several minutes late, auto-disable after 60 days of repo inactivity) -
+acceptable because `InterviewReminder.sent_at IS NULL` idempotency
+makes a late or skipped tick harmless, just delayed.
+
+Upgrade path back to Celery, if background work ever needs real worker
+concurrency or crash-safe retry: redeploy `celery-worker`/`celery-beat`
+as paid Render Background Workers (docker-compose.yml's services show
+the exact commands) and point the two call sites above back at
+`app.tasks.ai_celery` / re-add the beat schedule instead.
+
 ## Not yet implemented (next up per TODO.md)
 
 - Analytics reporting endpoints (CSV/PDF export) — the dashboard-metrics
@@ -1409,11 +1457,20 @@ backend/
                                     # (POST register/upsert, DELETE deregister)
           ai.py                    # POST/GET /ai/resume-analyses,
                                     # POST/GET /ai/ats-scores - both async
-                                    # (202 + Celery dispatch, poll GET .../{id})
+                                    # (202 + BackgroundTasks dispatch,
+                                    # poll GET .../{id})
+          internal.py              # POST /internal/reminders/run - shared-
+                                    # secret-authenticated, triggers
+                                    # send_due_reminders on demand (the
+                                    # cron replacement, see below)
     core/                          # config, security (JWT, password hashing)
       celery_app.py                # Celery app instance + beat schedule
                                     # (send_due_reminders, every 10 min) +
-                                    # include=[..., "app.tasks.ai"]
+                                    # include=[..., "app.tasks.ai_celery"] -
+                                    # still fully functional for local dev/
+                                    # study (docker-compose.yml), just not
+                                    # what production dispatches through
+                                    # (see "Background job execution" above)
     db/                            # engine/session, declarative base
     models/                        # SQLAlchemy ORM models
                                     # (InterviewReminder, DeviceToken - reminders;
@@ -1446,10 +1503,16 @@ backend/
         job_description_fetcher.py  # fetch_job_description() - SSRF-guarded
                                      # job_url fetch + trafilatura extraction
     tasks/
-      reminders.py                 # Celery task: send_due_reminders
-      ai.py                        # Celery tasks: parse_resume_task,
+      reminders_celery.py          # Celery task: send_due_reminders
+      ai_celery.py                 # Celery tasks: parse_resume_task,
                                     # score_ats_task - first per-request-
                                     # dispatched tasks in this codebase
+      reminders_inline.py          # same send_due_reminders logic as a
+                                    # plain function, called by internal.py
+                                    # instead of a beat schedule
+      ai_inline.py                 # same parse/score logic as plain
+                                    # functions, dispatched via
+                                    # BackgroundTasks instead of .delay()
     utils/
       timezone.py                  # shared IANA tz-name validation
     main.py                        # FastAPI app + router registration
