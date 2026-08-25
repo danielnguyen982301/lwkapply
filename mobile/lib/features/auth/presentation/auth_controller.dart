@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../notifications/data/push_service.dart';
+import '../../settings/data/user_api.dart';
 import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_state.dart';
@@ -10,7 +11,7 @@ import '../domain/user.dart';
 import 'session_providers.dart';
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository, this._pushService, this._ref)
+  AuthController(this._repository, this._pushService, this._userApi, this._ref)
       : super(const AuthState.unknown()) {
     _bootstrap();
 
@@ -42,6 +43,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthRepository _repository;
   final PushService _pushService;
+  final UserApi _userApi;
   final Ref _ref;
 
   void _setAuthenticated({required User user, required String accessToken}) {
@@ -54,6 +56,18 @@ class AuthController extends StateNotifier<AuthState> {
     state = AuthState.unauthenticated(errorMessage: errorMessage);
     _ref.read(accessTokenProvider.notifier).state = null;
     _ref.read(currentUserProvider.notifier).state = null;
+  }
+
+  /// Updates `state.user`/`currentUserProvider` together after a
+  /// profile/avatar change — every other read of the current user (none
+  /// yet on mobile, but see webapp's AppLayout.vue greeting for the
+  /// shape this exists to support) sees the update with no extra sync
+  /// step, same reasoning `_setAuthenticated` already follows.
+  void _setUser(User user) {
+    final accessToken = state.accessToken;
+    if (accessToken == null) return;
+    state = AuthState.authenticated(user: user, accessToken: accessToken);
+    _ref.read(currentUserProvider.notifier).state = user;
   }
 
   /// Runs once on app start: try to silently restore a session from the
@@ -141,6 +155,58 @@ class AuthController extends StateNotifier<AuthState> {
     );
     _ref.read(currentUserProvider.notifier).state = null;
   }
+
+  // --- Account settings -------------------------------------------------
+  // These mutate `state.user`/`currentUserProvider` in place on success
+  // (via `_setUser`) rather than living in a separate settings
+  // controller — mirrors webapp's stores/auth.ts, which keeps these on
+  // the same store for the same reason.
+
+  Future<User> updateProfile({
+    required String firstName,
+    required String lastName,
+    bool includeTimezone = false,
+    String? timezone,
+  }) async {
+    final user = await _userApi.updateProfile(
+      firstName: firstName,
+      lastName: lastName,
+      includeTimezone: includeTimezone,
+      timezone: timezone,
+    );
+    _setUser(user);
+    return user;
+  }
+
+  Future<User> uploadAvatar({
+    required String filePath,
+    required String fileName,
+  }) async {
+    final user =
+        await _userApi.uploadAvatar(filePath: filePath, fileName: fileName);
+    _setUser(user);
+    return user;
+  }
+
+  Future<User> removeAvatar() async {
+    final user = await _userApi.deleteAvatar();
+    _setUser(user);
+    return user;
+  }
+
+  /// Permanently deletes the account, then tears down the local session
+  /// the same way [logout] does — deregister the device token first
+  /// (needs a still-valid Bearer token), then clear everything local.
+  /// Skips `_repository.logout()`'s server-side refresh-token revoke
+  /// (the account, and therefore that token, no longer exists) in favor
+  /// of [AuthRepository.clearLocalSession], which only clears local
+  /// storage.
+  Future<void> deleteAccount({required String password}) async {
+    await _pushService.deregisterCurrentDevice();
+    await _userApi.deleteAccount(password: password);
+    await _repository.clearLocalSession();
+    _setUnauthenticated();
+  }
 }
 
 final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
@@ -148,6 +214,7 @@ final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
   return AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(pushServiceProvider),
+    ref.watch(userApiProvider),
     ref,
   );
 });

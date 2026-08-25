@@ -7,7 +7,9 @@ class User {
     required this.firstName,
     required this.lastName,
     required this.isActive,
+    required this.timezoneIsManual,
     this.avatarUrl,
+    this.timezone,
   });
 
   final String id;
@@ -16,6 +18,15 @@ class User {
   final String lastName;
   final bool isActive;
   final String? avatarUrl;
+
+  /// Null until the first login/register/refresh auto-detects one (see
+  /// core/utils/timezone.dart). [timezoneIsManual] distinguishes
+  /// "auto-detected" from "the user explicitly picked this in Account
+  /// Settings" — `PATCH /users/me` sets it true on an explicit non-null
+  /// `timezone`, and back to false on an explicit null (see
+  /// ProfileScreen).
+  final String? timezone;
+  final bool timezoneIsManual;
 
   String get fullName => '$firstName $lastName';
 
@@ -27,6 +38,8 @@ class User {
       lastName: json['last_name'] as String,
       isActive: json['is_active'] as bool,
       avatarUrl: json['avatar_url'] as String?,
+      timezone: json['timezone'] as String?,
+      timezoneIsManual: json['timezone_is_manual'] as bool,
     );
   }
 }
