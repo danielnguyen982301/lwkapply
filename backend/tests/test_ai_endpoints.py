@@ -6,11 +6,11 @@ Uses the same fixtures as the other endpoint test files (client,
 db_session, make_user, auth_headers - see conftest.py).
 
 Mocking strategy: these tests verify *dispatch*, not the pipeline (the
-pipeline itself is test_ai_celery_tasks.py's job) - parse_resume_task.delay/
-score_ats_task.delay are patched so no real Celery broker is needed, and
-is_ai_configured is patched to True by default (an autouse fixture) so
-tests aren't accidentally exercising the 503 path unless they explicitly
-want to.
+pipeline itself is test_ai_inline.py's job) - process_resume_analysis/
+process_ats_score are patched so BackgroundTasks never runs the real
+pipeline, and is_ai_configured is patched to True by default (an autouse
+fixture) so tests aren't accidentally exercising the 503 path unless
+they explicitly want to.
 """
 
 import uuid
@@ -44,8 +44,8 @@ def _make_document(db_session, user, **overrides):
 
 def _make_resume_analysis(db_session, user, document, **overrides):
     defaults = {"user_id": user.id, "document_id": document.id}
-    # Mirrors the real invariant (app/tasks/ai_celery.py::parse_resume_task sets
-    # analysis_name in the same commit as status=COMPLETED) - a completed
+    # Mirrors the real invariant (app/tasks/ai_inline.py::process_resume_analysis
+    # sets analysis_name in the same commit as status=COMPLETED) - a completed
     # analysis with no analysis_name would trip AtsScore.analysis_name's
     # RuntimeError guard the moment a test scores against it.
     if (
@@ -77,17 +77,19 @@ def ai_configured(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def no_real_celery_dispatch(monkeypatch):
-    """Every test in this file gets task dispatch stubbed out - none of
-    them need a real broker, and tests that specifically care about
-    dispatch happening can still inspect these via the returned mocks."""
+def no_real_background_dispatch(monkeypatch):
+    """Every test in this file gets task dispatch stubbed out - the real
+    pipeline (network calls to R2/Gemini) never runs even though
+    BackgroundTasks executes for real against TestClient, and tests that
+    specifically care about dispatch happening can still inspect these
+    via the returned mocks."""
     from unittest.mock import MagicMock
 
     fake_parse = MagicMock()
     fake_score = MagicMock()
-    monkeypatch.setattr(ai_endpoints_module, "parse_resume_task", fake_parse)
-    monkeypatch.setattr(ai_endpoints_module, "score_ats_task", fake_score)
-    return {"parse_resume_task": fake_parse, "score_ats_task": fake_score}
+    monkeypatch.setattr(ai_endpoints_module, "process_resume_analysis", fake_parse)
+    monkeypatch.setattr(ai_endpoints_module, "process_ats_score", fake_score)
+    return {"process_resume_analysis": fake_parse, "process_ats_score": fake_score}
 
 
 class TestAiFeaturesRequireConfiguration:
@@ -141,7 +143,7 @@ class TestCreateResumeAnalysis:
         db_session,
         make_user,
         auth_headers,
-        no_real_celery_dispatch,
+        no_real_background_dispatch,
     ):
         user = make_user()
         document = _make_document(db_session, user)
@@ -158,7 +160,7 @@ class TestCreateResumeAnalysis:
         assert body["document_id"] == str(document.id)
         assert body["analysis_name"] is None
         assert body["document_file_name"] == document.file_name
-        no_real_celery_dispatch["parse_resume_task"].delay.assert_called_once_with(
+        no_real_background_dispatch["process_resume_analysis"].assert_called_once_with(
             body["id"]
         )
 
@@ -204,7 +206,7 @@ class TestCreateResumeAnalysis:
         db_session,
         make_user,
         auth_headers,
-        no_real_celery_dispatch,
+        no_real_background_dispatch,
     ):
         user = make_user()
         document = _make_document(db_session, user)
@@ -220,7 +222,7 @@ class TestCreateResumeAnalysis:
         body = response.json()
         assert body["id"] == str(existing.id)
         assert body["document_file_name"] == document.file_name
-        no_real_celery_dispatch["parse_resume_task"].delay.assert_not_called()
+        no_real_background_dispatch["process_resume_analysis"].assert_not_called()
 
 
 class TestGetAndListResumeAnalyses:
@@ -360,7 +362,7 @@ class TestCreateAtsScore:
         db_session,
         make_user,
         auth_headers,
-        no_real_celery_dispatch,
+        no_real_background_dispatch,
     ):
         user = make_user()
         document = _make_document(db_session, user)
@@ -385,7 +387,7 @@ class TestCreateAtsScore:
         assert body["scored_at"] is None
         assert body["document_file_name"] == document.file_name
         assert body["analysis_name"] == analysis.analysis_name
-        no_real_celery_dispatch["score_ats_task"].delay.assert_called_once_with(
+        no_real_background_dispatch["process_ats_score"].assert_called_once_with(
             body["id"]
         )
 
@@ -395,7 +397,7 @@ class TestCreateAtsScore:
         db_session,
         make_user,
         auth_headers,
-        no_real_celery_dispatch,
+        no_real_background_dispatch,
     ):
         user = make_user()
         document = _make_document(db_session, user)
@@ -424,7 +426,7 @@ class TestCreateAtsScore:
         db_session,
         make_user,
         auth_headers,
-        no_real_celery_dispatch,
+        no_real_background_dispatch,
     ):
         user = make_user()
         document = _make_document(db_session, user)

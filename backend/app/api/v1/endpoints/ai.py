@@ -3,10 +3,11 @@ AI feature endpoints: Resume Parser (POST/GET /ai/resume-analyses) and
 ATS Score (POST/GET /ai/ats-scores) - TODO.md "AI Features".
 
 Both resources are async: a POST creates a `pending` row and dispatches a
-Celery task (app/tasks/ai_celery.py), returning 202 immediately; the client
-polls GET .../{id} for status to become completed/failed. First
-per-request-dispatched Celery tasks in this codebase - see that file's
-own docstring.
+FastAPI BackgroundTasks job (app/tasks/ai_inline.py), returning 202
+immediately; the client polls GET .../{id} for status to become
+completed/failed. A Celery-based equivalent (app/tasks/ai_celery.py) also
+exists, kept for local dev/study - see docs/DEPLOYMENT.md for why the
+default here is BackgroundTasks instead.
 
 Both are top-level, user-owned resources (like Application), not nested
 under /applications/{id}/ the way Interview is - see
@@ -26,7 +27,7 @@ just reuses an in-flight analysis never consumes budget either.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -52,7 +53,7 @@ from app.services.rate_limit import (
     ai_usage_key,
     check_and_increment,
 )
-from app.tasks.ai_celery import parse_resume_task, score_ats_task
+from app.tasks.ai_inline import process_ats_score, process_resume_analysis
 
 router = APIRouter()
 
@@ -155,6 +156,7 @@ def _get_owned_ats_score(db: Session, ats_score_id: uuid.UUID, user: User) -> At
 )
 def create_resume_analysis(
     payload: ResumeAnalysisCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -192,7 +194,7 @@ def create_resume_analysis(
     db.commit()
     db.refresh(analysis)
 
-    parse_resume_task.delay(str(analysis.id))
+    background_tasks.add_task(process_resume_analysis, str(analysis.id))
     return analysis
 
 
@@ -279,6 +281,7 @@ def list_resume_analyses(
 )
 def create_ats_score(
     payload: AtsScoreCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -312,7 +315,7 @@ def create_ats_score(
     db.commit()
     db.refresh(ats_score)
 
-    score_ats_task.delay(str(ats_score.id))
+    background_tasks.add_task(process_ats_score, str(ats_score.id))
     return ats_score
 
 

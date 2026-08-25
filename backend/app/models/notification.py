@@ -4,8 +4,10 @@ that table holds delivery *preferences*, this table holds the actual
 notification *events* shown to a user, each with its own read/unread
 state.
 
-Only one producer exists today: app/tasks/reminders_celery.py's
-send_due_reminders, which creates one row per due IN_APP-channel
+Only one producer exists today: app/tasks/reminders_inline.py's
+send_due_reminders (app/tasks/reminders_celery.py's function of the
+same name is a Celery-based equivalent, kept for local dev/study),
+which creates one row per due IN_APP-channel
 InterviewReminder (see ReminderChannel in app/models/interview_reminder.py)
 - same scheduling/idempotency machinery as the email/push channels,
 just writing a Notification row instead of calling an external

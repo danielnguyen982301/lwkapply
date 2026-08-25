@@ -69,12 +69,17 @@ api_router.include_router(
 # AI features (Resume Parser + ATS Score - TODO.md "AI Features") - two
 # top-level, user-owned resources (like Application), not nested under
 # /applications/{id}/. Both POST routes are async: they return 202 with
-# a pending row and dispatch a Celery task; see app/tasks/ai_celery.py.
+# a pending row and dispatch a background job; see app/tasks/ai_inline.py
+# (app/tasks/ai_celery.py is a Celery-based equivalent, kept for local
+# dev/study - see docs/DEPLOYMENT.md).
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 
 # In-app notification feed (the "bell icon") - top-level, user-owned,
 # read-mostly, same shape as documents/ai above. The only producer is
-# app/tasks/reminders_celery.py; this router only reads/marks rows read.
+# app/tasks/reminders_inline.py, triggered by an external cron hitting
+# app/api/v1/endpoints/internal.py (app/tasks/reminders_celery.py is a
+# Celery-beat-based equivalent, kept for local dev/study). This router
+# only reads/marks rows read.
 api_router.include_router(
     notifications.router, prefix="/notifications", tags=["notifications"]
 )

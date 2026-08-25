@@ -11,7 +11,9 @@ application-scoped URL, so anchoring ownership directly to user_id is
 actually more consistent with Application's own pattern, not less.
 
 Async by design: created with status=pending, processed by
-app/tasks/ai_celery.py::parse_resume_task (Celery), polled via
+app/tasks/ai_inline.py::process_resume_analysis (FastAPI BackgroundTasks;
+app/tasks/ai_celery.py::parse_resume_task is a Celery-based equivalent,
+kept for local dev/study), polled via
 GET /ai/resume-analyses/{id} until status is completed/failed. See
 app/models/ats_score.py, which depends on parsed_data here and reuses
 this module's AIJobStatus enum.
