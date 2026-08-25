@@ -116,6 +116,16 @@ class Settings(BaseSettings):
     # reliability, not because 3.7 was non-functional.
     GEMINI_MODEL: str = "gemini-3.6-flash"
 
+    # --- Internal/cron-triggered endpoints (see app/api/v1/endpoints/
+    # internal.py, app/tasks/reminders_inline.py) ---
+    # Shared secret an external scheduler (e.g. a GitHub Actions cron
+    # workflow) presents in an X-Internal-Cron-Secret header to trigger
+    # send-due-reminders without a Celery beat process running. Empty by
+    # default -> the endpoint refuses every request (503), same
+    # "unconfigured feature fails clearly" precedent as GEMINI_API_KEY
+    # above, rather than accepting an empty-string secret as valid.
+    INTERNAL_CRON_SECRET: str = ""
+
     # --- AI feature rate limiting (free tier only - see TODO.md "AI
     # Features"). Shared budget across resume-analyses and ats-scores
     # (both draw on the same Gemini cost) - see
