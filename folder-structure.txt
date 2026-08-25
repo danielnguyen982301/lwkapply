@@ -389,14 +389,32 @@
 │   │   │   │       ├── interviews_list_state.dart
 │   │   │   │       └── interviews_panel.dart
 │   │   │   ├── notifications
-│   │   │   │   └── data
-│   │   │   │       ├── device_tokens_api.dart
-│   │   │   │       ├── local_notifications.dart
-│   │   │   │       └── push_service.dart
+│   │   │   │   ├── data
+│   │   │   │   │   ├── device_tokens_api.dart
+│   │   │   │   │   ├── local_notifications.dart
+│   │   │   │   │   ├── notifications_api.dart
+│   │   │   │   │   └── push_service.dart
+│   │   │   │   ├── domain
+│   │   │   │   │   └── notification.dart
+│   │   │   │   └── presentation
+│   │   │   │       ├── notification_bell_button.dart
+│   │   │   │       ├── notifications_controller.dart
+│   │   │   │       ├── notifications_screen.dart
+│   │   │   │       └── notifications_state.dart
 │   │   │   └── settings
+│   │   │       ├── data
+│   │   │       │   ├── user_api.dart
+│   │   │       │   └── user_settings_api.dart
+│   │   │       ├── domain
+│   │   │       │   └── user_settings.dart
 │   │   │       └── presentation
+│   │   │           ├── change_password_screen.dart
+│   │   │           ├── delete_account_dialog.dart
+│   │   │           ├── notification_preferences_screen.dart
+│   │   │           ├── profile_screen.dart
 │   │   │           ├── settings_icon_button.dart
-│   │   │           └── settings_screen.dart
+│   │   │           ├── settings_screen.dart
+│   │   │           └── timezone_picker_sheet.dart
 │   │   ├── main.dart
 │   │   └── shared
 │   │       └── widgets
@@ -448,13 +466,21 @@
     │   │   │   ├── CustomInputText.vue
     │   │   │   ├── CustomPassword.vue
     │   │   │   ├── CustomSelect.vue
-    │   │   │   └── CustomTextarea.vue
+    │   │   │   ├── CustomTextarea.vue
+    │   │   │   └── CustomToggleSwitch.vue
     │   │   ├── documents
     │   │   │   ├── DocumentAttachDialog.vue
     │   │   │   ├── DocumentEditDialog.vue
     │   │   │   └── DocumentUploadDialog.vue
-    │   │   └── interviews
-    │   │       └── InterviewFormDialog.vue
+    │   │   ├── interviews
+    │   │   │   └── InterviewFormDialog.vue
+    │   │   ├── notifications
+    │   │   │   └── NotificationBell.vue
+    │   │   └── settings
+    │   │       ├── DeleteAccountDialog.vue
+    │   │       ├── NotificationSettingsCard.vue
+    │   │       ├── PasswordSettingsCard.vue
+    │   │       └── ProfileSettingsCard.vue
     │   ├── layouts
     │   │   ├── AppLayout.vue
     │   │   └── AuthLayout.vue
@@ -487,7 +513,9 @@
     │   │   ├── documents.ts
     │   │   ├── interviewDirectory.ts
     │   │   ├── interviews.ts
-    │   │   └── resumeAnalyses.ts
+    │   │   ├── notifications.ts
+    │   │   ├── resumeAnalyses.ts
+    │   │   └── userSettings.ts
     │   ├── style.css
     │   ├── test
     │   │   └── primevue.ts
@@ -498,7 +526,9 @@
     │   │   ├── auth.ts
     │   │   ├── contact.ts
     │   │   ├── document.ts
-    │   │   └── interview.ts
+    │   │   ├── interview.ts
+    │   │   ├── notification.ts
+    │   │   └── userSettings.ts
     │   ├── views
     │   │   ├── DashboardView.vue
     │   │   ├── NotFoundView.vue
@@ -520,8 +550,10 @@
     │   │   │   └── ContactDirectoryView.vue
     │   │   ├── documents
     │   │   │   └── DocumentDirectoryView.vue
-    │   │   └── interviews
-    │   │       └── InterviewDirectoryView.vue
+    │   │   ├── interviews
+    │   │   │   └── InterviewDirectoryView.vue
+    │   │   └── settings
+    │   │       └── AccountSettingsView.vue
     │   └── vite-env.d.ts
     ├── tailwind.config.js
     ├── tsconfig.app.json
@@ -529,4 +561,4 @@
     ├── tsconfig.node.json
     └── vite.config.ts
 
-130 directories, 400 files
+137 directories, 425 files
