@@ -16,6 +16,7 @@ import '../features/contacts/presentation/contact_directory_screen.dart';
 import '../features/documents/presentation/document_directory_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/interviews/presentation/interview_directory_screen.dart';
+import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/settings/presentation/change_password_screen.dart';
 import '../features/settings/presentation/notification_preferences_screen.dart';
 import '../features/settings/presentation/profile_screen.dart';
@@ -182,6 +183,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings/notification-preferences',
         name: 'settings-notification-preferences',
         builder: (context, state) => const NotificationPreferencesScreen(),
+      ),
+      // Reached via NotificationBellButton in an AppBar's actions — same
+      // plain-top-level-push reasoning as every other non-shell route
+      // above.
+      GoRoute(
+        path: '/notifications',
+        name: 'notifications',
+        builder: (context, state) => const NotificationsScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
