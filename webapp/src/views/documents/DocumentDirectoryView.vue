@@ -118,7 +118,7 @@ function openAnalysisModal(doc: Document) {
 // --- Delete / download -------------------------------------------------
 function confirmDelete(doc: Document) {
   confirm.require({
-    message: `Permanently delete "${doc.file_name}"? This removes it from every application it's attached to, and can't be undone.`,
+    message: `Permanently delete "${doc.file_name}"? This removes it from every application it's attached to and permanently deletes any AI analyses and ATS scores run against it, and can't be undone.`,
     header: 'Confirm deletion',
     icon: 'pi pi-exclamation-triangle',
     rejectLabel: 'Cancel',
