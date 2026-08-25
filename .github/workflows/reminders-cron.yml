@@ -27,10 +27,14 @@ name: Reminders Cron
 # "Enable workflow") if that happens.
 on:
   schedule:
-    # Every 15 minutes - comfortably inside the "every 5-15 min" window
-    # TODO.md's reminder plan calls for, same window celery beat's
-    # every-10-minutes schedule targets.
-    - cron: "*/15 * * * *"
+    # Every 10 minutes - matches celery beat's original cadence exactly
+    # (app/core/celery_app.py's beat_schedule) rather than just landing
+    # somewhere in TODO.md's "every 5-15 min" window. This repo is
+    # public, so GitHub Actions minutes are unmetered - no cost reason
+    # to space runs out further; if this workflow is ever copied into a
+    # private repo, note that private repos get a limited free minutes/
+    # month budget and every scheduled run bills at least 1 minute.
+    - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
 jobs:

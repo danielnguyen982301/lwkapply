@@ -1302,7 +1302,7 @@ default:
   `X-Internal-Cron-Secret` header, not `get_current_user` - the caller
   is a scheduler, not a logged-in user. `.github/workflows/reminders-cron.yml`
   is the default scheduler: a GitHub Actions cron workflow hitting that
-  endpoint every 15 minutes, replacing celery-beat's own every-10-minute
+  endpoint every 10 minutes, replacing celery-beat's own every-10-minute
   `beat_schedule` entry.
 
 Trade-offs accepted for the $0-extra-infra path: no retry if the
