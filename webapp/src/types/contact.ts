@@ -1,12 +1,9 @@
-import type { ApplicationStatus } from './application'
-
-// Mirrors ContactRead (backend/app/schemas/contact.py). Contacts are
-// always created/edited nested under an application (see ContactCreatePayload
-// / ContactUpdatePayload below) — but they can also be read via the flat
-// cross-application directory endpoint, see ContactWithApplication below.
+// Mirrors ContactRead (backend/app/schemas/contact.py). A contact is a
+// top-level, user-owned resource - no application_id here at all, since a
+// contact can be attached to zero, one, or several applications (see
+// ApplicationContact / stores/applicationContacts.ts).
 export interface Contact {
   id: string
-  application_id: string
   name: string
   title: string | null
   email: string | null
@@ -15,13 +12,12 @@ export interface Contact {
   updated_at: string
 }
 
-// Mirrors ContactListResponse. No pagination fields — list_contacts()
-// returns every contact for the application in one shot (contact counts
-// per application are small; unlike Applications there's no list/page_size
-// query param on this endpoint).
+// Mirrors ContactListResponse. Paginated, like Documents.
 export interface ContactListResponse {
   items: Contact[]
   total: number
+  page: number
+  page_size: number
 }
 
 // Mirrors ContactCreate, which is just ContactBase — every field the
@@ -39,33 +35,24 @@ export interface ContactCreatePayload {
 // for "don't change this".
 export type ContactUpdatePayload = Partial<ContactCreatePayload>
 
-// --- Cross-application contact directory ---------------------------------
-// Mirrors ApplicationSummary / ContactWithApplicationRead /
-// ContactWithApplicationListResponse (backend/app/schemas/contact.py),
-// returned only by GET /contacts (the flat "all my contacts" directory,
-// not the nested per-application endpoints above).
-
-export interface ContactApplicationSummary {
-  id: string
-  company: string
-  position: string
-  application_name: string | null
-  status: ApplicationStatus
-}
-
-export interface ContactWithApplication extends Contact {
-  application: ContactApplicationSummary
-}
-
-export interface ContactWithApplicationListResponse {
-  items: ContactWithApplication[]
-  total: number
-  page: number
-  page_size: number
-}
-
-export interface ContactDirectoryParams {
-  search?: string
+// Mirrors GET /contacts' query params (app/api/v1/endpoints/contacts.py).
+// `search` matches `name` only. As with DocumentListParams' `search`,
+// `null` means "clear the filter" (distinct from omitting the key, which
+// means "keep whatever's already applied" - see fetchContacts() in
+// stores/contacts.ts).
+export interface ContactListParams {
+  search?: string | null
   page?: number
   page_size?: number
+}
+
+// --- Application <-> Contact attachment ------------------------------------
+// Mirrors ApplicationContactCreate (backend/app/schemas/contact.py), used
+// by stores/applicationContacts.ts to attach an existing contact to an
+// application. Listing attached contacts returns plain Contact[]
+// (ContactListResponse) - no embedded application, symmetric with the
+// plain top-level contact shape above.
+
+export interface ApplicationContactCreatePayload {
+  contact_id: string
 }
