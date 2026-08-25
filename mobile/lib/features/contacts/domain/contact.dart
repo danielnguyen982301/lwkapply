@@ -1,14 +1,15 @@
 /// Mirrors ContactRead (backend/app/schemas/contact.py) and
 /// webapp/src/types/contact.ts::Contact.
 ///
-/// Contacts only ever exist nested under an application on mobile (no
-/// cross-application directory screen yet — that would mirror
-/// ContactDirectoryView.vue/GET /contacts and is separate future work,
-/// unrelated to this per-application tab).
+/// Deliberately no `applicationId` any more — a contact is a top-level,
+/// user-owned resource now (backend/BACKEND_SUMMARY.md's "A note on
+/// Contact / ApplicationContact"), reusable across zero, one, or several
+/// applications via the ApplicationContact join
+/// (features/contacts/data/application_contacts_api.dart), so there's no
+/// single owning application left to reference here.
 class Contact {
   const Contact({
     required this.id,
-    required this.applicationId,
     required this.name,
     required this.title,
     required this.email,
@@ -18,7 +19,6 @@ class Contact {
   });
 
   final String id;
-  final String applicationId;
   final String name;
   final String? title;
   final String? email;
@@ -29,7 +29,6 @@ class Contact {
   factory Contact.fromJson(Map<String, dynamic> json) {
     return Contact(
       id: json['id'] as String,
-      applicationId: json['application_id'] as String,
       name: json['name'] as String,
       title: json['title'] as String?,
       email: json['email'] as String?,
@@ -40,17 +39,21 @@ class Contact {
   }
 }
 
-/// Mirrors ContactListResponse (backend/app/schemas/contact.py). No
-/// pagination fields — `GET /applications/{id}/contacts` deliberately
-/// returns every contact for the application in one shot (see
-/// BACKEND_SUMMARY.md's note on the contacts directory endpoint for why
-/// the nested list stays unpaginated while the cross-application
-/// directory is).
+/// Mirrors ContactListResponse. Paginated, like Documents — both the
+/// top-level `GET /contacts` directory and the nested
+/// `GET /applications/{id}/contacts` attached-list share this shape.
 class ContactListResponse {
-  const ContactListResponse({required this.items, required this.total});
+  const ContactListResponse({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.pageSize,
+  });
 
   final List<Contact> items;
   final int total;
+  final int page;
+  final int pageSize;
 
   factory ContactListResponse.fromJson(Map<String, dynamic> json) {
     return ContactListResponse(
@@ -58,6 +61,8 @@ class ContactListResponse {
           .map((item) => Contact.fromJson(item as Map<String, dynamic>))
           .toList(),
       total: json['total'] as int,
+      page: json['page'] as int,
+      pageSize: json['page_size'] as int,
     );
   }
 }
