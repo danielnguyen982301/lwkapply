@@ -6,7 +6,7 @@ app/services/r2.py and app/services/email.py.
 Deliberately network-only, same boundary r2.py/email.py both hold - this
 module knows nothing about interviews, reminders, or the DB. Anything
 that needs to fan out to a user's multiple devices, or prune a token
-that FCM reports as dead, lives in the caller (app/tasks/reminders.py)
+that FCM reports as dead, lives in the caller (app/tasks/reminders_celery.py)
 so this file stays a thin, easily-mocked client boundary, matching how
 Documents' tests mock only `app.services.r2._r2_client` and nothing
 else in that module.

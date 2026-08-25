@@ -1,7 +1,7 @@
 """
 In-app notification feed - top-level, user-owned, read-mostly resource
 (same shape as app/api/v1/endpoints/documents.py). The only producer today
-is app/tasks/reminders.py's send_due_reminders, which creates a row per
+is app/tasks/reminders_celery.py's send_due_reminders, which creates a row per
 due IN_APP-channel InterviewReminder; this module only ever reads/marks
 rows as read, it never creates them.
 

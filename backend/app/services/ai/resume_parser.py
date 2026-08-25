@@ -9,7 +9,7 @@ upload time) is a deliberate, documented gap: python-docx only reads the
 OOXML .docx format, and pulling in a heavier legacy-.doc extraction
 dependency (textract/antiword/LibreOffice conversion) for a shrinking
 share of uploads isn't worth it for this pass. Raises
-UnsupportedResumeFormatError, which app/tasks/ai.py::parse_resume_task
+UnsupportedResumeFormatError, which app/tasks/ai_celery.py::parse_resume_task
 turns into status=failed with a "please re-upload as PDF or DOCX"
 message.
 """

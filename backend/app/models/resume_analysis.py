@@ -11,7 +11,9 @@ application-scoped URL, so anchoring ownership directly to user_id is
 actually more consistent with Application's own pattern, not less.
 
 Async by design: created with status=pending, processed by
-app/tasks/ai.py::parse_resume_task (Celery), polled via
+app/tasks/ai_inline.py::process_resume_analysis (FastAPI BackgroundTasks;
+app/tasks/ai_celery.py::parse_resume_task is a Celery-based equivalent,
+kept for local dev/study), polled via
 GET /ai/resume-analyses/{id} until status is completed/failed. See
 app/models/ats_score.py, which depends on parsed_data here and reuses
 this module's AIJobStatus enum.
@@ -66,7 +68,7 @@ class ResumeAnalysis(Base, UUIDMixin, TimestampMixin):
     )
     # Full text extracted from the resume file (app/services/ai/
     # resume_parser.py::extract_text), stored alongside the structured
-    # summary below so ATS Score (app/tasks/ai.py::score_ats_task) can
+    # summary below so ATS Score (app/tasks/ai_celery.py::score_ats_task) can
     # match against the actual resume content/keywords rather than a
     # paraphrased structured summary that may have dropped nuance
     # ParsedResume's fixed schema doesn't have a slot for.
@@ -76,7 +78,7 @@ class ResumeAnalysis(Base, UUIDMixin, TimestampMixin):
     # (app/schemas/ai.py), which both produces and validates this shape.
     parsed_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Set only when status transitions to COMPLETED (app/tasks/ai.py::
+    # Set only when status transitions to COMPLETED (app/tasks/ai_celery.py::
     # parse_resume_task) - distinct from created_at (when the request was
     # submitted), since parsing is async and the two can be seconds or
     # minutes apart. Stays NULL on a failed run.
@@ -84,7 +86,7 @@ class ResumeAnalysis(Base, UUIDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     # Auto-generated from the source document's file name + completion
-    # timestamp when status transitions to COMPLETED (app/tasks/ai.py::
+    # timestamp when status transitions to COMPLETED (app/tasks/ai_celery.py::
     # parse_resume_task::_generate_analysis_name) - stays NULL on a failed
     # run, same as completed_at. User-editable afterwards (PATCH
     # /ai/resume-analyses/{id}), so no DB-level uniqueness is enforced -

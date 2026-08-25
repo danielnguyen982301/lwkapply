@@ -18,7 +18,7 @@ caller is responsible for pasting the right thing. job_description
 starts NULL when sourced from job_url (that's the one field here that
 can't be non-null at creation, unlike every other required column in
 this codebase's other models, because its value genuinely isn't known
-yet) and is filled in by app/tasks/ai.py::score_ats_task once fetched. A
+yet) and is filled in by app/tasks/ai_celery.py::score_ats_task once fetched. A
 fetch/extraction failure (dead link, JS-rendered page, blocked scraper -
 see app/services/ai/job_description_fetcher.py) marks status=failed with
 an error_message asking the caller to resubmit with job_description
@@ -89,7 +89,7 @@ class AtsScore(Base, UUIDMixin, TimestampMixin):
     # validates this shape.
     feedback: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Set only when status transitions to COMPLETED (app/tasks/ai.py::
+    # Set only when status transitions to COMPLETED (app/tasks/ai_celery.py::
     # score_ats_task) - same rationale as ResumeAnalysis.completed_at:
     # distinct from created_at since scoring is async. Stays NULL on a
     # failed run.
@@ -115,7 +115,7 @@ class AtsScore(Base, UUIDMixin, TimestampMixin):
         nullable on ResumeAnalysis itself: an AtsScore can only ever be
         created against a resume_analysis whose status is already
         COMPLETED (enforced in create_ats_score), and analysis_name is set
-        in the same commit as that COMPLETED transition (app/tasks/ai.py::
+        in the same commit as that COMPLETED transition (app/tasks/ai_celery.py::
         parse_resume_task), so it's never NULL by the time an AtsScore
         exists to reference it. Already covered by the same
         joinedload(AtsScore.resume_analysis) list endpoints use for

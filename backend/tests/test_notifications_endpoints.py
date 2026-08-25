@@ -3,8 +3,8 @@ Integration tests for /notifications (app/api/v1/endpoints/notifications.py).
 
 Read-mostly, top-level, user-owned resource - same DataTable/Paginator
 shape as documents.py. The only real producer is
-app/tasks/reminders.py::send_due_reminders (covered in
-test_reminders.py); these tests insert Notification rows directly via
+app/tasks/reminders_celery.py::send_due_reminders (covered in
+test_reminders_celery.py); these tests insert Notification rows directly via
 the ORM, same "these tests are about GET/POST /notifications, not about
 how a row gets created" reasoning make_user uses for registration.
 """

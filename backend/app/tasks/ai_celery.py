@@ -1,11 +1,11 @@
 """
 Celery tasks for the AI features (Resume Parser + ATS Score - TODO.md
 "AI Features"). First per-request-dispatched Celery tasks in this
-codebase - app/tasks/reminders.py's send_due_reminders is beat-scheduled,
+codebase - app/tasks/reminders_celery.py's send_due_reminders is beat-scheduled,
 not triggered by an API call (see app/api/v1/endpoints/ai.py, which
 calls .delay() on both tasks below right after creating a pending row).
 
-Same shape as app/tasks/reminders.py: opens/closes its own
+Same shape as app/tasks/reminders_celery.py: opens/closes its own
 SessionLocal() (runs outside a request, can't use the get_db FastAPI
 dependency), and commits at each status transition rather than once at
 the end - one bad run shouldn't leave a row stuck on `processing`
@@ -56,7 +56,7 @@ def _generate_analysis_name(file_name: str, completed_at: datetime) -> str:
     return f"{slug}_{completed_at.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
 
-@celery_app.task(name="app.tasks.ai.parse_resume_task")
+@celery_app.task(name="app.tasks.ai_celery.parse_resume_task")
 def parse_resume_task(resume_analysis_id: str) -> None:
     db = SessionLocal()
     try:
@@ -109,7 +109,7 @@ def parse_resume_task(resume_analysis_id: str) -> None:
         db.close()
 
 
-@celery_app.task(name="app.tasks.ai.score_ats_task")
+@celery_app.task(name="app.tasks.ai_celery.score_ats_task")
 def score_ats_task(ats_score_id: str) -> None:
     db = SessionLocal()
     try:
