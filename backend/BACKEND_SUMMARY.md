@@ -1322,6 +1322,32 @@ as paid Render Background Workers (docker-compose.yml's services show
 the exact commands) and point the two call sites above back at
 `app.tasks.ai_celery` / re-add the beat schedule instead.
 
+### Scaling / load balancing — not configured, not needed yet
+
+Came up when picking Render/Vercel/Supabase in docs/DEPLOYMENT.md;
+worth recording the reasoning here too since it's about this app's own
+statelessness, not just infra choices:
+
+- **Vercel and Cloudflare R2** load-balance themselves via their own
+  global CDN/edge networks - nothing this codebase needs to do.
+- **Render** runs the API as one instance. Its own router/proxy always
+  fronts that instance (never raw-exposed to the internet), but there's
+  no horizontal scaling (multiple instances splitting traffic) turned
+  on - that's a Render dashboard toggle on paid plans, not a code
+  change, precisely because nothing added so far breaks under multiple
+  instances: `get_current_user`'s JWT auth carries no server-side
+  session state, `app/services/rate_limit.py`'s AI rate limiter already
+  lives in Redis rather than in-process memory, and the
+  `BackgroundTasks` jobs added just above write straight to Postgres
+  rather than holding anything in shared memory between requests. Flip
+  that toggle whenever real traffic justifies it - no rework needed
+  first.
+- **Supabase** is a single primary Postgres instance - read replicas or
+  other DB-level load balancing would be premature at this project's
+  traffic level. The Supavisor connection pooler `DATABASE_URL` already
+  points at (see docs/DEPLOYMENT.md's Database section) is connection
+  pooling, a different concern from horizontal DB scaling.
+
 ## Not yet implemented (next up per TODO.md)
 
 - Analytics reporting endpoints (CSV/PDF export) — the dashboard-metrics
