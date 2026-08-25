@@ -2,39 +2,40 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../applications/domain/application.dart';
-import '../../applications/presentation/application_status_style.dart';
 import '../../settings/presentation/settings_icon_button.dart';
-import '../domain/contact_with_application.dart';
+import '../data/application_contacts_api.dart' show ContactsException;
+import '../data/contact_directory_api.dart';
+import '../domain/contact.dart';
 import 'contact_directory_controller.dart';
 import 'contact_directory_state.dart';
+import 'contact_form_sheet.dart';
 
 /// Mobile counterpart to webapp/src/views/contacts/ContactDirectoryView.vue
 /// and the bottom-nav "Contacts" tab (previously `ComingSoonScreen` — see
-/// router.dart). Read-only by design, same reasoning as the web view: it
-/// aggregates every contact across every application the user owns, and
-/// the empty state / each row point back to the owning application to
-/// add/edit/delete rather than duplicating that form here (contacts only
-/// have a create/edit UI nested inside `ApplicationFormScreen`'s Contacts
-/// tab).
+/// router.dart).
 ///
-/// Deliberate divergences from `ApplicationsListScreen`, the closest
-/// existing infinite-scroll pattern:
-/// - No FAB / no create action — there's nothing to create from here.
-/// - Only a text search (name or company) — no status/enum filter sheet,
-///   since `GET /contacts` (BACKEND_SUMMARY.md) doesn't take one. The
-///   future Interviews/Documents directory screens will each have their
-///   own version of this divergence (a `result` filter, a `file_type`
-///   filter) when those are built.
-/// - Tapping a row pushes the owning application's edit screen
-///   (`/applications/{id}/edit`), the same top-level route
-///   `ApplicationsListScreen` already uses — there's nothing to edit on
-///   a contact from this screen itself.
-/// - Email/LinkedIn are tappable via `url_launcher`, same as the nested
-///   `ContactsPanel`/`ContactFormSheet` UI (see MOBILE_SUMMARY.md).
+/// **No longer read-only** — this is now the primary place to manage the
+/// user's whole contact directory (add/edit/delete), matching
+/// `ContactDirectoryView.vue`'s own rework once `Contact` became a
+/// top-level, user-owned resource (see contact.dart's doc comment). Each
+/// row no longer points back to "the" owning application — a contact can
+/// belong to zero, one, or several applications now, so there's no single
+/// one left to navigate to; attaching a contact to a specific application
+/// still only happens from within that application's Contacts tab
+/// (`ContactsPanel`).
+///
+/// Deliberate divergences from `DocumentDirectoryScreen`, the closest
+/// existing top-level-directory pattern:
+/// - Only a text search (name) — no second filter sheet, since
+///   `GET /contacts` (ContactDirectoryApi's doc comment) doesn't take one.
+/// - Add/edit reuses `ContactFormSheet` (the same modal bottom sheet
+///   `ContactsPanel` uses), not a dedicated upload/edit flow — a contact
+///   is a plain JSON form, not a file.
+/// - Each card shows just two row actions (edit/delete), so they stay
+///   plain `IconButton`s rather than collapsing into an overflow menu the
+///   way Documents' four actions do.
 class ContactDirectoryScreen extends ConsumerStatefulWidget {
   const ContactDirectoryScreen({super.key});
 
@@ -73,6 +74,9 @@ class _ContactDirectoryScreenState
     }
   }
 
+  ContactDirectoryController get _controller =>
+      ref.read(contactDirectoryControllerProvider.notifier);
+
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
@@ -87,6 +91,79 @@ class _ContactDirectoryScreenState
     _searchController.clear();
     ref.read(contactDirectoryControllerProvider.notifier).setSearch('');
     setState(() {});
+  }
+
+  Future<void> _openAddSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => ContactFormSheet(
+        existing: null,
+        onSubmit: (draft) async {
+          final created =
+              await ref.read(contactDirectoryApiProvider).create(draft);
+          if (mounted) _controller.prepend(created);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openEditSheet(Contact contact) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => ContactFormSheet(
+        existing: contact,
+        onSubmit: (draft) async {
+          final updated = await ref
+              .read(contactDirectoryApiProvider)
+              .update(contact.id, draft);
+          if (mounted) _controller.replaceById(updated);
+        },
+      ),
+    );
+  }
+
+  /// Permanent, cross-application delete — explicitly warns about that,
+  /// unlike ContactsPanel's detach-only "Remove from this application"
+  /// confirm, since removing a contact here really does delete it
+  /// everywhere it's attached.
+  Future<void> _confirmDelete(Contact contact) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete contact?'),
+        content: Text(
+          'Permanently delete ${contact.name}? This removes them from '
+          "every application they're attached to, and can't be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(contactDirectoryApiProvider).delete(contact.id);
+      if (!mounted) return;
+      _controller.removeById(contact.id);
+    } on ContactsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _launch(Uri uri) async {
@@ -107,49 +184,57 @@ class _ContactDirectoryScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(contactDirectoryControllerProvider);
-    final controller = ref.read(contactDirectoryControllerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: const [SettingsIconButton()],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search by name or company…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: _clearSearch,
-                      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name…',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: _clearSearch,
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                  ),
                 ),
-                isDense: true,
               ),
+              const SizedBox(height: 4),
+              Expanded(child: _buildBody(context, state)),
+            ],
+          ),
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _openAddSheet,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text('Add contact'),
             ),
           ),
-          const SizedBox(height: 4),
-          Expanded(child: _buildBody(context, state, controller)),
         ],
       ),
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    ContactDirectoryState state,
-    ContactDirectoryController controller,
-  ) {
+  Widget _buildBody(BuildContext context, ContactDirectoryState state) {
     if (state.status == RequestStatus.error && state.items.isEmpty) {
       return Center(
         child: Padding(
@@ -163,7 +248,7 @@ class _ContactDirectoryScreenState
               ),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: controller.refresh,
+                onPressed: _controller.refresh,
                 child: const Text('Retry'),
               ),
             ],
@@ -198,20 +283,23 @@ class _ContactDirectoryScreenState
               const SizedBox(height: 8),
               Text(
                 state.hasActiveSearch
-                    ? 'Try a different name or company.'
-                    : 'Add recruiters, hiring managers, or interviewers '
-                        'from within an application, and they\'ll show up '
-                        'here.',
+                    ? 'Try a different name.'
+                    : 'Add a recruiter, hiring manager, or interviewer to '
+                        'get started.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (state.hasActiveSearch) ...[
-                const SizedBox(height: 12),
+              const SizedBox(height: 12),
+              if (state.hasActiveSearch)
                 TextButton(
                   onPressed: _clearSearch,
                   child: const Text('Clear search'),
+                )
+              else
+                FilledButton(
+                  onPressed: _openAddSheet,
+                  child: const Text('Add contact'),
                 ),
-              ],
             ],
           ),
         ),
@@ -219,28 +307,27 @@ class _ContactDirectoryScreenState
     }
 
     return RefreshIndicator(
-      onRefresh: controller.refresh,
+      onRefresh: _controller.refresh,
       child: ListView.separated(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
         itemCount: state.items.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index == state.items.length) {
             return _buildFooter(state);
           }
-          final item = state.items[index];
+          final contact = state.items[index];
           return _ContactCard(
-            item: item,
-            onTap: () =>
-                context.push('/applications/${item.application.id}/edit'),
-            onEmailTap: item.contact.email == null
+            contact: contact,
+            onEdit: () => _openEditSheet(contact),
+            onDelete: () => _confirmDelete(contact),
+            onEmailTap: contact.email == null
                 ? null
-                : () =>
-                    _launch(Uri(scheme: 'mailto', path: item.contact.email)),
-            onLinkedinTap: item.contact.linkedinUrl == null
+                : () => _launch(Uri(scheme: 'mailto', path: contact.email)),
+            onLinkedinTap: contact.linkedinUrl == null
                 ? null
-                : () => _launch(Uri.parse(item.contact.linkedinUrl!)),
+                : () => _launch(Uri.parse(contact.linkedinUrl!)),
           );
         },
       ),
@@ -272,7 +359,7 @@ class _ContactDirectoryScreenState
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Center(
           child: Text(
-            'You\'ve reached the end · ${state.total} total',
+            "You've reached the end · ${state.total} total",
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -284,96 +371,80 @@ class _ContactDirectoryScreenState
 
 class _ContactCard extends StatelessWidget {
   const _ContactCard({
-    required this.item,
-    required this.onTap,
+    required this.contact,
+    required this.onEdit,
+    required this.onDelete,
     this.onEmailTap,
     this.onLinkedinTap,
   });
 
-  final ContactWithApplication item;
-  final VoidCallback onTap;
+  final Contact contact;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
   final VoidCallback? onEmailTap;
   final VoidCallback? onLinkedinTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final contact = item.contact;
-    final application = item.application;
 
     return Card(
       margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      contact.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  Text(
+                    contact.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _StatusChip(status: application.status),
-                ],
-              ),
-              if (contact.title != null) ...[
-                const SizedBox(height: 2),
-                Text(contact.title!, style: theme.textTheme.bodyMedium),
-              ],
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(
-                    Icons.business_outlined,
-                    size: 16,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      application.applicationName != null
-                          ? '${application.company} · ${application.position} '
-                              '(${application.applicationName})'
-                          : '${application.company} · ${application.position}',
-                      style: theme.textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              if (contact.email != null || contact.linkedinUrl != null) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: [
-                    if (contact.email != null)
-                      _LinkChip(
-                        icon: Icons.email_outlined,
-                        label: contact.email!,
-                        onTap: onEmailTap,
-                      ),
-                    if (contact.linkedinUrl != null)
-                      _LinkChip(
-                        icon: Icons.link,
-                        label: 'LinkedIn',
-                        onTap: onLinkedinTap,
-                      ),
+                  if (contact.title != null) ...[
+                    const SizedBox(height: 2),
+                    Text(contact.title!, style: theme.textTheme.bodyMedium),
                   ],
-                ),
-              ],
-            ],
-          ),
+                  if (contact.email != null || contact.linkedinUrl != null) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        if (contact.email != null)
+                          _LinkChip(
+                            icon: Icons.email_outlined,
+                            label: contact.email!,
+                            onTap: onEmailTap,
+                          ),
+                        if (contact.linkedinUrl != null)
+                          _LinkChip(
+                            icon: Icons.link,
+                            label: 'LinkedIn',
+                            onTap: onLinkedinTap,
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit contact',
+              onPressed: onEdit,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete contact',
+              color: theme.colorScheme.error,
+              onPressed: onDelete,
+            ),
+          ],
         ),
       ),
     );
@@ -410,30 +481,6 @@ class _LinkChip extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final ApplicationStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: status.backgroundColor(context),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status.label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: status.foregroundColor(context),
-              fontWeight: FontWeight.w600,
-            ),
       ),
     );
   }

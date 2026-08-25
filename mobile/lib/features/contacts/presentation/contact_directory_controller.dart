@@ -1,21 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/application_contacts_api.dart' show ContactsException;
 import '../data/contact_directory_api.dart';
-import '../data/contacts_api.dart' show ContactsException;
+import '../domain/contact.dart';
 import 'contact_directory_state.dart';
 
 /// Mirrors InterviewsListController's fetch/append split for infinite
-/// scroll (features/interviews/presentation/
-/// interviews_list_controller.dart), but as a plain (non-`.family`)
-/// StateNotifier, same as ApplicationsListController — this screen shows
-/// one global, cross-application list, not something scoped per
+/// scroll, but as a plain (non-`.family`) StateNotifier, same as
+/// ApplicationsListController/DocumentDirectoryController — this screen
+/// shows one global, cross-application list, not something scoped per
 /// application.
 ///
-/// Read-only: unlike ApplicationsListController/InterviewsListController,
-/// there's no create/update/delete here to react to — `GET /contacts` is
-/// the only call this feature makes (see ContactDirectoryApi's doc
-/// comment for why edits happen from the owning application instead, not
-/// this screen).
+/// **No longer read-only.** This is now the primary place to manage the
+/// contact directory (add/edit/delete), not a read-only
+/// cross-application view — `Contact` is a top-level, user-owned
+/// resource now (see contact.dart's doc comment), so there's no other
+/// screen with a better claim to owning these actions.
+/// `prepend`/`replaceById`/`removeById` patch local state the same way
+/// `DocumentDirectoryController` does for its own library list.
 class ContactDirectoryController extends StateNotifier<ContactDirectoryState> {
   ContactDirectoryController(this._api) : super(const ContactDirectoryState()) {
     fetchFirstPage();
@@ -82,6 +84,36 @@ class ContactDirectoryController extends StateNotifier<ContactDirectoryState> {
     if (search == state.search) return;
     state = state.copyWith(search: search);
     await fetchFirstPage();
+  }
+
+  /// After a successful create — always the newest contact, so always
+  /// belongs at index 0 regardless of how many pages are already loaded.
+  /// Mirrors DocumentDirectoryController.prepend.
+  void prepend(Contact contact) {
+    state = state.copyWith(
+      items: [contact, ...state.items],
+      total: state.total + 1,
+    );
+  }
+
+  /// After a successful edit — same item, same position.
+  void replaceById(Contact updated) {
+    state = state.copyWith(
+      items: [
+        for (final item in state.items)
+          if (item.id == updated.id) updated else item,
+      ],
+    );
+  }
+
+  /// After a successful delete — no reorder ambiguity, same reasoning
+  /// as every other list's `removeById`.
+  void removeById(String id) {
+    if (!state.items.any((item) => item.id == id)) return;
+    state = state.copyWith(
+      items: state.items.where((item) => item.id != id).toList(),
+      total: state.total > 0 ? state.total - 1 : 0,
+    );
   }
 }
 

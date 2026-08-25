@@ -2,34 +2,35 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
-import '../domain/contact_with_application.dart';
-import 'contacts_api.dart' show ContactsException;
+import '../domain/contact.dart';
+import '../domain/contact_draft.dart';
+import 'application_contacts_api.dart' show ContactsException;
 
-/// Raw HTTP calls against the flat, top-level `GET /contacts` directory
-/// endpoint (backend/app/api/v1/endpoints/contacts.py::directory_router)
-/// — every contact across every application the user owns, with the
-/// parent application's company/position/status embedded.
+/// Raw HTTP calls against the top-level `GET/POST /contacts` +
+/// `GET/PATCH/DELETE /contacts/{id}` directory
+/// (backend/app/api/v1/endpoints/contacts.py) — the user's whole contact
+/// directory, independent of any application.
 ///
-/// Deliberately a separate API class from `ContactsApi`
-/// (contacts_api.dart), not an extension of it: different endpoint
-/// (`/contacts`, not `/applications/{id}/contacts`), different response
-/// shape (paginated, with an embedded `application` summary), different
-/// lifecycle — same reasoning webapp/src/stores/contactDirectory.ts
-/// gives for being a separate store from stores/contacts.ts, and the
-/// same split ContactsApi itself already draws around being nested-only.
+/// A contact used to belong to exactly one application (the old
+/// `ContactsApi`, `application_contacts_api.dart` now); this is the full
+/// CRUD surface that replaced it once `Contact` was decoupled into a
+/// top-level, user-owned resource (backend/BACKEND_SUMMARY.md's "A note
+/// on Contact / ApplicationContact") — create, list, get, patch, and
+/// delete all live here now, not nested under an application.
+/// `ApplicationContactsApi` (application_contacts_api.dart) is the
+/// separate, much smaller API for attaching/detaching an already-created
+/// directory contact to/from a specific application.
 ///
-/// Reuses `ContactsException` rather than declaring a new exception
-/// type: same resource, same error-shape contract, just a different
-/// route on it.
+/// Reuses `ContactsException` from `application_contacts_api.dart` rather
+/// than declaring a new type: same resource, same error-shape contract.
 class ContactDirectoryApi {
   ContactDirectoryApi(this._dio);
 
   final Dio _dio;
 
-  /// Mirrors `GET /contacts`. `search` matches contact name or the
-  /// parent application's company (see BACKEND_SUMMARY.md's note on the
-  /// contacts directory endpoint) — pass `null` or `''` to clear it.
-  Future<ContactWithApplicationListResponse> list({
+  /// Mirrors `GET /contacts`. `search` matches contact name — pass
+  /// `null`/`''` to clear it.
+  Future<ContactListResponse> list({
     String? search,
     int page = 1,
     int pageSize = 20,
@@ -43,15 +44,63 @@ class ContactDirectoryApi {
           'page_size': pageSize,
         },
       );
-      return ContactWithApplicationListResponse.fromJson(response.data!);
+      return ContactListResponse.fromJson(response.data!);
     } on DioException catch (e) {
       throw ContactsException(_messageFor(e));
     }
   }
 
-  /// Same shape as ContactsApi._messageFor — kept as its own copy per
-  /// this codebase's existing precedent (see that method's doc comment)
-  /// even though it throws the same exception type.
+  /// Mirrors `GET /contacts/{id}`.
+  Future<Contact> get(String id) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('/contacts/$id');
+      return Contact.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ContactsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `POST /contacts` — creates straight in the directory, no
+  /// `applicationId` involved.
+  Future<Contact> create(ContactDraft draft) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/contacts',
+        data: draft.toJson(),
+      );
+      return Contact.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ContactsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `PATCH /contacts/{id}`.
+  Future<Contact> update(String id, ContactDraft draft) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/contacts/$id',
+        data: draft.toJson(),
+      );
+      return Contact.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ContactsException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `DELETE /contacts/{id}` (204 No Content on success) — a
+  /// real, permanent delete, unlike `ApplicationContactsApi.detach`
+  /// (which only removes one application's link). Removes the contact
+  /// from every application it's attached to.
+  Future<void> delete(String id) async {
+    try {
+      await _dio.delete<void>('/contacts/$id');
+    } on DioException catch (e) {
+      throw ContactsException(_messageFor(e));
+    }
+  }
+
+  /// Same shape as the other resource APIs' `_messageFor` — kept as its
+  /// own copy per this codebase's existing precedent.
   String _messageFor(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

@@ -1,16 +1,14 @@
 import 'package:flutter/foundation.dart';
 
-import '../domain/contact_with_application.dart';
+import '../domain/contact.dart';
 
 enum RequestStatus { idle, loading, loadingMore, error }
 
-/// Mirrors InterviewsListState's shape (features/interviews/presentation/
-/// interviews_list_state.dart) for the infinite-scroll bookkeeping, plus
-/// a `search` field — the one filter `GET /contacts` supports (name or
-/// company; see BACKEND_SUMMARY.md's note on the contacts directory
-/// endpoint). No `.family` scoping here, unlike InterviewsListState:
-/// this is a single global, cross-application list, same as
-/// ApplicationsListState.
+/// Mirrors InterviewsListState's shape for the infinite-scroll
+/// bookkeeping, plus a `search` field — the one filter `GET /contacts`
+/// supports (name; see ContactDirectoryApi's doc comment). No `.family`
+/// scoping here: this is a single global, cross-application list, same
+/// as ApplicationsListState/DocumentDirectoryState.
 @immutable
 class ContactDirectoryState {
   const ContactDirectoryState({
@@ -23,7 +21,7 @@ class ContactDirectoryState {
     this.errorMessage,
   });
 
-  final List<ContactWithApplication> items;
+  final List<Contact> items;
   final int total;
   final int page;
   final int pageSize;
@@ -36,7 +34,7 @@ class ContactDirectoryState {
   bool get hasActiveSearch => search.isNotEmpty;
 
   ContactDirectoryState copyWith({
-    List<ContactWithApplication>? items,
+    List<Contact>? items,
     int? total,
     int? page,
     int? pageSize,
