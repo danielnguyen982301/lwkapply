@@ -3,7 +3,7 @@ AI feature endpoints: Resume Parser (POST/GET /ai/resume-analyses) and
 ATS Score (POST/GET /ai/ats-scores) - TODO.md "AI Features".
 
 Both resources are async: a POST creates a `pending` row and dispatches a
-Celery task (app/tasks/ai.py), returning 202 immediately; the client
+Celery task (app/tasks/ai_celery.py), returning 202 immediately; the client
 polls GET .../{id} for status to become completed/failed. First
 per-request-dispatched Celery tasks in this codebase - see that file's
 own docstring.
@@ -52,7 +52,7 @@ from app.services.rate_limit import (
     ai_usage_key,
     check_and_increment,
 )
-from app.tasks.ai import parse_resume_task, score_ats_task
+from app.tasks.ai_celery import parse_resume_task, score_ats_task
 
 router = APIRouter()
 

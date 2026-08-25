@@ -6,7 +6,7 @@ Uses the same fixtures as the other endpoint test files (client,
 db_session, make_user, auth_headers - see conftest.py).
 
 Mocking strategy: these tests verify *dispatch*, not the pipeline (the
-pipeline itself is test_ai_tasks.py's job) - parse_resume_task.delay/
+pipeline itself is test_ai_celery_tasks.py's job) - parse_resume_task.delay/
 score_ats_task.delay are patched so no real Celery broker is needed, and
 is_ai_configured is patched to True by default (an autouse fixture) so
 tests aren't accidentally exercising the 503 path unless they explicitly
@@ -44,7 +44,7 @@ def _make_document(db_session, user, **overrides):
 
 def _make_resume_analysis(db_session, user, document, **overrides):
     defaults = {"user_id": user.id, "document_id": document.id}
-    # Mirrors the real invariant (app/tasks/ai.py::parse_resume_task sets
+    # Mirrors the real invariant (app/tasks/ai_celery.py::parse_resume_task sets
     # analysis_name in the same commit as status=COMPLETED) - a completed
     # analysis with no analysis_name would trip AtsScore.analysis_name's
     # RuntimeError guard the moment a test scores against it.

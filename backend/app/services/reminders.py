@@ -3,7 +3,7 @@ Keeps `interview_reminders` rows in sync with an `Interview`'s
 scheduled_at/result. Called from the interview CRUD endpoints
 (app/api/v1/endpoints/interviews.py) on create/update - not a Celery
 task itself, this just writes the rows the beat task
-(app/tasks/reminders.py) later reads and sends.
+(app/tasks/reminders_celery.py) later reads and sends.
 
 MVP behaviour (see TODO.md - multi-lead-time is explicitly deferred):
 one *pending* (unsent) reminder per interview **per channel**, at
@@ -18,7 +18,7 @@ EMAIL, regardless of whether the user has any registered device token
 yet (Option A from the Phase B planning discussion - see git history/
 conversation, not written down elsewhere). This keeps this function's
 only responsibility "does this interview need a reminder", with zero
-knowledge of device-token state - app/tasks/reminders.py's send loop is
+knowledge of device-token state - app/tasks/reminders_celery.py's send loop is
 what decides a channel has nothing to send to, and that's a send-time
 concern, not a scheduling-time one. The same reasoning now extends to
 IN_APP (drives the Notification feed, app/models/notification.py) and to
@@ -40,7 +40,7 @@ from app.models.user import User
 # reminder row per interview - see module docstring on why PUSH is
 # unconditional here. IN_APP is the same story: whether a channel is
 # actually *enabled* for this user (app/models/user_settings.py) is a
-# send-time concern (app/tasks/reminders.py), not decided here.
+# send-time concern (app/tasks/reminders_celery.py), not decided here.
 _ACTIVE_CHANNELS = (ReminderChannel.EMAIL, ReminderChannel.PUSH, ReminderChannel.IN_APP)
 
 

@@ -18,7 +18,7 @@ Two backends, chosen by `settings.EMAIL_PROVIDER`:
 Both backends log-and-swallow send failures rather than raising, on
 purpose: a reminder email failing to send shouldn't crash the Celery
 task for every *other* due reminder in the same batch (see
-app/tasks/reminders.py, which calls this per-reminder in a loop). The
+app/tasks/reminders_celery.py, which calls this per-reminder in a loop). The
 caller checks the boolean return to decide whether to stamp `sent_at`.
 """
 

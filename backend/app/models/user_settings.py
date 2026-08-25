@@ -11,7 +11,7 @@ see app/api/v1/endpoints/auth.py::register - and backfilled for
 pre-existing users by the migration that introduces this table), so call
 sites can generally treat `user.settings` as present rather than
 optional; the one place that reads it for real scheduling/send logic
-(app/services/reminders.py, app/tasks/reminders.py) still fails open on a
+(app/services/reminders.py, app/tasks/reminders_celery.py) still fails open on a
 genuinely missing row rather than trusting that invariant blindly.
 """
 

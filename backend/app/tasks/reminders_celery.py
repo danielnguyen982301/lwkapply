@@ -215,7 +215,7 @@ def _send_push_reminder(db: Session, reminder: InterviewReminder) -> bool:
     return not any_transient_failure
 
 
-@celery_app.task(name="app.tasks.reminders.send_due_reminders")
+@celery_app.task(name="app.tasks.reminders_celery.send_due_reminders")
 def send_due_reminders() -> int:
     """Returns the number of reminders successfully sent/resolved
     (across all channels), for logging / test assertions."""

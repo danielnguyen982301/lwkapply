@@ -3,8 +3,8 @@ Tests for the interview-reminder pipeline: scheduling
 (app/services/reminders.py::sync_interview_reminders, exercised through
 the real interview create endpoint - same "integration test of a write
 path wired into an endpoint" shape as test_application_status_history.py)
-and sending (app/tasks/reminders.py::send_due_reminders, called directly
-as a plain function - same approach test_ai_tasks.py uses, since Celery
+and sending (app/tasks/reminders_celery.py::send_due_reminders, called directly
+as a plain function - same approach test_ai_celery_tasks.py uses, since Celery
 tasks are plain callables and there's no existing precedent for routing
 through the broker in this test suite).
 
@@ -20,12 +20,12 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-import app.tasks.reminders as reminders_task_module
+import app.tasks.reminders_celery as reminders_task_module
 from app.models.application import Application, ApplicationStatus
 from app.models.interview import Interview, InterviewType
 from app.models.interview_reminder import InterviewReminder, ReminderChannel
 from app.models.notification import Notification
-from app.tasks.reminders import send_due_reminders
+from app.tasks.reminders_celery import send_due_reminders
 
 BASE_SCHEDULED_AT_OFFSET = timedelta(hours=48)
 
@@ -142,7 +142,7 @@ def patch_reminders_task_session(monkeypatch, db_session):
     request) - bind a second Session to db_session's own connection so
     its commits become SAVEPOINT release/restart within the same
     transaction this test rolls back, same approach
-    test_ai_tasks.py::patch_ai_tasks_session uses for app.tasks.ai."""
+    test_ai_celery_tasks.py::patch_ai_tasks_session uses for app.tasks.ai_celery."""
     connection = db_session.connection()
     task_session_factory = sessionmaker(
         bind=connection, join_transaction_mode="create_savepoint"

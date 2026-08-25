@@ -1,17 +1,17 @@
 """
-Integration tests for app.tasks.ai (parse_resume_task, score_ats_task).
+Integration tests for app.tasks.ai_celery (parse_resume_task, score_ats_task).
 
 Celery tasks are plain callables - these call them directly rather than
 through the broker, same approach the plan called for since there's no
 existing precedent in this codebase for testing a task that opens its
-own SessionLocal() (app/tasks/reminders.py's send_due_reminders has no
+own SessionLocal() (app/tasks/reminders_celery.py's send_due_reminders has no
 test coverage yet either - see TODO.md).
 
 The tricky part: SessionLocal() normally opens a brand-new connection to
 settings.DATABASE_URL, which would (a) miss whatever this test's
 db_session fixture already inserted (different connection, different
 transaction) and (b) not roll back at teardown. patch_ai_tasks_session
-below fixes this by monkeypatching app.tasks.ai.SessionLocal to a
+below fixes this by monkeypatching app.tasks.ai_celery.SessionLocal to a
 sessionmaker bound to the *same* connection db_session uses, with
 join_transaction_mode="create_savepoint" (SQLAlchemy 2.0) so the task's
 own db.commit() calls become SAVEPOINT release/restart rather than
@@ -22,7 +22,7 @@ second, independent Session on the same connection.
 
 Mocking strategy: download_document/extract_text/parse_resume/
 score_resume_against_job/fetch_job_description are all imported by name
-into app.tasks.ai's own namespace, so they're patched there (not in
+into app.tasks.ai_celery's own namespace, so they're patched there (not in
 their defining modules) - same "resolved through the calling module's
 own globals" reasoning documented in test_documents_endpoints.py.
 """
@@ -33,13 +33,17 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-import app.tasks.ai as ai_tasks_module
+import app.tasks.ai_celery as ai_tasks_module
 from app.models.ats_score import AtsScore
 from app.models.document import Document, DocumentType
 from app.models.resume_analysis import AIJobStatus, ResumeAnalysis
 from app.schemas.ai import AtsScoreResult, ParsedResume
 from app.services.ai.resume_parser import UnsupportedResumeFormatError
-from app.tasks.ai import _generate_analysis_name, parse_resume_task, score_ats_task
+from app.tasks.ai_celery import (
+    _generate_analysis_name,
+    parse_resume_task,
+    score_ats_task,
+)
 
 
 @pytest.fixture()

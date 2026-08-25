@@ -18,7 +18,7 @@ from celery.schedules import crontab
 # never import directly (e.g. Application.application_documents ->
 # "ApplicationDocument") fails to resolve the first time any mapper gets
 # configured, since mapper configuration is lazy and process-wide. Bit
-# the hard way once already: app/tasks/ai.py only imports Document/
+# the hard way once already: app/tasks/ai_celery.py only imports Document/
 # ResumeAnalysis/AtsScore/Application directly, none of which imports
 # ApplicationDocument, so parse_resume_task crashed with
 # `InvalidRequestError: ... failed to locate a name ('ApplicationDocument')`
@@ -32,7 +32,7 @@ celery_app = Celery(
     "lwkapply",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.reminders", "app.tasks.ai"],
+    include=["app.tasks.reminders_celery", "app.tasks.ai_celery"],
 )
 
 celery_app.conf.update(
@@ -49,7 +49,7 @@ celery_app.conf.update(
 # late/duplicate beat tick harmless, not the schedule's precision.
 celery_app.conf.beat_schedule = {
     "send-due-interview-reminders": {
-        "task": "app.tasks.reminders.send_due_reminders",
+        "task": "app.tasks.reminders_celery.send_due_reminders",
         "schedule": crontab(minute="*/10"),
     },
 }

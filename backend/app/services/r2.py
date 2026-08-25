@@ -236,7 +236,7 @@ def delete_document(object_key: str) -> None:
 
 def download_document(object_key: str) -> bytes:
     """Fetches an object's raw bytes for server-side processing (Resume
-    Parser - app/tasks/ai.py). Everything else in this module only ever
+    Parser - app/tasks/ai_celery.py). Everything else in this module only ever
     hands the client a presigned URL; this is the first caller that needs
     the actual file content in-process."""
     try:

@@ -1,7 +1,7 @@
 """
 Fetches and extracts job-posting text from an Application.job_url, for
 ATS Score's "prefer job_url over asking the user to paste anything" flow
-(app/tasks/ai.py::score_ats_task).
+(app/tasks/ai_celery.py::score_ats_task).
 
 This is the first place the backend fetches a user-supplied URL from
 server-side code - every other outbound call (R2, Resend, FCM) hits a
@@ -18,7 +18,7 @@ fetch_job_description() returns None (never raises) for every "couldn't
 get anything usable" outcome - blocked scheme/IP, timeout, non-2xx, or
 an extraction result too short to be a real job posting. Callers treat
 None as "fall back to asking the user to paste it" (see
-app/tasks/ai.py), not as an error to propagate directly.
+app/tasks/ai_celery.py), not as an error to propagate directly.
 """
 
 import ipaddress

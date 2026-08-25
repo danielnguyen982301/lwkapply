@@ -55,7 +55,7 @@ def call_structured(system_instruction: str, user_prompt: str, schema: type[T]) 
     unset. Either path re-validates against `schema` rather than trusting
     the SDK blindly, so a malformed/incomplete response raises a
     pydantic.ValidationError instead of silently returning partial data -
-    callers (app/tasks/ai.py) let that propagate as a real task failure.
+    callers (app/tasks/ai_celery.py) let that propagate as a real task failure.
     """
     client = get_client()
     response = client.models.generate_content(
