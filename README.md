@@ -87,7 +87,7 @@ The project is built as a modern multi-platform application consisting of:
 
 - Docker
 - GitHub Actions
-- AWS S3
+- Cloudflare R2
 - Railway / Render
 - Vercel
 
@@ -113,7 +113,7 @@ Platform: PostgreSQL (Supabase)
 
 ### Storage
 
-Platform: AWS S3
+Platform: Cloudflare R2
 
 ### CI/CD
 
