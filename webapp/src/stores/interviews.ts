@@ -11,11 +11,12 @@ import type {
 type RequestStatus = 'idle' | 'loading' | 'error'
 
 interface InterviewsState {
-  // Like the Contacts store, Interviews are always viewed in the context
-  // of a single application (a panel on the Application detail page).
-  // `applicationId` records which application `items` belongs to, so a
-  // stale response for a previous application can't clobber the panel
-  // after the user has already navigated to a different one.
+  // Like the applicationContacts store, Interviews are always viewed in
+  // the context of a single application (a panel on the Application
+  // detail page). `applicationId` records which application `items`
+  // belongs to, so a stale response for a previous application can't
+  // clobber the panel after the user has already navigated to a
+  // different one.
   applicationId: string | null
   items: Interview[]
   total: number

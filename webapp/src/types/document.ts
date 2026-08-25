@@ -18,8 +18,7 @@ export interface Document {
   updated_at: string
 }
 
-// Mirrors DocumentListResponse. Paginated, like Interviews (unlike
-// Contacts' nested list).
+// Mirrors DocumentListResponse. Paginated, like Interviews/Contacts.
 export interface DocumentListResponse {
   items: Document[]
   total: number

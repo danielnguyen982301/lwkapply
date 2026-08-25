@@ -29,7 +29,7 @@ interface AnalyticsState {
 }
 
 // One store for all four GET /analytics/* endpoints, not four separate
-// ones - unlike contactDirectory.ts vs contacts.ts (genuinely different
+// ones - unlike applicationContacts.ts vs contacts.ts (genuinely different
 // resources, shapes, and lifecycles), these four are only ever read
 // together by one view (AnalyticsDashboardView.vue), so a single store
 // keeps that relationship visible instead of four near-identical copies
@@ -87,7 +87,7 @@ export const useAnalyticsStore = defineStore('analytics', {
      * `months` defaults to whatever's already in state (initially 6) -
      * pass it explicitly to change the window. Same "omit = keep current
      * value" convention as fetchContacts()'s `search` param in
-     * contactDirectory.ts.
+     * stores/contacts.ts.
      */
     async fetchActivity(months?: number) {
       const requestedMonths = months ?? this.activityMonths

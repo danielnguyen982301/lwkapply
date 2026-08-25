@@ -14,8 +14,10 @@ type RequestStatus = 'idle' | 'loading' | 'error'
 // (used by InterviewsPanel.vue, has create/update/delete) while this one
 // is a read-only, paginated, cross-application listing (used by the
 // "Interviews" nav item) — different shape, different endpoint, different
-// lifecycle. Mirrors stores/contactDirectory.ts, with `result` in place of
-// Contacts' `search` (Interview has no name-like text field to match on).
+// lifecycle. Contact used to have this identical CRUD-vs-directory split
+// before it became a top-level resource like Document - see
+// stores/contacts.ts. `result` stands in for what would be Contacts'
+// `search` (Interview has no name-like text field to match on).
 interface InterviewDirectoryState {
   items: InterviewWithApplication[]
   total: number
@@ -45,7 +47,7 @@ export const useInterviewDirectoryStore = defineStore('interviewDirectory', {
     /**
      * Fetches a page of the interview directory. Any param not passed
      * falls back to current store state (same convention as
-     * fetchContacts() in stores/contactDirectory.ts) — pass `result: null`
+     * fetchContacts() in stores/contacts.ts) — pass `result: null`
      * explicitly to clear the filter.
      */
     async fetchInterviews(params: InterviewDirectoryParams = {}) {
