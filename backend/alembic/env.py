@@ -8,7 +8,14 @@ from app.db.base_class import Base
 from app import models  # noqa: F401  (registers all models on Base.metadata)
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# set_main_option() stores the value through configparser, which treats
+# "%" as its own interpolation character (that's how alembic.ini's
+# %(here)s substitution works) - unrelated to URL percent-encoding, but
+# a raw "%" here (e.g. from a percent-encoded special character in the
+# DB password) trips configparser's interpolation parser with
+# "invalid interpolation syntax". Doubling it survives that parse step
+# and leaves the single "%" SQLAlchemy/psycopg2 expect intact.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
