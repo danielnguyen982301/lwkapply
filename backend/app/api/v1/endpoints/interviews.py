@@ -9,13 +9,16 @@ Interview through Application to the current user - same IDOR-prevention
 approach as applications.py, just one hop further out.
 
 `directory_router` holds one read-only route: GET /interviews, a flat
-listing across every application the user owns (mirrors contacts.py's
-directory_router / GET /contacts). An interview still only ever exists
-nested under one application - this doesn't change ownership or add a
-new way to create one, it's just a different read path over the same
-rows, scoped via the same Application.user_id join the nested routes
-already use for ownership checks. Registered in router.py under the
-top-level /interviews prefix.
+listing across every application the user owns. An interview still only
+ever exists nested under one application - this doesn't change
+ownership or add a new way to create one, it's just a different read
+path over the same rows, scoped via the same Application.user_id join
+the nested routes already use for ownership checks. Registered in
+router.py under the top-level /interviews prefix.
+
+Contact used to have the identical directory_router shape (GET
+/contacts) before it became a top-level, user-owned resource like
+Document - see app/models/contact.py's module docstring.
 """
 
 import uuid

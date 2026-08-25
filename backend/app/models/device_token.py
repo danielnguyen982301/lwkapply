@@ -9,9 +9,9 @@ FCM token itself rather than by (user_id, platform), since:
   `user_id` on that token rather than accumulating stale rows for the
   previous owner.
 
-No cross-application ownership check needed here (unlike
-Interview/Document/Contact) - device tokens belong directly to a User,
-one hop, same as `Application.user_id`.
+No cross-application ownership check needed here (unlike Interview) -
+device tokens belong directly to a User, one hop, same as
+`Application.user_id`.
 """
 
 import enum
