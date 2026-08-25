@@ -1,6 +1,42 @@
 # Changelog
 
-## v0.17.0 (in progress)
+## v0.18.0 (in progress)
+
+### Changed
+
+- **Background job execution: BackgroundTasks/cron path added alongside
+  Celery** — deployment-driven, ahead of the platform choices settled in
+  `docs/DEPLOYMENT.md`: Render (the chosen backend host) has no free
+  tier for an always-on background worker, so production no longer
+  depends on Celery running. Full detail in `backend/BACKEND_SUMMARY.md`'s
+  "Background job execution" section; summary here:
+  - `app/tasks/ai.py`/`app/tasks/reminders.py` renamed to
+    `ai_celery.py`/`reminders_celery.py` (and their tests) — unchanged
+    otherwise, kept as a reference/upgrade path and still fully wired
+    through `docker-compose.yml`'s `celery-worker`/`celery-beat`
+    services for local dev.
+  - Two new modules, `app/tasks/ai_inline.py` and
+    `app/tasks/reminders_inline.py`, duplicate that same pipeline logic
+    as plain functions with no Celery decorator — deliberately
+    duplicated rather than factored into a shared helper, so the Celery
+    versions stay self-contained and untouched.
+  - `app/api/v1/endpoints/ai.py`'s two POST routes now dispatch via
+    FastAPI's `BackgroundTasks.add_task(...)` against the `_inline`
+    functions instead of `.delay()`.
+  - New `POST /internal/reminders/run` (`app/api/v1/endpoints/internal.py`),
+    authenticated by a shared secret (`INTERNAL_CRON_SECRET`, checked
+    with `secrets.compare_digest` the same way `verify_csrf` does) via
+    an `X-Internal-Cron-Secret` header rather than `get_current_user`,
+    replaces celery-beat's own schedule. `.github/workflows/reminders-cron.yml`
+    is the default scheduler — a GitHub Actions cron workflow hitting
+    that endpoint every 10 minutes, matching celery-beat's original
+    cadence exactly.
+  - Trade-offs accepted for the $0-extra-infra path, and the upgrade
+    path back to Celery if background work ever needs real worker
+    concurrency or crash-safe retry, are both spelled out in
+    `BACKEND_SUMMARY.md`.
+
+## v0.17.0
 
 ### Changed
 
