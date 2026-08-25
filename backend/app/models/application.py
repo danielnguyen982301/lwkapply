@@ -10,9 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.application_contact import ApplicationContact
     from app.models.application_document import ApplicationDocument
     from app.models.application_status_history import ApplicationStatusHistory
-    from app.models.contact import Contact
     from app.models.interview import Interview
     from app.models.user import User
 
@@ -74,7 +74,12 @@ class Application(Base, UUIDMixin, TimestampMixin):
     application_documents: Mapped[list["ApplicationDocument"]] = relationship(
         back_populates="application", cascade="all, delete-orphan"
     )
-    contacts: Mapped[list["Contact"]] = relationship(
+    # Deleting an application detaches its contacts (drops the join
+    # rows) - it never deletes the contacts themselves. Contacts are
+    # user-owned resources in their own right (see app/models/contact.py)
+    # and live on in the user's contact directory regardless of what
+    # happens to any application they were ever attached to.
+    application_contacts: Mapped[list["ApplicationContact"]] = relationship(
         back_populates="application", cascade="all, delete-orphan"
     )
     # Append-only audit log of status transitions - see
