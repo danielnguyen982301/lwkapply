@@ -18,13 +18,22 @@ interface FormValues {
   linkedin_url: string
 }
 
-// Extracted out of ContactsPanel.vue - add/edit is the same dialog, keyed
-// off whether `contact` is set. createContact()/updateContact()
-// (stores/contacts.ts) already patch the store's own `items` array on
-// success, so there's nothing for the panel to sync afterward - no emit
-// needed here.
+// Creates/edits a contact straight in the user's contact directory (POST/
+// PATCH /contacts - always standalone, never application-scoped; see
+// stores/contacts.ts), same shape as DocumentUploadDialog.vue/
+// DocumentEditDialog.vue combined into one dialog (add/edit keyed off
+// whether `contact` is set). Shared by ContactDirectoryView.vue
+// (directory-only add/edit) and ContactsPanel.vue, which also needs a
+// freshly-created contact attached to the current application afterward -
+// that's deliberately NOT this component's concern: it emits `created`/
+// `updated` with the resulting Contact and closes itself, and the caller
+// decides what happens next (ContactsPanel attaches a new contact as a
+// follow-up call, and patches its own attached-contacts list on an edit -
+// see its own attachError handling and `handleUpdated()` for where each
+// surfaces, since this dialog is already closed by then).
 const visible = defineModel<boolean>('visible', { default: false })
-const props = defineProps<{ applicationId: string; contact: Contact | null }>()
+const props = defineProps<{ contact: Contact | null }>()
+const emit = defineEmits<{ created: [contact: Contact]; updated: [contact: Contact] }>()
 
 const store = useContactsStore()
 
@@ -91,11 +100,14 @@ const onFormSubmit = handleSubmit(async (formValues) => {
   const payload = buildPayload(formValues)
   try {
     if (props.contact) {
-      await store.updateContact(props.applicationId, props.contact.id, payload)
+      const updated = await store.updateContact(props.contact.id, payload)
+      visible.value = false
+      emit('updated', updated)
     } else {
-      await store.createContact(props.applicationId, payload)
+      const created = await store.createContact(payload)
+      visible.value = false
+      emit('created', created)
     }
-    visible.value = false
   } catch {
     // store.mutationError is already set and rendered below.
   }
