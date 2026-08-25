@@ -127,8 +127,7 @@ class Interview {
 }
 
 /// Mirrors InterviewListResponse (backend/app/schemas/interview.py).
-/// Unlike Contacts, this endpoint IS paginated — same shape as
-/// ApplicationListResponse.
+/// Paginated, same shape as ApplicationListResponse/ContactListResponse.
 class InterviewListResponse {
   const InterviewListResponse({
     required this.items,

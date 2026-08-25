@@ -11,10 +11,11 @@ import 'interview_directory_state.dart';
 /// place of Contacts' `search` setter. Plain (non-`.family`)
 /// StateNotifier, same reasoning: one global, cross-application list.
 ///
-/// Read-only, same as ContactDirectoryController — `GET /interviews` is
-/// the only call this feature makes; scheduling/editing an interview
-/// still only happens from within `InterviewsPanel` on the owning
-/// application.
+/// Read-only — `GET /interviews` is the only call this feature makes;
+/// scheduling/editing an interview still only happens from within
+/// `InterviewsPanel` on the owning application. ContactDirectoryController
+/// used to be read-only too, before Contact became a top-level resource
+/// with its own add/edit/delete (see contact_directory_controller.dart).
 class InterviewDirectoryController
     extends StateNotifier<InterviewDirectoryState> {
   InterviewDirectoryController(this._api)
