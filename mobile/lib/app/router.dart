@@ -16,6 +16,9 @@ import '../features/contacts/presentation/contact_directory_screen.dart';
 import '../features/documents/presentation/document_directory_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/interviews/presentation/interview_directory_screen.dart';
+import '../features/settings/presentation/change_password_screen.dart';
+import '../features/settings/presentation/notification_preferences_screen.dart';
+import '../features/settings/presentation/profile_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import 'app_shell.dart';
 
@@ -164,6 +167,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/profile',
+        name: 'settings-profile',
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/settings/password',
+        name: 'settings-password',
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/settings/notification-preferences',
+        name: 'settings-notification-preferences',
+        builder: (context, state) => const NotificationPreferencesScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
