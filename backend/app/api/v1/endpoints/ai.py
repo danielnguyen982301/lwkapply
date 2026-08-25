@@ -6,8 +6,9 @@ Both resources are async: a POST creates a `pending` row and dispatches a
 FastAPI BackgroundTasks job (app/tasks/ai_inline.py), returning 202
 immediately; the client polls GET .../{id} for status to become
 completed/failed. A Celery-based equivalent (app/tasks/ai_celery.py) also
-exists, kept for local dev/study - see docs/DEPLOYMENT.md for why the
-default here is BackgroundTasks instead.
+exists, kept for local dev/study - see BACKEND_SUMMARY.md's "Background
+job execution" section for why the default here is BackgroundTasks
+instead.
 
 Both are top-level, user-owned resources (like Application), not nested
 under /applications/{id}/ the way Interview is - see

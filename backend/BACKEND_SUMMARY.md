@@ -1277,9 +1277,8 @@ per-request-dispatched task, including eventually testing
 ## Background job execution: BackgroundTasks/cron path added alongside Celery
 
 Deployment-driven follow-up to both sections above. Render (the chosen
-backend host, see docs/DEPLOYMENT.md) has no free tier for an always-on
-background worker, so production no longer runs Celery worker/beat by
-default:
+backend host) has no free tier for an always-on background worker, so
+production no longer runs Celery worker/beat by default:
 
 - `app/tasks/ai.py` and `app/tasks/reminders.py` were renamed to
   `ai_celery.py` / `reminders_celery.py` (and their tests likewise) -
@@ -1324,9 +1323,9 @@ the exact commands) and point the two call sites above back at
 
 ### Scaling / load balancing — not configured, not needed yet
 
-Came up when picking Render/Vercel/Supabase in docs/DEPLOYMENT.md;
-worth recording the reasoning here too since it's about this app's own
-statelessness, not just infra choices:
+Came up when picking Render/Vercel/Supabase as the deployment
+platforms. Recorded here rather than only in a deployment doc since
+it's about this app's own statelessness, not just infra choices:
 
 - **Vercel and Cloudflare R2** load-balance themselves via their own
   global CDN/edge networks - nothing this codebase needs to do.
@@ -1344,9 +1343,10 @@ statelessness, not just infra choices:
   first.
 - **Supabase** is a single primary Postgres instance - read replicas or
   other DB-level load balancing would be premature at this project's
-  traffic level. The Supavisor connection pooler `DATABASE_URL` already
-  points at (see docs/DEPLOYMENT.md's Database section) is connection
-  pooling, a different concern from horizontal DB scaling.
+  traffic level. The Supavisor connection pooler `DATABASE_URL` points
+  at (its session-mode pooler, chosen since Supabase defaults new
+  projects to IPv6-only direct connections that Render can't reach) is
+  connection pooling, a different concern from horizontal DB scaling.
 
 ## Not yet implemented (next up per TODO.md)
 

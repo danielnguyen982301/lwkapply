@@ -2,7 +2,8 @@
 FastAPI BackgroundTasks equivalents of app/tasks/ai_celery.py's
 parse_resume_task / score_ats_task, for deployments that skip running a
 Celery worker (Render has no free tier for an always-on background
-worker - see docs/DEPLOYMENT.md). Dispatched via
+worker - see BACKEND_SUMMARY.md's "Background job execution" section).
+Dispatched via
 BackgroundTasks.add_task() from app/api/v1/endpoints/ai.py instead of
 Celery's .delay() - same status-machine, same error handling, just no
 broker/worker process in between.

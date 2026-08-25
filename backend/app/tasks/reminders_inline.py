@@ -2,7 +2,8 @@
 In-process equivalent of app/tasks/reminders_celery.py's
 send_due_reminders, for deployments that skip running Celery beat
 (Render has no free tier for an always-on background worker - see
-docs/DEPLOYMENT.md). Triggered over HTTP by an external scheduler (a
+BACKEND_SUMMARY.md's "Background job execution" section). Triggered
+over HTTP by an external scheduler (a
 GitHub Actions cron workflow by default - see
 .github/workflows/reminders-cron.yml) hitting
 app/api/v1/endpoints/internal.py's POST /internal/reminders/run,

@@ -3,7 +3,8 @@ name: Reminders Cron
 # Replaces Celery beat's every-10-minutes schedule
 # (backend/app/core/celery_app.py's beat_schedule) for deployments that
 # don't run a Celery worker/beat process - Render has no free tier for
-# an always-on background worker, see docs/DEPLOYMENT.md. Hits
+# an always-on background worker, see backend/BACKEND_SUMMARY.md's
+# "Background job execution" section. Hits
 # POST /api/v1/internal/reminders/run instead, which does the same
 # find-due/dispatch/mark-sent work as
 # backend/app/tasks/reminders_celery.py::send_due_reminders (via

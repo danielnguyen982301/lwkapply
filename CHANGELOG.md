@@ -5,11 +5,11 @@
 ### Changed
 
 - **Background job execution: BackgroundTasks/cron path added alongside
-  Celery** — deployment-driven, ahead of the platform choices settled in
-  `docs/DEPLOYMENT.md`: Render (the chosen backend host) has no free
-  tier for an always-on background worker, so production no longer
-  depends on Celery running. Full detail in `backend/BACKEND_SUMMARY.md`'s
-  "Background job execution" section; summary here:
+  Celery** — deployment-driven: Render (the chosen backend host) has no
+  free tier for an always-on background worker, so production no
+  longer depends on Celery running. Full detail in
+  `backend/BACKEND_SUMMARY.md`'s "Background job execution" section;
+  summary here:
   - `app/tasks/ai.py`/`app/tasks/reminders.py` renamed to
     `ai_celery.py`/`reminders_celery.py` (and their tests) — unchanged
     otherwise, kept as a reference/upgrade path and still fully wired

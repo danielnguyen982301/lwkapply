@@ -10,7 +10,8 @@ schedule (app/core/celery_app.py's beat_schedule, still there for local
 dev/study) with an external scheduler hitting this endpoint instead -
 Render has no free tier for an always-on beat process. See
 .github/workflows/reminders-cron.yml for the default scheduler and
-docs/DEPLOYMENT.md for the full picture.
+BACKEND_SUMMARY.md's "Background job execution" section for the full
+picture.
 """
 
 import secrets

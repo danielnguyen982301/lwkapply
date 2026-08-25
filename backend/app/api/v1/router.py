@@ -72,7 +72,8 @@ api_router.include_router(
 # /applications/{id}/. Both POST routes are async: they return 202 with
 # a pending row and dispatch a background job; see app/tasks/ai_inline.py
 # (app/tasks/ai_celery.py is a Celery-based equivalent, kept for local
-# dev/study - see docs/DEPLOYMENT.md).
+# dev/study - see BACKEND_SUMMARY.md's "Background job execution"
+# section).
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 
 # In-app notification feed (the "bell icon") - top-level, user-owned,
