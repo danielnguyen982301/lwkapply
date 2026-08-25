@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     ai,
     analytics,
+    application_contacts,
     application_documents,
     applications,
     auth,
@@ -27,8 +28,8 @@ api_router.include_router(
 # user's own applications/interviews (see analytics.py's own docstring).
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
-# Interviews/Contacts are nested under a specific application - they never
-# exist independently of one, so their CRUD routes and ownership checks are
+# Interviews are nested under a specific application - an interview never
+# exists independently of one, so its CRUD routes and ownership checks are
 # scoped through applications/{application_id}/... rather than living at
 # the top level. See docstrings in each endpoint module.
 api_router.include_router(
@@ -38,37 +39,31 @@ api_router.include_router(
 )
 
 # Interviews additionally has one flat, top-level, read-only route: a
-# cross-application directory of every interview the user owns (mirrors
-# the Contacts directory route below). Creation/update/delete stay
-# nested above - this is just a different read path over the same rows.
+# cross-application directory of every interview the user owns. Creation/
+# update/delete stay nested above - this is just a different read path
+# over the same rows.
 api_router.include_router(
     interviews.directory_router, prefix="/interviews", tags=["interviews"]
 )
 
-# Documents are the opposite of Interviews/Contacts: a top-level,
-# user-owned resource in their own right (upload/read/update/delete all
+# Documents and Contacts are the opposite of Interviews: top-level,
+# user-owned resources in their own right (create/read/update/delete all
 # live here, unscoped by any application), reusable across zero or more
-# applications - see app/models/document.py. application_documents below
-# only handles attaching/detaching an existing document to/from a
-# specific application.
+# applications - see app/models/document.py / app/models/contact.py.
+# application_documents/application_contacts below only handle attaching/
+# detaching an existing document or contact to/from a specific
+# application.
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(
     application_documents.router,
     prefix="/applications/{application_id}/documents",
     tags=["documents"],
 )
+api_router.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 api_router.include_router(
-    contacts.router,
+    application_contacts.router,
     prefix="/applications/{application_id}/contacts",
     tags=["contacts"],
-)
-
-# Contacts additionally has one flat, top-level, read-only route: a
-# cross-application directory of every contact the user owns (used by the
-# "Contacts" nav item). Creation/update/delete stay nested above - this is
-# just a different read path over the same rows.
-api_router.include_router(
-    contacts.directory_router, prefix="/contacts", tags=["contacts"]
 )
 
 # AI features (Resume Parser + ATS Score - TODO.md "AI Features") - two
