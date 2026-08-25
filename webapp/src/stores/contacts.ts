@@ -3,22 +3,25 @@ import { api, extractErrorMessage } from '@/lib/api'
 import type {
   Contact,
   ContactCreatePayload,
+  ContactListParams,
   ContactListResponse,
   ContactUpdatePayload,
 } from '@/types/contact'
 
 type RequestStatus = 'idle' | 'loading' | 'error'
 
+// The top-level contact directory: every contact the user owns,
+// independent of any application (GET/POST /contacts, GET/PATCH/DELETE
+// /contacts/{id}) - a contact is no longer created in the context of one
+// application, and can be attached to zero, one, or several (see
+// stores/applicationContacts.ts for the attach/detach/list-attached side
+// of that, used by ContactsPanel.vue).
 interface ContactsState {
-  // Contacts are always viewed in the context of a single application (the
-  // Contacts panel on the Application detail page), so — unlike the
-  // Applications store — there's just one list, not list/board/current
-  // variants. `applicationId` records which application `items` belongs
-  // to, so a stale response from a fetch for a previous application can't
-  // clobber the panel after the user has already navigated to a new one.
-  applicationId: string | null
   items: Contact[]
   total: number
+  page: number
+  pageSize: number
+  search: string
   listStatus: RequestStatus
   listError: string | null
 
@@ -26,11 +29,15 @@ interface ContactsState {
   mutationError: string | null
 }
 
+const DEFAULT_PAGE_SIZE = 20
+
 export const useContactsStore = defineStore('contacts', {
   state: (): ContactsState => ({
-    applicationId: null,
     items: [],
     total: 0,
+    page: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    search: '',
     listStatus: 'idle',
     listError: null,
 
@@ -38,17 +45,37 @@ export const useContactsStore = defineStore('contacts', {
     mutationError: null,
   }),
 
+  getters: {
+    totalPages: (state): number => Math.max(1, Math.ceil(state.total / state.pageSize)),
+  },
+
   actions: {
-    async fetchContacts(applicationId: string) {
+    /**
+     * Fetches a page of the contact directory. Any param not passed falls
+     * back to current store state (same convention as fetchDocuments() in
+     * stores/documents.ts) - pass `search: null` explicitly to clear it.
+     */
+    async fetchContacts(params: ContactListParams = {}) {
       this.listStatus = 'loading'
       this.listError = null
+
+      const search = params.search !== undefined ? (params.search ?? '') : this.search
+      const page = params.page ?? this.page
+      const pageSize = params.page_size ?? this.pageSize
+
       try {
-        const { data } = await api.get<ContactListResponse>(
-          `/applications/${applicationId}/contacts`,
-        )
-        this.applicationId = applicationId
+        const { data } = await api.get<ContactListResponse>('/contacts', {
+          params: {
+            search: search || undefined,
+            page,
+            page_size: pageSize,
+          },
+        })
         this.items = data.items
         this.total = data.total
+        this.page = data.page
+        this.pageSize = data.page_size
+        this.search = search
         this.listStatus = 'idle'
       } catch (err) {
         this.listStatus = 'error'
@@ -57,15 +84,38 @@ export const useContactsStore = defineStore('contacts', {
       }
     },
 
-    async createContact(applicationId: string, payload: ContactCreatePayload): Promise<Contact> {
+    /** Convenience wrapper: apply a new search term and jump back to page 1. */
+    async setSearch(search: string) {
+      await this.fetchContacts({ search, page: 1 })
+    },
+
+    /**
+     * Isolated: returns matching contacts directly, without touching
+     * `items`/`page`/`search`. Used by
+     * components/contacts/ContactAttachDialog.vue for a live debounced
+     * search (default pageSize=10 - autocomplete suggestions, not a real
+     * listing). Reusing fetchContacts() would clobber whatever the actual
+     * Contacts directory view has set, since both are reachable in the
+     * same session without a full reload.
+     */
+    async searchContacts(query: string, pageSize = 10): Promise<Contact[]> {
+      const { data } = await api.get<ContactListResponse>('/contacts', {
+        params: {
+          search: query || undefined,
+          page: 1,
+          page_size: pageSize,
+        },
+      })
+      return data.items
+    },
+
+    async createContact(payload: ContactCreatePayload): Promise<Contact> {
       this.mutationStatus = 'loading'
       this.mutationError = null
       try {
-        const { data } = await api.post<Contact>(`/applications/${applicationId}/contacts`, payload)
-        if (this.applicationId === applicationId) {
-          this.items = [data, ...this.items]
-          this.total += 1
-        }
+        const { data } = await api.post<Contact>('/contacts', payload)
+        this.items = [data, ...this.items]
+        this.total += 1
         this.mutationStatus = 'idle'
         return data
       } catch (err) {
@@ -75,18 +125,11 @@ export const useContactsStore = defineStore('contacts', {
       }
     },
 
-    async updateContact(
-      applicationId: string,
-      contactId: string,
-      payload: ContactUpdatePayload,
-    ): Promise<Contact> {
+    async updateContact(contactId: string, payload: ContactUpdatePayload): Promise<Contact> {
       this.mutationStatus = 'loading'
       this.mutationError = null
       try {
-        const { data } = await api.patch<Contact>(
-          `/applications/${applicationId}/contacts/${contactId}`,
-          payload,
-        )
+        const { data } = await api.patch<Contact>(`/contacts/${contactId}`, payload)
         const index = this.items.findIndex((item) => item.id === contactId)
         if (index !== -1) this.items[index] = data
         this.mutationStatus = 'idle'
@@ -98,30 +141,26 @@ export const useContactsStore = defineStore('contacts', {
       }
     },
 
-    async deleteContact(applicationId: string, contactId: string): Promise<void> {
+    /** Permanently deletes the contact (and, server-side, every
+     * application it was attached to loses that link - see
+     * ApplicationContact's cascade). Not the same as detaching from one
+     * application; see stores/applicationContacts.ts for that. */
+    async deleteContact(contactId: string): Promise<void> {
       this.mutationStatus = 'loading'
       this.mutationError = null
       try {
-        await api.delete(`/applications/${applicationId}/contacts/${contactId}`)
+        await api.delete(`/contacts/${contactId}`)
         this.items = this.items.filter((item) => item.id !== contactId)
         this.total = Math.max(0, this.total - 1)
+        if (this.items.length === 0 && this.page > 1) {
+          await this.fetchContacts({ page: this.page - 1 })
+        }
         this.mutationStatus = 'idle'
       } catch (err) {
         this.mutationStatus = 'error'
         this.mutationError = extractErrorMessage(err)
         throw err
       }
-    },
-
-    /** Called on unmount of the Contacts panel so switching applications never briefly shows stale contacts. */
-    reset() {
-      this.applicationId = null
-      this.items = []
-      this.total = 0
-      this.listStatus = 'idle'
-      this.listError = null
-      this.mutationStatus = 'idle'
-      this.mutationError = null
     },
   },
 })
