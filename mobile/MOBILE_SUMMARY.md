@@ -21,9 +21,12 @@ notifications" below) and reports the device's timezone to the backend
 The bottom nav shrank from 4 tabs to 2 (Applications + a card-grid
 "Home" hub) to make room for Analytics and AI Tools without crowding
 the tab bar further — see "Navigation shell" below for the full
-reasoning. Settings now exists as its own screen (currently just
-hosting the logout action, moved off Applications' AppBar) — see
-"Settings screen" below. Analytics is implemented — see "Analytics
+reasoning. Settings has grown from a logout-only screen into the full
+account-settings screen (profile/avatar, password, timezone,
+notification preferences, account deletion), and a new in-app
+notification feed (bell icon + Unread/Read list) exists alongside the
+push notifications already implemented — see "Settings screen" and
+"Notifications feed" below. Analytics is implemented — see "Analytics
 feature" below.
 
 AI Tools (Resume Parser + ATS Score) is implemented — the backend and
@@ -195,14 +198,15 @@ need.
 
 ### Settings screen
 
-`lib/features/settings/presentation/settings_screen.dart` (new,
-`/settings` route) — currently minimal on purpose: just the logout
-action, moved here from Applications' AppBar because Settings didn't
-have anywhere to live until this pass gave it a real entry point. Every
-top-level screen that needs a way into Settings uses the same shared
-`SettingsIconButton` widget
-(`lib/features/settings/presentation/settings_icon_button.dart`) in its
-`AppBar.actions`, rather than each screen duplicating an inline
+`lib/features/settings/presentation/settings_screen.dart` (`/settings`
+route) — started as a logout-only menu; now the full account-settings
+entry point, each section a pushed sub-screen rather than one long
+scrolling page (mobile's usual shape for anything more than a couple of
+fields — see ApplicationFormScreen's per-tab screens, or Interviews/
+Contacts/Documents each being their own screen). Every top-level screen
+that needs a way into Settings uses the same shared `SettingsIconButton`
+widget (`lib/features/settings/presentation/settings_icon_button.dart`)
+in its `AppBar.actions`, rather than each screen duplicating an inline
 `IconButton`.
 
 **Why not hoist this into `AppShell` instead of repeating it per
@@ -217,11 +221,97 @@ need it. `SettingsIconButton` is the practical middle ground: still one
 line per screen, but the icon/tooltip/target route lives in exactly one
 place instead of five.
 
-**Not part of this pass** (still true per BACKEND_SUMMARY.md's parallel
-note): password reset, timezone override, and notification preferences —
-already noted elsewhere as a planned combined account/settings screen.
-This screen exists so logout has a proper home now; it grows into that
-fuller screen later rather than needing a second relocation.
+**Sub-screens** (all under `lib/features/settings/presentation/`):
+
+- **`ProfileScreen`** (`/settings/profile`) — avatar upload/remove
+  (`file_picker`, restricted to `png`/`jpg`/`jpeg`/`webp` — matches the
+  backend's `AVATAR_ALLOWED_CONTENT_TYPES`), first/last name
+  (`flutter_form_builder`), and a timezone override: an explicit
+  "Auto-detect timezone" `SwitchListTile` (mapped onto
+  `User.timezoneIsManual` — off means the app keeps overwriting
+  `User.timezone` from the device on every login/refresh, on means it's
+  locked to what's picked below) plus a "Choose your own timezone" row
+  that opens `TimezonePickerSheet` — a searchable bottom sheet over
+  `core/utils/timezone.dart`'s `timezoneOptions()` (every IANA zone
+  `package:timezone`'s bundled tzdata knows about, each labeled with its
+  live UTC offset, e.g. `"Asia/Ho Chi Minh (UTC+7)"` — mirrors
+  `webapp/src/lib/timezone.ts`). `package:timezone` was already a
+  transitive dependency via `flutter_local_notifications`; this pass
+  promotes it to direct in `pubspec.yaml`, since Dart's core `DateTime`
+  has no named-timezone support at all without it. All three fields
+  submit through new `AuthController` methods
+  (`updateProfile`/`uploadAvatar`/`removeAvatar`) that update
+  `currentUserProvider` in place, same reasoning `stores/auth.ts`
+  mutates `this.user` directly on web. `timezone` is only included in
+  the `PATCH /users/me` body when it actually changed (own dirty-check
+  against the saved value, kept as plain widget state rather than a
+  `FormBuilder` field) — the backend flips `timezone_is_manual` purely
+  from that key's *presence*, so resaving the name fields alone must
+  never silently re-lock an auto-detected timezone.
+- **`ChangePasswordScreen`** (`/settings/password`) and
+  **`NotificationPreferencesScreen`**
+  (`/settings/notification-preferences`) — call `userApiProvider`/
+  `userSettingsApiProvider` directly rather than through
+  `AuthController`; neither changes anything `currentUserProvider`
+  holds, so there's nothing else that needs to observe them completing.
+  `NotificationPreferencesScreen` mirrors `NotificationSettingsCard.vue`
+  (master + per-channel email/push toggles, dimmed *and* disabled when
+  the master switch is off; a switch to opt into a custom reminder lead
+  time vs. sending an explicit `null` to fall back to the server's
+  global default) — plain widget state, not `flutter_form_builder`,
+  same reasoning `DocumentUploadSheet`'s own file-type dropdown gives:
+  no validation happening here `form_builder` would add value to.
+- **`DeleteAccountDialog`** — an `AlertDialog` + `FormBuilder`
+  re-confirming the password before `DELETE /users/me`, called via
+  `AuthController.deleteAccount` (deregisters the push device token,
+  calls the API, then clears local session state the same way
+  `logout()` does — except through a new `AuthRepository
+  .clearLocalSession()` that skips `POST /auth/logout`'s server-side
+  refresh-token revoke, since the account, and therefore that token, no
+  longer exists once the delete succeeds). The router's own
+  auth-state `redirect` (see `app/router.dart`) sends the user to
+  `/login` afterward on its own, same as a plain logout — the dialog
+  itself doesn't navigate anywhere.
+
+### Notifications feed
+
+New ground on mobile — no in-app notification list/bell UI existed
+before this pass (push notifications for interview reminders already
+did, see "Push notifications" below; this is the separate in-app feed
+of notification *events*, mirroring the backend's `Notification`
+model/`/notifications` endpoints and web's `NotificationBell.vue`).
+
+- **`NotificationBellButton`**
+  (`lib/features/notifications/presentation/notification_bell_button.dart`)
+  — same `AppBar.actions` placement convention as `SettingsIconButton`,
+  a `Badge`-wrapped bell icon showing `NotificationsController`'s
+  `unreadCount`, pushing `/notifications` on tap.
+- **`NotificationsScreen`** — a full pushed screen, not a popover
+  (mobile has no hover/click popover equivalent) — with a full-width
+  Unread/Read `SegmentedButton` and an infinite-scroll `ListView`
+  (`ScrollController` threshold, same pattern
+  `ApplicationsListScreen`'s `_onScroll` uses), "Mark all read" on the
+  Unread tab. Tapping an unread item marks it read and, if it carries an
+  `application_id`, **pushes** (not replaces) into that application's
+  edit screen — backing out returns to the feed rather than to whatever
+  screen originally opened it.
+- **`NotificationsController`** (`StateNotifier`, mirrors
+  `stores/notifications.ts`) — deliberately **not** `.autoDispose` and
+  does **not** fetch anything on construction, unlike
+  `ApplicationsListController`: the unread-count badge has to keep
+  polling on every authenticated screen, not just while
+  `NotificationsScreen` happens to be open. `startPolling()`/
+  `stopPolling()` are called from `AuthController` on
+  login/register/silent-restore and logout respectively — the exact
+  same lifecycle `PushService.registerCurrentDevice()`/
+  `deregisterCurrentDevice()` already follow. Poll interval (30s)
+  matches `webapp/src/stores/notifications.ts`'s own constant, for
+  consistency across clients.
+- Backend needed a small change to support the Unread/Read tabs:
+  `GET /notifications` used to take a plain `unread_only: bool`, with no
+  way to ask for read-only. It's now `status: "all"|"unread"|"read"` —
+  additive, and this is the first client to depend on the new shape
+  (see `backend/BACKEND_SUMMARY.md`'s "In-app notification feed").
 
 ### Analytics feature (`lib/features/analytics/`)
 
@@ -832,11 +922,11 @@ whatever the device gives back.
 
 ## Not yet implemented
 
-- Password reset UI, timezone override, and notification preferences on
-  the new Settings screen (backend endpoints already exist per
-  BACKEND_SUMMARY.md; Settings currently only hosts logout — see
-  "Settings screen" above)
-  screen has it, these two don't yet (see "Settings screen" above)
+- Password-reset-by-email UI — a separate, still-open gap from
+  Settings' new "change password while logged in" flow
+  (`ChangePasswordScreen`, requires the current password); backend
+  endpoints for an actual forgot-password flow don't exist yet either
+  (see `backend/BACKEND_SUMMARY.md`)
 - In-app document download / offline document storage — downloads
   currently open the presigned URL externally via `url_launcher` only,
   no on-device copy kept

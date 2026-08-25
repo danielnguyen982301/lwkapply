@@ -290,15 +290,25 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       (`flutter_form_builder`), silent session restore on app start,
       refresh token in `flutter_secure_storage`, bearer + refresh-on-401
       Dio interceptor — see MOBILE_SUMMARY.md
-- [ ] Password reset UI on the Settings screen (backend endpoints already
-      exist; Settings screen exists now — see below — but doesn't call
-      them yet)
-- [x] Settings screen — currently minimal, just hosts the logout action
-      (moved off Applications' AppBar this pass) — see MOBILE_SUMMARY.md's
-      "Settings screen"
-  - [ ] Timezone override + notification preferences (e.g. re-enabling
-        push after an initial permission denial) — still not started,
-        the natural next additions to the same screen
+- [ ] Password-reset-by-email UI — a separate, still-open gap from the
+      "change password while logged in" flow below; no backend endpoint
+      for an actual forgot-password flow exists yet either
+- [x] Settings screen — grew from a logout-only menu into the full
+      account-settings screen: `ProfileScreen` (avatar, name, an
+      explicit auto-detect-timezone toggle + searchable timezone
+      picker), `ChangePasswordScreen`, `NotificationPreferencesScreen`
+      (master + per-channel toggles, custom reminder lead time), and
+      `DeleteAccountDialog` (password-reconfirmed) — see
+      MOBILE_SUMMARY.md's "Settings screen"
+- [x] In-app notification feed (bell icon + Unread/Read list) —
+      `NotificationBellButton`/`NotificationsScreen`, full-width tabs +
+      infinite scroll, polling `GET /notifications/unread-count` every
+      30s via `NotificationsController` (mirrors `stores/
+      notifications.ts`). New ground on mobile — distinct from the push
+      notifications already implemented below. Needed a small backend
+      change: `GET /notifications`'s `unread_only: bool` became
+      `status: "all"|"unread"|"read"` — see MOBILE_SUMMARY.md's
+      "Notifications feed"
 - [x] Bottom navigation shell — restructured this pass from 4 tabs
       (Applications/Interviews/Contacts/Documents) to 2
       (Applications + a card-grid "Home" hub holding Interviews/

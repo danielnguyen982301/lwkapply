@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../domain/application.dart';
+import '../../notifications/presentation/notification_bell_button.dart';
 import '../../settings/presentation/settings_icon_button.dart';
 import 'application_formatting.dart';
 import 'application_form_result.dart';
@@ -138,7 +139,7 @@ class _ApplicationsListScreenState
     return Scaffold(
       appBar: AppBar(
         title: const Text('Applications'),
-        actions: const [SettingsIconButton()],
+        actions: const [NotificationBellButton(), SettingsIconButton()],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm('/applications/new'),

@@ -103,6 +103,12 @@ class AuthRepository {
     }
     await _tokenStorage.clear();
   }
+
+  /// Used by [AuthController.deleteAccount] instead of [logout] — the
+  /// account (and therefore its refresh token) no longer exists
+  /// server-side once this runs, so there's nothing to revoke via
+  /// `POST /auth/logout`, only local storage to clear.
+  Future<void> clearLocalSession() => _tokenStorage.clear();
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {

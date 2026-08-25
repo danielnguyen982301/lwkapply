@@ -1,6 +1,41 @@
 # Changelog
 
-## v0.15.0 (in progress)
+## v0.16.0 (in progress)
+
+### Added
+
+- **Account settings, mobile** — mobile counterpart to v0.14.0/
+  v0.15.0's web `AccountSettingsView.vue`, and the first pass to touch
+  `Settings` beyond its original logout-only scope. `ProfileScreen` —
+  avatar upload/remove (`file_picker`), first/last name, and an
+  explicit "Auto-detect timezone" toggle + searchable
+  `TimezonePickerSheet` (every IANA zone labeled with its live UTC
+  offset, via `package:timezone` — already a transitive dependency
+  through `flutter_local_notifications`, promoted to direct here).
+  `ChangePasswordScreen`, `NotificationPreferencesScreen` (master +
+  per-channel toggles, custom reminder lead time), and a
+  password-reconfirmed `DeleteAccountDialog` round out the screen.
+  Profile/avatar changes route through new `AuthController` methods
+  (`updateProfile`/`uploadAvatar`/`removeAvatar`/`deleteAccount`) so
+  `currentUserProvider` updates in place, mirroring
+  `webapp/src/stores/auth.ts`. `User` gains `timezone`/
+  `timezoneIsManual` (mirrors `UserRead`, previously fetched but never
+  exposed on the mobile client). Full detail in
+  `mobile/MOBILE_SUMMARY.md`'s "Settings screen".
+- **In-app notification feed, mobile** — new ground on mobile (only
+  push notifications existed before): `NotificationBellButton` (unread
+  badge in `AppBar.actions`, same placement convention as
+  `SettingsIconButton`) and `NotificationsScreen` (a full pushed
+  screen, not a popover — full-width Unread/Read `SegmentedButton` +
+  infinite scroll). `NotificationsController` polls
+  `GET /notifications/unread-count` every 30s — deliberately not
+  `.autoDispose`, started/stopped from `AuthController` on the same
+  login/restore/logout lifecycle `PushService`'s device-token
+  registration already follows, so the badge keeps polling on every
+  authenticated screen rather than only while the feed is open. Full
+  detail in `mobile/MOBILE_SUMMARY.md`'s "Notifications feed".
+
+## v0.15.0
 
 ### Added
 

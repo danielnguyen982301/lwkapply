@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../notifications/presentation/notification_bell_button.dart';
 import '../../settings/presentation/settings_icon_button.dart';
 
 /// Landing screen for the "Home" tab (see app_shell.dart's doc comment
@@ -22,7 +23,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
-        actions: const [SettingsIconButton()],
+        actions: const [NotificationBellButton(), SettingsIconButton()],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

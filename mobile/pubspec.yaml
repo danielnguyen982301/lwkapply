@@ -61,6 +61,14 @@ dependencies:
   # NOT while the app is open (see push_service.dart's foreground
   # listener for why this package fills that one gap).
   flutter_local_notifications: ^18.0.1
+  # Was already a transitive dependency (flutter_local_notifications
+  # pulls it in for zoned scheduling) - promoted to direct here so
+  # ProfileScreen's timezone picker can use its bundled IANA tzdata
+  # database for the full zone list + current-offset display, matching
+  # webapp/src/lib/timezone.ts's Intl.supportedValuesOf('timeZone') +
+  # Intl.DateTimeFormat shortOffset. Dart's core DateTime has no
+  # named-timezone support at all without this.
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:
