@@ -1,0 +1,50 @@
+name: Reminders Cron
+
+# Replaces Celery beat's every-10-minutes schedule
+# (backend/app/core/celery_app.py's beat_schedule) for deployments that
+# don't run a Celery worker/beat process - Render has no free tier for
+# an always-on background worker, see docs/DEPLOYMENT.md. Hits
+# POST /api/v1/internal/reminders/run instead, which does the same
+# find-due/dispatch/mark-sent work as
+# backend/app/tasks/reminders_celery.py::send_due_reminders (via
+# backend/app/tasks/reminders_inline.py, the version this endpoint
+# actually calls).
+#
+# Requires two repo-level values under Settings > Secrets and variables
+# > Actions:
+#   - Secret INTERNAL_CRON_SECRET: same value as the backend's
+#     INTERNAL_CRON_SECRET env var (see backend/.env.example).
+#   - Variable BACKEND_URL: the deployed API's base URL, no trailing
+#     slash (e.g. https://lwkapply-api.onrender.com).
+# Until both are set this workflow will 401/503 against the endpoint -
+# harmless (idempotent, nothing to retry), but reminders won't send.
+#
+# GitHub's scheduled workflows are best-effort (can run several minutes
+# late under load) and get auto-disabled after 60 days of repo
+# inactivity - acceptable here since InterviewReminder.sent_at IS NULL
+# idempotency (see that model) makes a late or skipped tick harmless,
+# just delayed. Re-enable manually (Actions tab -> this workflow ->
+# "Enable workflow") if that happens.
+on:
+  schedule:
+    # Every 15 minutes - comfortably inside the "every 5-15 min" window
+    # TODO.md's reminder plan calls for, same window celery beat's
+    # every-10-minutes schedule targets.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-due-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger send-due-reminders
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST \
+            -H "X-Internal-Cron-Secret: ${{ secrets.INTERNAL_CRON_SECRET }}" \
+            "${{ vars.BACKEND_URL }}/api/v1/internal/reminders/run")
+          cat /tmp/response.json
+          echo
+          if [ "$status" -ge 300 ]; then
+            echo "Request failed with status $status"
+            exit 1
+          fi
