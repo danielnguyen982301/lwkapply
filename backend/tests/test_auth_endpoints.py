@@ -3,15 +3,34 @@ Integration tests for /auth/login, /auth/refresh, /auth/logout
 (app/api/v1/endpoints/auth.py), focused on the cookie/CSRF mechanics
 rather than credential validation.
 
+Every test here uses the `https_client` fixture below rather than
+conftest.py's plain `client` - deliberately pinning settings.COOKIE_SECURE
+and settings.COOKIE_SAMESITE to production's real values ("Secure;
+SameSite=None") instead of relying on whatever's ambient. Locally that's
+.env.local's COOKIE_SECURE=False/COOKIE_SAMESITE=lax; in CI it's
+config.py's class defaults (True/"none"), since .env.local is gitignored
+and never present there - so this file's tests silently behaved
+differently depending on which environment ran them until this was
+pinned explicitly, which is exactly the kind of fragility the CSRF fix
+these tests cover was itself about hunting down. A plain http://testserver
+client also can't store a Secure cookie at all (correct browser
+behavior, but means these need an https base_url to exercise real
+cross-origin cookie behavior at all, regardless of environment).
+
 TestClient keeps a real cookie jar across requests made with the same
 client instance (it wraps an httpx.Client), so these exercise the actual
 browser-like flow: login sets cookies, refresh/logout are called with
 whatever the client's jar holds - no manual cookie plumbing needed.
 """
 
+from typing import Generator
+
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
+from app.db.session import get_db
 from app.main import app
 from app.models.user import User
 
@@ -19,6 +38,22 @@ REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 REFRESH_URL = "/api/v1/auth/refresh"
 LOGOUT_URL = "/api/v1/auth/logout"
+
+
+@pytest.fixture()
+def https_client(db_session: Session, monkeypatch) -> Generator[TestClient, None, None]:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    monkeypatch.setattr(settings, "COOKIE_SAMESITE", "none")
+
+    def _get_db_override() -> Generator[Session, None, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    with TestClient(app, base_url="https://testserver") as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 def _make_user(
@@ -37,10 +72,10 @@ def _make_user(
 
 
 class TestLoginReturnsCsrfToken:
-    def test_login_response_includes_csrf_token(self, client, db_session):
+    def test_login_response_includes_csrf_token(self, https_client, db_session):
         _, password = _make_user(db_session)
 
-        response = client.post(
+        response = https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
         )
 
@@ -51,56 +86,56 @@ class TestLoginReturnsCsrfToken:
 
 
 class TestRefreshDoesNotRequireCsrf:
-    def test_refresh_succeeds_with_no_csrf_header(self, client, db_session):
+    def test_refresh_succeeds_with_no_csrf_header(self, https_client, db_session):
         """The regression this guards against: bootstrap() on a hard
         reload has no in-memory CSRF token to send yet, so /auth/refresh
         must work from the cookie jar alone."""
         _, password = _make_user(db_session)
-        client.post(
+        https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
         )
 
-        response = client.post(REFRESH_URL, headers={})
+        response = https_client.post(REFRESH_URL, headers={})
 
         assert response.status_code == 200
         assert response.json()["csrf_token"]
 
-    def test_refresh_401s_with_no_session_at_all(self, client):
-        response = client.post(REFRESH_URL)
+    def test_refresh_401s_with_no_session_at_all(self, https_client):
+        response = https_client.post(REFRESH_URL)
         assert response.status_code == 401
 
 
 class TestLogoutStillRequiresCsrf:
-    def test_logout_403s_without_csrf_header(self, client, db_session):
+    def test_logout_403s_without_csrf_header(self, https_client, db_session):
         _, password = _make_user(db_session)
-        client.post(
+        https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
         )
 
-        response = client.post(LOGOUT_URL)
+        response = https_client.post(LOGOUT_URL)
 
         assert response.status_code == 403
 
     def test_logout_succeeds_with_csrf_token_from_login_response(
-        self, client, db_session
+        self, https_client, db_session
     ):
         _, password = _make_user(db_session)
-        login_response = client.post(
+        login_response = https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
         )
         csrf_token = login_response.json()["csrf_token"]
 
-        response = client.post(LOGOUT_URL, headers={"X-CSRF-Token": csrf_token})
+        response = https_client.post(LOGOUT_URL, headers={"X-CSRF-Token": csrf_token})
 
         assert response.status_code == 204
 
-    def test_logout_403s_with_wrong_csrf_token(self, client, db_session):
+    def test_logout_403s_with_wrong_csrf_token(self, https_client, db_session):
         _, password = _make_user(db_session)
-        client.post(
+        https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
         )
 
-        response = client.post(
+        response = https_client.post(
             LOGOUT_URL, headers={"X-CSRF-Token": "not-the-right-token"}
         )
 
@@ -112,30 +147,13 @@ class TestLogoutCookieDeletionMatchesProductionAttributes:
     Starlette's Response.delete_cookie() defaults to
     secure=False, samesite="lax" when not told otherwise, silently
     different from what set_auth_cookies() actually set the cookies
-    with. Local dev's COOKIE_SECURE=False/COOKIE_SAMESITE=lax (see
-    .env.local) happens to match those defaults, which is exactly why
-    this never showed up there - only in production
-    (COOKIE_SECURE=True, COOKIE_SAMESITE=none) did the mismatch matter.
-    This monkeypatches settings to the production values so the test
-    actually exercises the case that broke.
+    with. Covered by the same production-shaped https_client fixture as
+    the rest of this file now - see the module docstring.
     """
 
     def test_delete_cookie_headers_match_set_cookie_attributes(
-        self, client, db_session, monkeypatch
+        self, https_client, db_session
     ):
-        from app.core.config import settings
-
-        monkeypatch.setattr(settings, "COOKIE_SECURE", True)
-        monkeypatch.setattr(settings, "COOKIE_SAMESITE", "none")
-
-        # A plain http://testserver client (what the `client` fixture
-        # uses) won't store a Secure cookie at all - real browsers don't
-        # either, for a plain-http origin, which is exactly correct
-        # behavior on their part, but it means this specific scenario
-        # (Secure; SameSite=None cookies, as production actually sets)
-        # needs an https base_url to reproduce faithfully.
-        https_client = TestClient(app, base_url="https://testserver")
-
         _, password = _make_user(db_session)
         login_response = https_client.post(
             LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}

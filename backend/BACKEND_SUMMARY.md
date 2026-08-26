@@ -1348,6 +1348,98 @@ it's about this app's own statelessness, not just infra choices:
   projects to IPv6-only direct connections that Render can't reach) is
   connection pooling, a different concern from horizontal DB scaling.
 
+## Email backend: Gmail API added alongside SMTP/Resend
+
+Deployment-driven, same family of change as "Background job execution"
+above - discovered once reminder emails were actually tried against a
+live Render deployment:
+
+- Render blocks outbound traffic to SMTP ports (25/465/587) entirely on
+  free web services (a policy change effective September 2025) - the
+  existing `app/services/email.py` SMTP backend can't even open a
+  connection there (`OSError: [Errno 101] Network is unreachable`).
+  Upgrading to a paid Render instance would unblock the ports, but this
+  project also has no domain to authenticate a provider like
+  Resend/SendGrid with, and since Feb 2024 (Gmail/Yahoo) / May 2025
+  (Microsoft) the major inbox providers require proper domain
+  authentication for reliable delivery anyway - a workaround using some
+  other provider's "single sender, no domain" mode would likely land in
+  spam regardless.
+- Fix: `app/services/email.py` renamed to `email_smtp.py` (unchanged
+  otherwise, kept as the local-dev/MailHog and Celery-reference-path
+  backend - same "rename, don't delete" precedent as the Celery task
+  modules). New `app/services/email_gmail_api.py` sends through the
+  Gmail API over HTTPS instead - not subject to Render's SMTP-port
+  block, and still carries Google's own SPF/DKIM/DMARC authentication
+  automatically since it's genuinely sent through Google's servers, not
+  a workaround with weaker deliverability. `app/tasks/reminders_inline.py`
+  (the production reminders pipeline) imports `send_email` from the new
+  module; `app/tasks/reminders_celery.py` is untouched and still uses
+  `email_smtp.py` against MailHog.
+- Auth: OAuth 2.0, a single long-lived refresh token for one specific
+  Gmail account (`GMAIL_API_SENDER_EMAIL`), minted once locally via
+  `scripts/gmail_oauth_setup.py` (opens a browser for the one-time
+  consent flow) rather than anything interactive happening at runtime -
+  `google-auth`'s `Credentials` turns the stored refresh token into
+  short-lived access tokens automatically on every send. Scope is
+  send-only (`gmail.send`), not full mailbox access.
+
+## Auth cookie fixes found during the same deployment pass
+
+Two bugs that only reproduced against a real cross-origin (Vercel +
+Render) production deployment, not local dev - both fixed on `master`
+directly rather than a feature branch, since they're corrections to
+existing behavior rather than new work:
+
+- **CSRF double-submit was completely broken in production** - the
+  `csrf_token` cookie was `httponly=False` specifically so frontend JS
+  could read it via `document.cookie` and echo it back as
+  `X-CSRF-Token`, which only works when frontend and backend share an
+  origin. Deployed separately, a different-origin frontend's own JS can
+  never read a cookie belonging to a different origin, so every
+  `/auth/refresh` and `/auth/logout` call 403'd. Fixed by returning
+  `csrf_token` in the `/login`/`/refresh` JSON response body instead
+  (`TokenResponse.csrf_token`) - something CORS already permits the
+  frontend to read regardless of origin - and dropping the CSRF check
+  from `/auth/refresh` entirely, since that endpoint has to work with
+  zero prior in-memory state (a fresh page load) and can't ever satisfy
+  a "you already have a token from an earlier response" requirement;
+  see that endpoint's own docstring for why dropping it there is safe.
+  `/auth/logout` keeps the check, now satisfiable. Also hardened
+  `csrf_token` to `httponly=True`, since nothing reads it via JS anymore.
+- **Logout didn't actually clear the session cookie in production** -
+  `clear_auth_cookies()` called Starlette's `Response.delete_cookie()`
+  without passing `secure`/`samesite`, which default to `False`/`"lax"`
+  - silently different from what `set_auth_cookies()` actually set
+  (`secure=settings.COOKIE_SECURE`, `samesite=settings.COOKIE_SAMESITE`,
+  `Secure; SameSite=None` in production). A deletion Set-Cookie with
+  mismatched attributes from the cookie it's trying to overwrite is a
+  known source of "logout doesn't really log out" bugs. Local dev never
+  caught this because `.env.local`'s `COOKIE_SECURE=False`/
+  `COOKIE_SAMESITE=lax` happen to match `delete_cookie()`'s defaults -
+  only production's different settings exposed the mismatch. Symptom:
+  click logout, land on `/login`, refresh immediately after, and get
+  logged right back in. Fixed by passing the same settings explicitly;
+  regression test in `tests/test_auth_endpoints.py` reproduces it
+  against production-shaped cookie settings via an `https://testserver`
+  `TestClient` (a `Secure` cookie won't even get stored by a plain
+  `http://` test client, which is correct browser behavior, but means
+  the bug needs an https base URL to reproduce at all).
+
+Also fixed in the same pass: `alembic/env.py` didn't escape `%` before
+handing `DATABASE_URL` to `config.set_main_option()`, which stores it
+through Python's `configparser` - `configparser` treats `%` as its own
+interpolation character (unrelated to URL percent-encoding), so a
+percent-encoded special character in the DB password (e.g. `%21` for
+`!`, exactly what Supabase's own docs recommend) tripped it with
+`invalid interpolation syntax` before any migration could run. Fixed by
+doubling `%` before the `set_main_option()` call; only affects the
+`alembic` CLI; `app/db/session.py`'s own `create_engine()` call never
+goes through `configparser`, so a running deployment was never affected
+by this one. `webapp/vercel.json` also had to be added - Vue Router's
+history-mode client-side routes 404'd on Vercel on a hard refresh with
+no SPA rewrite rule configured.
+
 ## Not yet implemented (next up per TODO.md)
 
 - Analytics reporting endpoints (CSV/PDF export) — the dashboard-metrics
@@ -1516,7 +1608,14 @@ backend/
       r2.py                        # Cloudflare R2 upload/download/delete for
                                     # documents (download_document() added
                                     # for Resume Parser's server-side read)
-      email.py                     # Resend (prod) / SMTP+MailHog (local) - reminders
+      email_smtp.py                # Resend / SMTP+MailHog - used by the Celery
+                                    # reference pipeline (reminders_celery.py)
+                                    # and local dev; Render blocks the SMTP
+                                    # ports this needs, so production doesn't
+                                    # use it - see email_gmail_api.py
+      email_gmail_api.py           # Gmail API over HTTPS - what
+                                    # reminders_inline.py (production) actually
+                                    # sends reminder emails through
       push.py                      # Firebase Admin SDK (FCM) - reminders, Phase B
       reminders.py                 # sync_interview_reminders() - interview CRUD
                                     # keeps interview_reminders rows in sync

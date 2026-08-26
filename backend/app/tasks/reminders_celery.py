@@ -24,7 +24,7 @@ from app.models.interview import Interview
 from app.models.interview_reminder import InterviewReminder, ReminderChannel
 from app.models.notification import Notification, NotificationType
 from app.models.user import User
-from app.services.email import send_email
+from app.services.email_smtp import send_email
 from app.services.push import PushResult, send_push
 
 logger = logging.getLogger(__name__)

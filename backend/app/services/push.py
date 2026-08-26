@@ -1,7 +1,7 @@
 """
 Push notification service via Firebase Cloud Messaging (Phase B - see
 TODO.md). Same "isolate the network client behind one module" shape as
-app/services/r2.py and app/services/email.py.
+app/services/r2.py and app/services/email_smtp.py.
 
 Deliberately network-only, same boundary r2.py/email.py both hold - this
 module knows nothing about interviews, reminders, or the DB. Anything

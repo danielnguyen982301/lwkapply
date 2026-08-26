@@ -17,8 +17,8 @@ redis==5.0.8
 celery==5.4.0
 boto3==1.35.24
 python-dotenv==1.0.1
-# Used by app/services/email.py's Resend backend (direct HTTP call, not
-# the `resend` SDK - see that file's docstring for why), and by
+# Used by app/services/email_smtp.py's Resend backend (direct HTTP
+# call, not the `resend` SDK - see that file's docstring for why), and by
 # app/services/ai/job_description_fetcher.py. Bumped from 0.27.2 to
 # 0.28.1 - google-genai 2.18.1 requires httpx>=0.28.1; nothing else in
 # this codebase's httpx usage (plain httpx.post()/httpx.stream() calls,
@@ -26,6 +26,15 @@ python-dotenv==1.0.1
 httpx==0.28.1
 # Used by app/services/push.py (FCM) - Phase B, see TODO.md.
 firebase-admin==6.5.0
+# Used by app/services/email_gmail_api.py - Gmail API client + the auth
+# library that turns a stored refresh token into short-lived access
+# tokens automatically. google-auth-oauthlib is deliberately NOT listed
+# here - it's only needed for the one-time local token-minting step
+# (scripts/gmail_oauth_setup.py), not at runtime, so it lives in
+# requirements-dev.txt instead.
+google-api-python-client==2.199.0
+google-auth==2.57.0
+google-auth-httplib2==0.4.2
 # AI features (Resume Parser + ATS Score) - see app/services/ai/ and
 # TODO.md "AI Features". Pinned to 2.8.0, not the latest (2.18.1):
 # google-genai>=2.9.0 requires pydantic>=2.12.5, which would force a
