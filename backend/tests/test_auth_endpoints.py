@@ -9,7 +9,10 @@ browser-like flow: login sets cookies, refresh/logout are called with
 whatever the client's jar holds - no manual cookie plumbing needed.
 """
 
+from fastapi.testclient import TestClient
+
 from app.core.security import hash_password
+from app.main import app
 from app.models.user import User
 
 REGISTER_URL = "/api/v1/auth/register"
@@ -102,3 +105,49 @@ class TestLogoutStillRequiresCsrf:
         )
 
         assert response.status_code == 403
+
+
+class TestLogoutCookieDeletionMatchesProductionAttributes:
+    """Regression test for a bug that only reproduced in production:
+    Starlette's Response.delete_cookie() defaults to
+    secure=False, samesite="lax" when not told otherwise, silently
+    different from what set_auth_cookies() actually set the cookies
+    with. Local dev's COOKIE_SECURE=False/COOKIE_SAMESITE=lax (see
+    .env.local) happens to match those defaults, which is exactly why
+    this never showed up there - only in production
+    (COOKIE_SECURE=True, COOKIE_SAMESITE=none) did the mismatch matter.
+    This monkeypatches settings to the production values so the test
+    actually exercises the case that broke.
+    """
+
+    def test_delete_cookie_headers_match_set_cookie_attributes(
+        self, client, db_session, monkeypatch
+    ):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+        monkeypatch.setattr(settings, "COOKIE_SAMESITE", "none")
+
+        # A plain http://testserver client (what the `client` fixture
+        # uses) won't store a Secure cookie at all - real browsers don't
+        # either, for a plain-http origin, which is exactly correct
+        # behavior on their part, but it means this specific scenario
+        # (Secure; SameSite=None cookies, as production actually sets)
+        # needs an https base_url to reproduce faithfully.
+        https_client = TestClient(app, base_url="https://testserver")
+
+        _, password = _make_user(db_session)
+        login_response = https_client.post(
+            LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
+        )
+        csrf_token = login_response.json()["csrf_token"]
+
+        response = https_client.post(LOGOUT_URL, headers={"X-CSRF-Token": csrf_token})
+
+        assert response.status_code == 204
+        set_cookie_headers = response.headers.get_list("set-cookie")
+        assert len(set_cookie_headers) == 2
+        for header in set_cookie_headers:
+            lowered = header.lower()
+            assert "secure" in lowered, header
+            assert "samesite=none" in lowered, header

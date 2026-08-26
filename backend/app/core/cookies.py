@@ -57,5 +57,27 @@ def set_auth_cookies(response: Response, refresh_token: str, csrf_token: str) ->
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
-    response.delete_cookie(CSRF_COOKIE_NAME, path="/")
+    """Starlette's Response.delete_cookie() defaults to
+    secure=False, samesite="lax" when not told otherwise - silently
+    different from what set_auth_cookies() above actually set
+    (secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
+    "Secure; SameSite=None" in production). A deletion Set-Cookie with
+    mismatched attributes from the cookie it's trying to overwrite is a
+    well-known source of "logout doesn't actually clear the cookie"
+    bugs - cookie storage matches on (name, domain, path), so it should
+    still work in theory, but real browsers are inconsistent enough
+    about this exact mismatch that relying on it isn't worth the risk.
+    Passing the same attributes used to set it removes any ambiguity.
+    """
+    response.delete_cookie(
+        REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        CSRF_COOKIE_NAME,
+        path="/",
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
