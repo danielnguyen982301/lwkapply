@@ -1,6 +1,83 @@
 # Changelog
 
-## v0.18.0 (in progress)
+## v0.19.0 (in progress)
+
+### Changed
+
+- **Reminder emails switched to the Gmail API** — deployment-driven:
+  Render blocks outbound traffic to SMTP ports (25/465/587) on free web
+  services, so the existing SMTP backend couldn't connect at all
+  (`OSError: [Errno 101] Network is unreachable`), and a paid domain-
+  authenticated provider like Resend/SendGrid wasn't an option either —
+  this project has no domain, and Gmail/Yahoo (Feb 2024) / Microsoft
+  (May 2025) now require domain authentication for reliable delivery
+  regardless. Full detail in `backend/BACKEND_SUMMARY.md`'s "Email
+  backend: Gmail API added alongside SMTP/Resend" section; summary
+  here:
+  - `app/services/email.py` renamed to `email_smtp.py`, unchanged
+    otherwise — kept as the local-dev (MailHog) / Celery-reference-path
+    backend, same "rename, don't delete" precedent as the Celery task
+    modules.
+  - New `app/services/email_gmail_api.py` sends over HTTPS via the
+    Gmail API instead of raw SMTP, so Render's port block doesn't
+    apply — and still carries Google's own SPF/DKIM/DMARC
+    authentication automatically, since it's genuinely sent through
+    Google's servers. `app/tasks/reminders_inline.py` (the production
+    pipeline) uses it; `app/tasks/reminders_celery.py` is untouched.
+  - Auth is OAuth 2.0 with one long-lived, send-only-scoped
+    (`gmail.send`) refresh token for a single Gmail account, minted
+    once locally via the new `scripts/gmail_oauth_setup.py` rather
+    than anything interactive at runtime.
+  - `Reply-To`/`List-Unsubscribe` headers added after a real send
+    landed in spam — legitimate, standard signals, though the real
+    fix for inbox placement is sender/recipient reputation building up
+    over real sends and the recipient marking a message "Not spam",
+    not something headers alone solve.
+
+### Fixed
+
+- **CSRF double-submit was completely broken in production.** The
+  `csrf_token` cookie required frontend JS to read it via
+  `document.cookie` and echo it back as `X-CSRF-Token`, which only
+  works when frontend and backend share an origin — deployed
+  separately (Vercel, Render), a different-origin frontend can never
+  read a cookie belonging to a different origin, so every
+  `/auth/refresh` and `/auth/logout` call 403'd. Fixed by returning
+  `csrf_token` in the `/login`/`/refresh` response body instead
+  (something CORS already permits reading regardless of origin), and
+  dropping the CSRF check from `/auth/refresh` entirely — that
+  endpoint has to work on a fresh page load with zero prior state, so
+  it can never satisfy a "you already have a token from an earlier
+  response" requirement; see that endpoint's docstring for why
+  dropping it there is safe. `/auth/logout` keeps the check.
+- **Logout didn't actually clear the session cookie in production** —
+  `clear_auth_cookies()` called `Response.delete_cookie()` without
+  passing `secure`/`samesite`, which silently default to `False`/
+  `"lax"`, different from what the cookie was actually set with
+  (`Secure; SameSite=None` in production). Symptom: click logout, land
+  on `/login`, refresh immediately after, get logged right back in.
+  Local dev never caught this because `.env.local`'s cookie settings
+  happen to match `delete_cookie()`'s defaults.
+- **`alembic upgrade head` failed against a percent-encoded DB
+  password** (e.g. Supabase's own recommended encoding for special
+  characters) with `invalid interpolation syntax` — `alembic/env.py`
+  wasn't escaping `%` before handing `DATABASE_URL` to
+  `config.set_main_option()`, which stores it through Python's
+  `configparser`, and `configparser` treats `%` as its own
+  interpolation character. Only affected the `alembic` CLI, never a
+  running deployment.
+- **Refreshing a client-side route 404'd on Vercel** — no
+  `webapp/vercel.json` SPA rewrite existed, so a hard reload on any
+  non-root Vue Router path hit Vercel's static host directly instead
+  of `index.html`.
+- `tests/test_auth_endpoints.py` itself was flaky across environments
+  — most of it silently depended on `.env.local`'s local-only cookie
+  settings to work at all via a plain `http://testserver` test client,
+  which is absent (and therefore behaves differently) in CI. Fixed
+  with an explicit, production-shaped `https_client` fixture used
+  throughout the file.
+
+## v0.18.0
 
 ### Changed
 
