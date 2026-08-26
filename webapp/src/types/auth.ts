@@ -17,6 +17,11 @@ export interface User {
 export interface AccessTokenResponse {
   access_token: string
   token_type: 'bearer'
+  // See backend TokenResponse.csrf_token's docstring — this is how the
+  // frontend gets its copy now, rather than reading the csrf_token
+  // cookie directly (which only works when frontend and backend share
+  // an origin).
+  csrf_token: string
 }
 
 export interface LoginPayload {

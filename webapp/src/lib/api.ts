@@ -3,19 +3,14 @@ import { useAuthStore } from '@/stores/auth'
 
 const UNSAFE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : null
-}
-
 // Requests go through the Vite dev proxy (see vite.config.ts) so this can
 // stay relative in dev and be overridden per-environment in production.
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 15_000,
   // Required so the browser sends/receives the httpOnly refresh-token
-  // cookie and the readable csrf_token cookie on cross-origin requests
-  // (frontend and API are on different domains — Vercel vs Railway/Render).
+  // and csrf_token cookies on cross-origin requests (frontend and API
+  // are on different domains — Vercel vs Render).
   withCredentials: true,
 })
 
@@ -25,16 +20,19 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${auth.accessToken}`
   }
 
-  // Double-submit CSRF: echo the csrf_token cookie back as a header.
-  // Only relevant for /auth/refresh and /auth/logout, which are the only
-  // endpoints authenticated via cookie rather than the bearer header —
-  // but it's harmless to attach on every unsafe request.
+  // Double-submit CSRF: echo the CSRF token back as a header. Only
+  // relevant for /auth/logout, the one remaining endpoint authenticated
+  // via cookie rather than the bearer header (see backend
+  // verify_csrf's docstring for why /auth/refresh doesn't need this) —
+  // but harmless to attach on every unsafe request regardless. Sourced
+  // from the auth store (populated from the login/refresh response
+  // body), not read from the csrf_token cookie directly — a
+  // different-origin frontend's own JS can never read a cookie that
+  // belongs to the API's origin, cross-origin Vercel/Render setup
+  // included.
   const method = config.method?.toLowerCase()
-  if (method && UNSAFE_METHODS.has(method)) {
-    const csrfToken = readCookie('csrf_token')
-    if (csrfToken) {
-      config.headers['X-CSRF-Token'] = csrfToken
-    }
+  if (method && UNSAFE_METHODS.has(method) && auth.csrfToken) {
+    config.headers['X-CSRF-Token'] = auth.csrfToken
   }
 
   return config

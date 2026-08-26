@@ -16,6 +16,13 @@ type RequestStatus = 'idle' | 'loading' | 'error'
 interface AuthState {
   user: User | null
   accessToken: string | null
+  // In-memory only, same reasoning/lifetime as accessToken — sourced
+  // from the login/refresh response body (see lib/api.ts's request
+  // interceptor, which echoes this back as X-CSRF-Token on unsafe
+  // requests) rather than read from the csrf_token cookie directly,
+  // since that cookie lives on the API's origin (Vercel vs Render),
+  // which this page's own JS can never read via document.cookie.
+  csrfToken: string | null
   status: 'idle' | 'loading' | 'error'
   error: string | null
   /** Set once the initial bootstrap() attempt has finished, success or
@@ -52,6 +59,7 @@ export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
     user: null,
     accessToken: null,
+    csrfToken: null,
     status: 'idle',
     error: null,
     bootstrapped: false,
@@ -83,6 +91,7 @@ export const useAuthStore = defineStore('auth', {
           timezone: getBrowserTimezone(),
         })
         this.accessToken = data.access_token
+        this.csrfToken = data.csrf_token
         await this.fetchCurrentUser()
         this.status = 'idle'
       } catch (err) {
@@ -121,6 +130,7 @@ export const useAuthStore = defineStore('auth', {
         await this.fetchCurrentUser()
       } catch {
         this.accessToken = null
+        this.csrfToken = null
         this.user = null
       } finally {
         this.bootstrapped = true
@@ -132,6 +142,7 @@ export const useAuthStore = defineStore('auth', {
         timezone: getBrowserTimezone(),
       })
       this.accessToken = data.access_token
+      this.csrfToken = data.csrf_token
       return data.access_token
     },
 
@@ -145,6 +156,7 @@ export const useAuthStore = defineStore('auth', {
       }
       this.user = null
       this.accessToken = null
+      this.csrfToken = null
     },
 
     // --- Account settings ------------------------------------------------
