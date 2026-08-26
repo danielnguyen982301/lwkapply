@@ -20,3 +20,9 @@ celery-types==0.26.0
 # this line is redundant with the `-r requirements.txt` above and kept
 # only so `httpx` stays visibly listed as a direct dev-test dependency.
 httpx==0.28.1
+
+# Only used by scripts/gmail_oauth_setup.py's one-time local step that
+# mints GMAIL_API_REFRESH_TOKEN (see app/services/email_gmail_api.py) -
+# runs a local OAuth consent flow in a browser, never needed at
+# runtime/in production, hence dev-only.
+google-auth-oauthlib==1.4.1
