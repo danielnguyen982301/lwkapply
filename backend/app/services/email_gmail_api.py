@@ -76,6 +76,13 @@ def _build_raw_message(to: str, subject: str, html: str, text: str) -> dict:
     message["Subject"] = subject
     message["From"] = f"{settings.EMAIL_FROM_NAME} <{settings.GMAIL_API_SENDER_EMAIL}>"
     message["To"] = to
+    # Standard, legitimate signals for transactional mail - neither
+    # guarantees inbox placement (that's mostly sender/recipient
+    # reputation, which only builds up over real sends + the recipient
+    # marking a message "Not spam"), but both are widely recognized by
+    # spam filters and cost nothing to include.
+    message["Reply-To"] = settings.GMAIL_API_SENDER_EMAIL
+    message["List-Unsubscribe"] = f"<{settings.FRONTEND_URL}/settings>"
     # Attach text before html - per MIME convention the *last* part is
     # preferred by clients that support it, so html (the richer version)
     # should come second. Same ordering email_smtp.py uses.

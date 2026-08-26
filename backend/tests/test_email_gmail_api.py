@@ -15,7 +15,7 @@ from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
 import app.services.email_gmail_api as email_gmail_api_module
-from app.services.email_gmail_api import send_email
+from app.services.email_gmail_api import _build_raw_message, send_email
 
 
 @pytest.fixture(autouse=True)
@@ -55,6 +55,22 @@ class TestNotConfigured:
         )
 
         assert result is False
+
+
+class TestBuildRawMessage:
+    def test_includes_reply_to_and_list_unsubscribe(self):
+        import base64
+        from email import message_from_bytes
+
+        from app.core.config import settings
+
+        body = _build_raw_message(
+            to="user@example.com", subject="Hi", html="<p>hi</p>", text="hi"
+        )
+        message = message_from_bytes(base64.urlsafe_b64decode(body["raw"]))
+
+        assert message["Reply-To"] == settings.GMAIL_API_SENDER_EMAIL
+        assert message["List-Unsubscribe"] == f"<{settings.FRONTEND_URL}/settings>"
 
 
 class TestSendEmail:
