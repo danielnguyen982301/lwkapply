@@ -20,12 +20,19 @@ name: Reminders Cron
 # Until both are set this workflow will 401/503 against the endpoint -
 # harmless (idempotent, nothing to retry), but reminders won't send.
 #
-# GitHub's scheduled workflows are best-effort (can run several minutes
-# late under load) and get auto-disabled after 60 days of repo
-# inactivity - acceptable here since InterviewReminder.sent_at IS NULL
-# idempotency (see that model) makes a late or skipped tick harmless,
-# just delayed. Re-enable manually (Actions tab -> this workflow ->
-# "Enable workflow") if that happens.
+# DISABLED (Actions tab -> this workflow -> toggled off) as of the
+# GMAIL_API_* / auth-cookie deployment pass - see CHANGELOG.md v0.19.0.
+# GitHub's scheduled workflows are documented as best-effort, but in
+# practice this one went well beyond "a few minutes late": real run
+# history showed multi-hour gaps with the schedule trigger firing zero
+# times, not just landing late - worse than the idempotency-covers-a-
+# late-tick reasoning this comment originally assumed. cron-job.org is
+# the actual scheduler in production now (same endpoint, more punctual
+# in practice). This file is kept, disabled, as a free redundant
+# fallback that costs nothing while off and can be re-enabled (Actions
+# tab -> this workflow -> "Enable workflow") if cron-job.org itself
+# ever needs a backup - workflow_dispatch below still works for manual
+# testing regardless of the schedule trigger's on/off state.
 on:
   schedule:
     # Every 10 minutes - matches celery beat's original cadence exactly

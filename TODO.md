@@ -411,10 +411,13 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       API, Docker), Supabase (Postgres), Cloudflare R2 (storage),
       Upstash (Redis), Gmail API (reminder emails — Render blocks
       outbound SMTP ports on free web services, and this project has
-      no domain to authenticate a provider like Resend with), GitHub
-      Actions cron (`.github/workflows/reminders-cron.yml`, replaces
-      Celery beat since Render has no free always-on-worker tier).
-      Mobile ships as a sideloaded APK, no Play Store listing. Full
+      no domain to authenticate a provider like Resend with), cron-job.org
+      (triggers reminders via `POST /internal/reminders/run`, replacing
+      Celery beat since Render has no free always-on-worker tier - the
+      original plan, a GitHub Actions cron workflow, turned out to be
+      unreliable in practice and is now disabled, kept as a free
+      backup - see `.github/workflows/reminders-cron.yml`). Mobile
+      ships as a sideloaded APK, no Play Store listing. Full
       reasoning for each choice in `backend/BACKEND_SUMMARY.md`'s
       "Background job execution", "Scaling / load balancing", and
       "Email backend" sections; a from-scratch walkthrough (exact

@@ -1299,10 +1299,20 @@ production no longer runs Celery worker/beat by default:
   shared secret (`INTERNAL_CRON_SECRET`, compared with
   `secrets.compare_digest` the same way `verify_csrf` does) via an
   `X-Internal-Cron-Secret` header, not `get_current_user` - the caller
-  is a scheduler, not a logged-in user. `.github/workflows/reminders-cron.yml`
-  is the default scheduler: a GitHub Actions cron workflow hitting that
-  endpoint every 10 minutes, replacing celery-beat's own every-10-minute
-  `beat_schedule` entry.
+  is a scheduler, not a logged-in user.
+- **Scheduler: cron-job.org, not GitHub Actions** - the original plan
+  was `.github/workflows/reminders-cron.yml`, a GitHub Actions cron
+  workflow hitting that endpoint every 10 minutes. In production,
+  GitHub's scheduled-workflow triggers turned out to be unreliable well
+  beyond the documented "best-effort, can run a few minutes late" -
+  real run history showed multi-hour gaps with the trigger not firing
+  at all, not just landing late. Replaced with cron-job.org (a
+  purpose-built free scheduler) hitting the same endpoint, which is
+  meaningfully more punctual in practice. The GitHub Actions workflow
+  is kept in the repo, disabled (Actions tab toggle, not removed) as a
+  free zero-cost fallback that can be re-enabled if cron-job.org itself
+  ever needs a backup; `workflow_dispatch` still works for manual
+  testing regardless of the schedule trigger's on/off state.
 
 Trade-offs accepted for the $0-extra-infra path: no retry if the
 in-process background task crashes mid-run (a Render redeploy mid-task
