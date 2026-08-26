@@ -52,17 +52,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _issue_tokens(user_id, refresh_token: Optional[str] = None) -> TokenResponse:
+def _issue_tokens(
+    user_id, csrf_token: str, refresh_token: Optional[str] = None
+) -> TokenResponse:
     """Builds the JSON response body for /login and /refresh.
 
     `refresh_token` must only ever be passed by mobile call sites (see
     `is_mobile_client`) - never pass it unconditionally, or web's fetch
     response would carry the refresh token in plaintext JSON, defeating
-    the httpOnly-cookie protection entirely.
+    the httpOnly-cookie protection entirely. `csrf_token` is the opposite
+    - always pass it, both client types - see TokenResponse.csrf_token's
+    docstring for why.
     """
     return TokenResponse(
         access_token=create_access_token(str(user_id)),
         refresh_token=refresh_token,
+        csrf_token=csrf_token,
     )
 
 
@@ -162,21 +167,33 @@ def login(
 
     return _issue_tokens(
         user.id,
+        csrf_token=csrf_token,
         refresh_token=refresh_token if is_mobile_client(request) else None,
     )
 
 
-@router.post(
-    "/refresh",
-    response_model=TokenResponse,
-    dependencies=[Depends(verify_csrf_unless_mobile)],
-)
+@router.post("/refresh", response_model=TokenResponse)
 def refresh(
     request: Request,
     response: Response,
     payload: Optional[RefreshRequest] = None,
     db: Session = Depends(get_db),
 ):
+    """Deliberately *not* behind verify_csrf_unless_mobile, unlike /logout.
+
+    This is the call app boot uses to turn a stored refresh-token cookie
+    back into a session (see webapp's authStore.bootstrap()) - the whole
+    point is that it has to work with zero prior in-memory state, so it
+    can never be given a CSRF token sourced from an earlier response the
+    way /logout's caller always has one. Dropping the check here is safe
+    because a forged cross-site call can't actually gain anything: CORS
+    still stops any origin but our own configured frontend from reading
+    the response body, so an attacker only ever gets a blind, harmless
+    token rotation - never sees the new access/CSRF token themselves,
+    and refresh tokens are stateless/unrevoked JWTs, so nothing about the
+    legitimate session gets invalidated by an extra rotation happening in
+    the background.
+    """
     mobile = is_mobile_client(request)
 
     if mobile:
@@ -219,6 +236,7 @@ def refresh(
 
     return _issue_tokens(
         user.id,
+        csrf_token=new_csrf_token,
         refresh_token=new_refresh_token if mobile else None,
     )
 

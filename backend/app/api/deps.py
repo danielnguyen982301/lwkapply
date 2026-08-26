@@ -68,15 +68,23 @@ def is_mobile_client(request: Request) -> bool:
 
 
 def verify_csrf(request: Request) -> None:
-    """Double-submit CSRF check for the two cookie-authenticated
-    endpoints (/auth/refresh, /auth/logout). Every other endpoint
-    authenticates via the Authorization header, which a cross-site form
-    or script can't forge, so it doesn't need this.
+    """Double-submit CSRF check, currently only guarding /auth/logout
+    (see that endpoint's dependencies=[...] - /auth/refresh deliberately
+    doesn't use this, see its own docstring for why). Every other
+    endpoint authenticates via the Authorization header, which a
+    cross-site form or script can't forge, so it doesn't need this.
 
-    Requires the frontend to read the (non-httpOnly) csrf_token cookie
-    and echo its value back in an X-CSRF-Token header - something only
-    same-origin JS can do, since a different origin's script can't read
-    our cookies under the browser's same-origin policy.
+    Compares this cookie against an X-CSRF-Token header the frontend
+    sends. The frontend's copy of that value comes from the /login or
+    /refresh JSON response body (TokenResponse.csrf_token) - not from
+    reading this cookie via JS. That distinction matters when frontend
+    and backend are on different origins (e.g. Vercel vs Render): the
+    cookie itself still round-trips to the server fine regardless of
+    origin (that's just how cookies work), but a different-origin
+    frontend's own document.cookie can never see a cookie that belongs
+    to this API's origin, so requiring the frontend to *read the cookie
+    itself* - as this used to - only ever worked when frontend and
+    backend shared an origin.
     """
     cookie_value = request.cookies.get(CSRF_COOKIE_NAME)
     header_value = request.headers.get("x-csrf-token")
@@ -93,7 +101,7 @@ def verify_csrf(request: Request) -> None:
 
 
 def verify_csrf_unless_mobile(request: Request) -> None:
-    """Same two endpoints as `verify_csrf`, but skips the check for the
+    """Same endpoint(s) as `verify_csrf`, but skips the check for the
     mobile client.
 
     CSRF double-submit exists to stop a *browser* from silently riding an

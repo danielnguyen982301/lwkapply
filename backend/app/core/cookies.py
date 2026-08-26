@@ -38,10 +38,20 @@ def set_auth_cookies(response: Response, refresh_token: str, csrf_token: str) ->
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=csrf_token,
-        httponly=False,  # frontend JS must read this one to echo it back
+        # httpOnly - the frontend gets its own copy of this value from
+        # the /login and /refresh JSON response bodies now (see
+        # TokenResponse.csrf_token), not by reading this cookie via JS,
+        # since a frontend on a different origin than this API (e.g.
+        # Vercel vs Render) can never read this cookie under the
+        # same-origin policy regardless of this flag. Nothing reads it
+        # via document.cookie anymore, so there's no reason to leave it
+        # JS-accessible - the cookie only needs to keep existing so the
+        # browser sends it back for the server-side double-submit
+        # comparison in app/api/deps.py::verify_csrf.
+        httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
-        path="/",  # frontend needs to read it regardless of current path
+        path="/",  # sent alongside the request regardless of current path
         max_age=settings.REFRESH_TOKEN_COOKIE_MAX_AGE,
     )
 

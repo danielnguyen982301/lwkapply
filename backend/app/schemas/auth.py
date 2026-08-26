@@ -25,6 +25,19 @@ class TokenResponse(BaseModel):
     # refresh token straight out of the fetch response, defeating the
     # entire reason that cookie is httpOnly.
     refresh_token: Optional[str] = None
+    # Always populated, both clients. The double-submit CSRF cookie
+    # (app/core/cookies.py) itself is fine cross-origin - the browser
+    # still attaches it to every request to this API regardless of what
+    # origin's page triggered the request - but a *different-origin*
+    # frontend's own JS can never read another origin's cookie via
+    # document.cookie to construct the matching X-CSRF-Token header, only
+    # a same-origin frontend could. Returning the value here instead lets
+    # the frontend source it from a response it's actually allowed to
+    # read (CORS already scopes that to just our own configured origin),
+    # which works regardless of whether frontend and backend share a
+    # registrable domain. Not a new exposure - this cookie was already
+    # httponly=False specifically so JS could read it.
+    csrf_token: str
 
 
 class RefreshRequest(BaseModel):
