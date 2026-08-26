@@ -16,6 +16,12 @@ the cost of the two staying in sync by hand if the pipeline itself
 changes. Idempotency (sent_at IS NULL guard, see
 app/models/interview_reminder.py) is what makes a late/duplicate
 external-cron tick harmless, same as it does for a duplicate beat tick.
+
+Email specifically goes through app/services/email_gmail_api.py here,
+not app/services/email_smtp.py (which reminders_celery.py still uses) -
+Render blocks outbound SMTP ports on free web services, so this
+pipeline needs the HTTPS-based Gmail API instead. See that module's own
+docstring for the full reasoning.
 """
 
 import logging
@@ -32,7 +38,7 @@ from app.models.interview import Interview
 from app.models.interview_reminder import InterviewReminder, ReminderChannel
 from app.models.notification import Notification, NotificationType
 from app.models.user import User
-from app.services.email_smtp import send_email
+from app.services.email_gmail_api import send_email
 from app.services.push import PushResult, send_push
 
 logger = logging.getLogger(__name__)
