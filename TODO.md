@@ -407,14 +407,28 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
 
 ## Deployment
 
+- [x] Production environment — live: Vercel (webapp), Render (backend
+      API, Docker), Supabase (Postgres), Cloudflare R2 (storage),
+      Upstash (Redis), Gmail API (reminder emails — Render blocks
+      outbound SMTP ports on free web services, and this project has
+      no domain to authenticate a provider like Resend with), GitHub
+      Actions cron (`.github/workflows/reminders-cron.yml`, replaces
+      Celery beat since Render has no free always-on-worker tier).
+      Mobile ships as a sideloaded APK, no Play Store listing. Full
+      reasoning for each choice in `backend/BACKEND_SUMMARY.md`'s
+      "Background job execution", "Scaling / load balancing", and
+      "Email backend" sections; a from-scratch walkthrough (exact
+      dashboard navigation, env vars) exists but isn't checked in — ask
+      for it if setting this up again from zero
 - [ ] Docker Compose (frontend — backend's is already done)
-- [ ] Production environment
 - [x] CI/CD pipeline — webapp (`.github/workflows/webapp-ci.yml`:
       eslint, prettier check, vue-tsc type-check, vitest w/ coverage,
       build); backend's already existed, now with a `postgres:16-alpine`
       `services:` container in the `test` job so integration tests (see
       Testing below) can run in CI, not just locally
-- [ ] Monitoring
+- [ ] Monitoring — the natural next item now that a real deployment
+      exists; nothing wired up yet (error tracking, application logs
+      beyond Render's own, DB monitoring)
 
 ---
 
