@@ -86,6 +86,21 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
 
+    # --- Gmail API (app/services/email_gmail_api.py) ---
+    # Production's actual email backend (see reminders_inline.py) -
+    # sends over HTTPS via the Gmail API rather than raw SMTP, since
+    # Render blocks outbound SMTP ports (25/465/587) on free web
+    # services and this project has no domain to authenticate with a
+    # provider like Resend/SendGrid anyway. GMAIL_API_REFRESH_TOKEN is
+    # minted once, locally, via scripts/gmail_oauth_setup.py - see that
+    # script's docstring. GMAIL_API_SENDER_EMAIL is the Gmail address
+    # that token was issued for; must match, since Gmail rejects a
+    # From header that doesn't belong to the authenticated account.
+    GMAIL_API_CLIENT_ID: str = ""
+    GMAIL_API_CLIENT_SECRET: str = ""
+    GMAIL_API_REFRESH_TOKEN: str = ""
+    GMAIL_API_SENDER_EMAIL: str = ""
+
     # Used to build the "view application" link inside a reminder email.
     FRONTEND_URL: str = "http://localhost:5173"
 
