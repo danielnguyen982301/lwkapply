@@ -44,6 +44,10 @@ class WrappingTabSelector extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Wrap(
+        // Wrap's default alignment (start) hugs the chips to the left,
+        // dumping all the leftover row width on the right only - center
+        // each row instead so the empty space is even on both sides.
+        alignment: WrapAlignment.center,
         spacing: 4,
         runSpacing: 4,
         children: [
