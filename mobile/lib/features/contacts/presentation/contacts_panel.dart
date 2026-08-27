@@ -230,10 +230,21 @@ class _ContactsPanelState extends ConsumerState<ContactsPanel> {
         Positioned(
           right: 16,
           bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _openAddContactSheet,
-            icon: const Icon(Icons.person_add_alt_1_outlined),
-            label: const Text('Add contact'),
+          // This Stack (unlike a Scaffold's own floatingActionButton slot)
+          // gets no automatic inset for the system gesture nav bar, so a
+          // plain `bottom: 16` lands the FAB underneath it on a real
+          // device with gesture navigation enabled — invisible even
+          // though it looks fine on an emulator without one. SafeArea
+          // pads just enough to clear it.
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: FloatingActionButton.extended(
+              onPressed: _openAddContactSheet,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text('Add contact'),
+            ),
           ),
         ),
       ],

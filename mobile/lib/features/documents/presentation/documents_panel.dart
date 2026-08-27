@@ -282,10 +282,19 @@ class _DocumentsPanelState extends ConsumerState<DocumentsPanel> {
         Positioned(
           right: 16,
           bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _openAddDocumentSheet,
-            icon: const Icon(Icons.add),
-            label: const Text('Add document'),
+          // See contacts_panel.dart's FAB for why: this Stack gets no
+          // automatic gesture-nav-bar inset the way a Scaffold's own
+          // floatingActionButton slot would, so a real device with
+          // gesture navigation hides the FAB behind it.
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: FloatingActionButton.extended(
+              onPressed: _openAddDocumentSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('Add document'),
+            ),
           ),
         ),
       ],

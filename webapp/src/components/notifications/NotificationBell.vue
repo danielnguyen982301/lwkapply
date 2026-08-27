@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Badge from 'primevue/badge'
 import Button from 'primevue/button'
@@ -53,6 +53,13 @@ async function handleNotificationClick(notification: Notification) {
     // Deliberately doesn't close the popover - navigating to check one
     // notification shouldn't lose your place in the list underneath it.
     await router.push({ name: 'application-detail', params: { id: notification.application_id } })
+    // The header (and its bell) is sticky, but the popover itself is an
+    // absolutely-positioned overlay computed at open time. Navigating can
+    // change the document height (and thus scroll position) without ever
+    // firing a scroll event the popover would otherwise reposition on, so
+    // re-align it to the bell's current position explicitly.
+    await nextTick()
+    popover.value?.alignOverlay()
   }
 }
 
