@@ -37,16 +37,18 @@ class WrappingTabSelector extends StatelessWidget {
         color: colorScheme.surface,
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: 4,
+        runSpacing: 4,
         children: [
           for (var i = 0; i < labels.length; i++)
             ChoiceChip(
               label: Text(labels[i]),
               selected: i == selectedIndex,
               showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               onSelected: (_) => onSelected(i),
             ),
         ],
