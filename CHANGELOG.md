@@ -2,6 +2,41 @@
 
 ## v0.19.0 (in progress)
 
+### Added
+
+- **Password reset by email, on web and mobile — replaces the old
+  "change password" flow entirely.** `POST /auth/password-reset/request`
+  was previously a stub (issued no token, sent no email); it now builds
+  and emails a signed reset link via the new
+  `app/services/password_reset.py`, rate limited by email and IP.
+  `POST /auth/password-reset/confirm` (already live) now ties the token
+  to a new `User.token_version` column, bumped on every successful
+  reset — this both invalidates every other already-issued
+  access/refresh token for that user (tokens are otherwise stateless
+  and unrevoked) and makes the reset token itself single-use. Full
+  detail in `backend/BACKEND_SUMMARY.md`'s security notes.
+  - **`POST /users/me/password` (current password + new password) is
+    gone.** Replaced by `POST /users/me/password-reset/request` — the
+    Settings page's "Reset password" button now emails a link instead
+    of taking the current password inline, the same flow a logged-out
+    visitor gets from "Forgot password?". Email possession is the
+    proof of identity for a change either way, so this collapses two
+    code paths into one instead of keeping a separate, weaker-audited
+    flow around.
+  - **Web**: new `ForgotPasswordView.vue`/`ResetPasswordView.vue` guest
+    routes, a "Forgot password?" link on `LoginView.vue`, and
+    `PasswordSettingsCard.vue` reduced to a single button.
+  - **Mobile**: new `ForgotPasswordScreen`/`ResetPasswordScreen`, a
+    "Forgot password?" link on `LoginScreen`, and `ChangePasswordScreen`
+    replaced by `ResetPasswordRequestScreen`. The emailed link
+    (`https://lwkapply.vercel.app/reset-password?token=...`) can open
+    directly into the app via a new Android intent-filter + the
+    `app_links` package (`DeepLinkService`), rather than only a
+    browser — not a fully-verified Android App Link (no
+    `assetlinks.json`/`autoVerify`, since there's no release-signing/
+    Play Store setup to publish one against yet), so Android falls back
+    to its normal disambiguation dialog when the app is installed.
+
 ### Changed
 
 - **Reminder emails switched to the Gmail API** — deployment-driven:

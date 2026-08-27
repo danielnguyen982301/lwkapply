@@ -78,7 +78,26 @@ Package name: `lwkapply_mobile`.
 ### Authentication (`lib/features/auth/`)
 
 Full login + registration flow, plus silent session restore on app
-start. No password-reset screen yet.
+start.
+
+- **Password reset** — `ForgotPasswordScreen` (email ->
+  `POST /auth/password-reset/request`) and `ResetPasswordScreen` (token
+  + new password -> `POST /auth/password-reset/confirm`), guest routes
+  reached from `LoginScreen`'s "Forgot password?" link. `token` normally
+  arrives via the emailed reset link itself: `data/deep_link_service.dart`
+  (the `app_links` package) listens for the OS handing this app the
+  `https://lwkapply.vercel.app/reset-password?token=...` URL — see the
+  matching intent-filter on `MainActivity` in
+  `android/app/src/main/AndroidManifest.xml` — and pushes
+  `/reset-password?token=...`, same "capture a `GoRouter` reference"
+  shape as `PushService`'s FCM tap-to-deep-link handling. Not a verified
+  Android App Link (no `assetlinks.json`/`autoVerify`) since there's no
+  release-signing/Play Store setup to publish one against yet — Android
+  falls back to its normal disambiguation dialog when the app is
+  installed. There's no dedicated screen for completing the API
+  contract from a *typed-in* token; if the link is ever opened somewhere
+  this app isn't installed to intercept it, the same URL still works as
+  a normal page in the web app.
 
 - **Token storage strategy** (the one real architecture decision here):
   access token lives in memory only (inside `AuthController`'s Riverpod
@@ -249,12 +268,15 @@ place instead of five.
   `FormBuilder` field) — the backend flips `timezone_is_manual` purely
   from that key's *presence*, so resaving the name fields alone must
   never silently re-lock an auto-detected timezone.
-- **`ChangePasswordScreen`** (`/settings/password`) and
+- **`ResetPasswordRequestScreen`** (`/settings/password`) and
   **`NotificationPreferencesScreen`**
   (`/settings/notification-preferences`) — call `userApiProvider`/
   `userSettingsApiProvider` directly rather than through
   `AuthController`; neither changes anything `currentUserProvider`
   holds, so there's nothing else that needs to observe them completing.
+  `ResetPasswordRequestScreen` is a single button
+  (`POST /users/me/password-reset/request`) rather than a current+new
+  password form — see "Password reset" below.
   `NotificationPreferencesScreen` mirrors `NotificationSettingsCard.vue`
   (master + per-channel email/push toggles, dimmed *and* disabled when
   the master switch is off; a switch to opt into a custom reminder lead
@@ -967,11 +989,6 @@ whatever the device gives back.
 
 ## Not yet implemented
 
-- Password-reset-by-email UI — a separate, still-open gap from
-  Settings' new "change password while logged in" flow
-  (`ChangePasswordScreen`, requires the current password); backend
-  endpoints for an actual forgot-password flow don't exist yet either
-  (see `backend/BACKEND_SUMMARY.md`)
 - In-app document download / offline document storage — downloads
   currently open the presigned URL externally via `url_launcher` only,
   no on-device copy kept

@@ -651,10 +651,16 @@ matching every other feature's "one store per resource" convention.
   `meta.dirty` says something actually changed — otherwise resaving the
   name fields alone would silently re-lock an auto-detected timezone as
   manual
-- **Password**: change form (`POST /users/me/password`) — current
-  password, new password, confirm — `zod`'s `.refine()` cross-field check
-  for the confirm match, same vee-validate pattern as every other form
-  here
+- **Password**: a single "Reset password" button
+  (`POST /users/me/password-reset/request`), not a current+new password
+  form — emails a reset link the same way the logged-out forgot-password
+  flow does (new guest routes `/forgot-password` -> `ForgotPasswordView.vue`
+  and `/reset-password?token=...` -> `ResetPasswordView.vue`, both under
+  `AuthLayout.vue` alongside `LoginView.vue`/`RegisterView.vue`, with a
+  "Forgot password?" link added to `LoginView.vue`; see
+  `BACKEND_SUMMARY.md`'s security notes on `User.token_version`). No
+  current-password field: email possession is the proof of identity for
+  a change either way, so there's one flow instead of two
 - **Notification preferences**: `stores/userSettings.ts` (new store —
   `GET`/`PATCH /users/me/settings`), a distinct sub-resource from `User`
   itself so it doesn't belong on the `auth` store. A `useForm<NotificationSettingsFormValues>`
