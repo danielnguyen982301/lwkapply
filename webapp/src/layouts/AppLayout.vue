@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Avatar from 'primevue/avatar'
+import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import Tag from 'primevue/tag'
 import type { MenuItem } from 'primevue/menuitem'
@@ -19,6 +20,22 @@ type NavItem = {
 const auth = useAuthStore()
 const notifications = useNotificationsStore()
 const router = useRouter()
+const route = useRoute()
+
+// Below `lg`, the sidebar becomes an off-canvas drawer triggered by the
+// header's hamburger button instead of always occupying layout width.
+// Closed on every route change (below) rather than requiring each nav
+// link to close it individually — that covers the account menu's
+// "Account settings" navigation too, which lives outside the <nav> the
+// links themselves are in.
+const mobileNavOpen = ref(false)
+
+watch(
+  () => route.fullPath,
+  () => {
+    mobileNavOpen.value = false
+  },
+)
 
 const navItems: NavItem[] = [
   { name: 'dashboard', label: 'Dashboard', to: '/' },
@@ -33,12 +50,18 @@ const navItems: NavItem[] = [
 // AppLayout stays mounted for the whole authenticated session (only its
 // RouterView child swaps between pages), so one poll loop here covers the
 // header bell on every page rather than each view starting its own.
+function handleEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') mobileNavOpen.value = false
+}
+
 onMounted(() => {
   notifications.startPolling()
+  window.addEventListener('keydown', handleEscape)
 })
 
 onBeforeUnmount(() => {
   notifications.stopPolling()
+  window.removeEventListener('keydown', handleEscape)
 })
 
 async function handleLogout() {
@@ -89,8 +112,18 @@ const userMenuItems: MenuItem[] = [
 
 <template>
   <div class="flex min-h-screen">
+    <!-- Below `lg`, this dims the page and closes the drawer on click;
+         hidden (and unrendered) at `lg`+ where the sidebar is permanent. -->
+    <div
+      v-if="mobileNavOpen"
+      class="fixed inset-0 z-30 bg-ink/40 lg:hidden"
+      aria-hidden="true"
+      @click="mobileNavOpen = false"
+    />
+
     <aside
-      class="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-ink text-paper"
+      class="fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 -translate-x-full flex-col bg-ink text-paper transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:translate-x-0"
+      :class="mobileNavOpen && 'translate-x-0'"
       aria-label="Primary navigation"
     >
       <div class="px-6 py-5">
@@ -149,12 +182,23 @@ const userMenuItems: MenuItem[] = [
 
     <div class="flex min-w-0 flex-1 flex-col">
       <header
-        class="sticky top-0 flex items-center justify-end border-b border-slate/10 bg-white px-6 py-3"
+        class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate/10 bg-white px-4 py-3 sm:px-6"
       >
-        <NotificationBell />
+        <Button
+          icon="pi pi-bars"
+          severity="secondary"
+          text
+          rounded
+          class="lg:hidden"
+          aria-label="Open navigation menu"
+          @click="mobileNavOpen = true"
+        />
+        <div class="ml-auto">
+          <NotificationBell />
+        </div>
       </header>
 
-      <main class="min-w-0 flex-1 overflow-x-hidden p-6">
+      <main class="min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6">
         <RouterView />
       </main>
     </div>
