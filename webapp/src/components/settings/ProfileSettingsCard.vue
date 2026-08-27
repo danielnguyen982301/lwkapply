@@ -214,7 +214,7 @@ function confirmRemoveAvatar() {
         Profile updated.
       </Message>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="flex flex-col gap-1">
           <label for="settings-first-name" class="text-sm font-medium text-ink"> First name </label>
           <CustomInputText
