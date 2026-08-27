@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
   <div class="space-y-4">
     <AiToolsTabs />
 
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="font-display text-xl font-semibold text-ink">ATS Scores</h1>
         <p class="mt-1 max-w-2xl text-sm text-slate">
@@ -132,7 +132,13 @@ onBeforeUnmount(() => {
           application's job URL, a pasted job URL, or pasted directly.
         </p>
       </div>
-      <Button label="New Score" icon="pi pi-plus" size="small" @click="openCreateDialog" />
+      <Button
+        label="New Score"
+        icon="pi pi-plus"
+        size="small"
+        class="self-start"
+        @click="openCreateDialog"
+      />
     </div>
 
     <Message v-if="store.listStatus === 'error'" severity="error" :closable="false">
@@ -159,73 +165,75 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="space-y-0">
-      <DataTable
-        :value="store.items"
-        :loading="store.listStatus === 'loading'"
-        size="small"
-        striped-rows
-        aria-label="Your ATS scores"
-        selection-mode="single"
-        @row-click="handleRowClick"
-      >
-        <Column header="Resume">
-          <template #body="{ data }: { data: AtsScore }">
-            <TruncatedText
-              :text="data.document_file_name"
-              max-width="16rem"
-              class="cursor-pointer font-medium text-ink hover:underline"
-            />
-          </template>
-        </Column>
-        <Column field="analysis_name" header="Analysis used">
-          <template #body="{ data }: { data: AtsScore }">
-            <ProgressSpinner
-              v-if="loadingAnalysisId === data.id"
-              style="width: 1rem; height: 1rem"
-              stroke-width="6"
-              aria-label="Loading analysis"
-            />
-            <TruncatedText
-              v-else
-              :text="data.analysis_name"
-              max-width="14rem"
-              class="cursor-pointer font-medium text-ink hover:underline"
-              @click.stop="openAnalysisDialog(data)"
-            />
-          </template>
-        </Column>
-        <Column header="Status">
-          <template #body="{ data }: { data: AtsScore }">
-            <Tag
-              :value="AI_JOB_STATUS_LABELS[data.status]"
-              :severity="aiJobStatusSeverity(data.status)"
-            />
-          </template>
-        </Column>
-        <Column header="Score">
-          <template #body="{ data }: { data: AtsScore }">
-            <Tag
-              v-if="data.score !== null"
-              :value="`${data.score}/100`"
-              :severity="atsScoreSeverity(data.score)"
-            />
-            <span v-else class="text-slate">—</span>
-          </template>
-        </Column>
-        <Column header="Source">
-          <template #body="{ data }: { data: AtsScore }">
-            <span v-if="data.job_description_source" class="text-sm text-slate">
-              {{ data.job_description_source === 'url' ? 'Job URL' : 'Pasted' }}
-            </span>
-            <span v-else class="text-slate">—</span>
-          </template>
-        </Column>
-        <Column header="Created">
-          <template #body="{ data }: { data: AtsScore }">
-            {{ formatDate(data.created_at) }}
-          </template>
-        </Column>
-      </DataTable>
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="store.items"
+          :loading="store.listStatus === 'loading'"
+          size="small"
+          striped-rows
+          aria-label="Your ATS scores"
+          selection-mode="single"
+          @row-click="handleRowClick"
+        >
+          <Column header="Resume">
+            <template #body="{ data }: { data: AtsScore }">
+              <TruncatedText
+                :text="data.document_file_name"
+                max-width="16rem"
+                class="cursor-pointer font-medium text-ink hover:underline"
+              />
+            </template>
+          </Column>
+          <Column field="analysis_name" header="Analysis used">
+            <template #body="{ data }: { data: AtsScore }">
+              <ProgressSpinner
+                v-if="loadingAnalysisId === data.id"
+                style="width: 1rem; height: 1rem"
+                stroke-width="6"
+                aria-label="Loading analysis"
+              />
+              <TruncatedText
+                v-else
+                :text="data.analysis_name"
+                max-width="14rem"
+                class="cursor-pointer font-medium text-ink hover:underline"
+                @click.stop="openAnalysisDialog(data)"
+              />
+            </template>
+          </Column>
+          <Column header="Status">
+            <template #body="{ data }: { data: AtsScore }">
+              <Tag
+                :value="AI_JOB_STATUS_LABELS[data.status]"
+                :severity="aiJobStatusSeverity(data.status)"
+              />
+            </template>
+          </Column>
+          <Column header="Score">
+            <template #body="{ data }: { data: AtsScore }">
+              <Tag
+                v-if="data.score !== null"
+                :value="`${data.score}/100`"
+                :severity="atsScoreSeverity(data.score)"
+              />
+              <span v-else class="text-slate">—</span>
+            </template>
+          </Column>
+          <Column header="Source">
+            <template #body="{ data }: { data: AtsScore }">
+              <span v-if="data.job_description_source" class="text-sm text-slate">
+                {{ data.job_description_source === 'url' ? 'Job URL' : 'Pasted' }}
+              </span>
+              <span v-else class="text-slate">—</span>
+            </template>
+          </Column>
+          <Column header="Created">
+            <template #body="{ data }: { data: AtsScore }">
+              {{ formatDate(data.created_at) }}
+            </template>
+          </Column>
+        </DataTable>
+      </div>
 
       <Paginator
         :rows="store.pageSize"

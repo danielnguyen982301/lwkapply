@@ -114,65 +114,67 @@ const handleRowClick = useApplicationRowClick<InterviewWithApplication>(
     </div>
 
     <div v-else class="space-y-0">
-      <DataTable
-        :value="store.items"
-        :loading="store.listStatus === 'loading'"
-        size="small"
-        striped-rows
-        selection-mode="single"
-        aria-label="All your interviews"
-        @row-click="handleRowClick"
-      >
-        <Column header="Application Name">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <TruncatedText :text="data.application.application_name" max-width="10rem" />
-          </template>
-        </Column>
-        <Column header="Scheduled">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <span class="font-medium text-ink">{{ formatScheduledAt(data.scheduled_at) }}</span>
-          </template>
-        </Column>
-        <Column header="Type">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            {{ INTERVIEW_TYPE_LABELS[data.type] }}
-          </template>
-        </Column>
-        <Column header="Company">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <RouterLink
-              :to="{ name: 'application-detail', params: { id: data.application.id } }"
-              class="block max-w-[10rem] truncate text-ink hover:underline"
-              :title="data.application.company"
-            >
-              {{ data.application.company }}
-            </RouterLink>
-          </template>
-        </Column>
-        <Column header="Position">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <TruncatedText :text="data.application.position" max-width="10rem" />
-          </template>
-        </Column>
-        <Column header="Status">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <ApplicationStatusTag :status="data.application.status" />
-          </template>
-        </Column>
-        <Column header="Result">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            <Tag
-              :value="INTERVIEW_RESULT_LABELS[data.result]"
-              :severity="interviewResultSeverity(data.result)"
-            />
-          </template>
-        </Column>
-        <Column header="Duration">
-          <template #body="{ data }: { data: InterviewWithApplication }">
-            {{ data.duration_minutes ? `${data.duration_minutes} min` : '—' }}
-          </template>
-        </Column>
-      </DataTable>
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="store.items"
+          :loading="store.listStatus === 'loading'"
+          size="small"
+          striped-rows
+          selection-mode="single"
+          aria-label="All your interviews"
+          @row-click="handleRowClick"
+        >
+          <Column header="Application Name">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <TruncatedText :text="data.application.application_name" max-width="10rem" />
+            </template>
+          </Column>
+          <Column header="Scheduled">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <span class="font-medium text-ink">{{ formatScheduledAt(data.scheduled_at) }}</span>
+            </template>
+          </Column>
+          <Column header="Type">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              {{ INTERVIEW_TYPE_LABELS[data.type] }}
+            </template>
+          </Column>
+          <Column header="Company">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <RouterLink
+                :to="{ name: 'application-detail', params: { id: data.application.id } }"
+                class="block max-w-[10rem] truncate text-ink hover:underline"
+                :title="data.application.company"
+              >
+                {{ data.application.company }}
+              </RouterLink>
+            </template>
+          </Column>
+          <Column header="Position">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <TruncatedText :text="data.application.position" max-width="10rem" />
+            </template>
+          </Column>
+          <Column header="Status">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <ApplicationStatusTag :status="data.application.status" />
+            </template>
+          </Column>
+          <Column header="Result">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              <Tag
+                :value="INTERVIEW_RESULT_LABELS[data.result]"
+                :severity="interviewResultSeverity(data.result)"
+              />
+            </template>
+          </Column>
+          <Column header="Duration">
+            <template #body="{ data }: { data: InterviewWithApplication }">
+              {{ data.duration_minutes ? `${data.duration_minutes} min` : '—' }}
+            </template>
+          </Column>
+        </DataTable>
+      </div>
 
       <Paginator
         :rows="store.pageSize"

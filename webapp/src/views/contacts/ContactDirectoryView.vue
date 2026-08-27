@@ -102,7 +102,7 @@ function confirmDelete(contact: Contact) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="font-display text-xl font-semibold text-ink">Contacts</h1>
       <Button label="Add contact" icon="pi pi-plus" size="small" @click="openAddDialog" />
     </div>
@@ -155,79 +155,81 @@ function confirmDelete(contact: Contact) {
     </div>
 
     <div v-else class="space-y-0">
-      <DataTable
-        :value="store.items"
-        :loading="store.listStatus === 'loading'"
-        size="small"
-        striped-rows
-        aria-label="All your contacts"
-      >
-        <Column header="Name">
-          <template #body="{ data }: { data: Contact }">
-            <TruncatedText :text="data.name" max-width="12rem" class="font-medium text-ink" />
-          </template>
-        </Column>
-        <Column header="Title">
-          <template #body="{ data }: { data: Contact }">
-            <TruncatedText :text="data.title" max-width="10rem" />
-          </template>
-        </Column>
-        <Column header="Email">
-          <template #body="{ data }: { data: Contact }">
-            <a
-              v-if="data.email"
-              :href="`mailto:${data.email}`"
-              class="block max-w-[14rem] truncate text-slate hover:text-ink hover:underline"
-              :title="data.email"
-            >
-              {{ data.email }}
-            </a>
-            <span v-else>—</span>
-          </template>
-        </Column>
-        <Column header="LinkedIn">
-          <template #body="{ data }: { data: Contact }">
-            <a
-              v-if="data.linkedin_url"
-              :href="data.linkedin_url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-slate hover:text-ink hover:underline"
-            >
-              View profile
-            </a>
-            <span v-else>—</span>
-          </template>
-        </Column>
-        <Column header="Added">
-          <template #body="{ data }: { data: Contact }">
-            {{ formatDate(data.created_at) }}
-          </template>
-        </Column>
-        <Column header="" style="width: 7rem">
-          <template #body="{ data }: { data: Contact }">
-            <div class="flex justify-end gap-1">
-              <Button
-                v-tooltip.bottom="tooltip('Edit contact')"
-                icon="pi pi-pencil"
-                aria-label="Edit contact"
-                link
-                size="small"
-                @click="openEditDialog(data)"
-              />
-              <Button
-                v-tooltip.bottom="tooltip('Delete contact')"
-                icon="pi pi-trash"
-                aria-label="Delete contact"
-                text
-                severity="danger"
-                size="small"
-                @click="confirmDelete(data)"
-              />
-            </div>
-          </template>
-        </Column>
-      </DataTable>
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="store.items"
+          :loading="store.listStatus === 'loading'"
+          size="small"
+          striped-rows
+          aria-label="All your contacts"
+        >
+          <Column header="Name">
+            <template #body="{ data }: { data: Contact }">
+              <TruncatedText :text="data.name" max-width="12rem" class="font-medium text-ink" />
+            </template>
+          </Column>
+          <Column header="Title">
+            <template #body="{ data }: { data: Contact }">
+              <TruncatedText :text="data.title" max-width="10rem" />
+            </template>
+          </Column>
+          <Column header="Email">
+            <template #body="{ data }: { data: Contact }">
+              <a
+                v-if="data.email"
+                :href="`mailto:${data.email}`"
+                class="block max-w-[14rem] truncate text-slate hover:text-ink hover:underline"
+                :title="data.email"
+              >
+                {{ data.email }}
+              </a>
+              <span v-else>—</span>
+            </template>
+          </Column>
+          <Column header="LinkedIn">
+            <template #body="{ data }: { data: Contact }">
+              <a
+                v-if="data.linkedin_url"
+                :href="data.linkedin_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-slate hover:text-ink hover:underline"
+              >
+                View profile
+              </a>
+              <span v-else>—</span>
+            </template>
+          </Column>
+          <Column header="Added">
+            <template #body="{ data }: { data: Contact }">
+              {{ formatDate(data.created_at) }}
+            </template>
+          </Column>
+          <Column header="" style="width: 7rem">
+            <template #body="{ data }: { data: Contact }">
+              <div class="flex justify-end gap-1">
+                <Button
+                  v-tooltip.bottom="tooltip('Edit contact')"
+                  icon="pi pi-pencil"
+                  aria-label="Edit contact"
+                  link
+                  size="small"
+                  @click="openEditDialog(data)"
+                />
+                <Button
+                  v-tooltip.bottom="tooltip('Delete contact')"
+                  icon="pi pi-trash"
+                  aria-label="Delete contact"
+                  text
+                  severity="danger"
+                  size="small"
+                  @click="confirmDelete(data)"
+                />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
 
       <Paginator
         :rows="store.pageSize"

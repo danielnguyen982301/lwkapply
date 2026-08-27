@@ -138,7 +138,7 @@ function handleDownload(doc: Document) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="font-display text-xl font-semibold text-ink">Documents</h1>
       <Button
         label="Upload document"
@@ -226,73 +226,79 @@ function handleDownload(doc: Document) {
     </div>
 
     <div v-else class="space-y-0">
-      <DataTable
-        :value="store.items"
-        :loading="store.listStatus === 'loading'"
-        size="small"
-        striped-rows
-        aria-label="All your documents"
-      >
-        <Column header="File name">
-          <template #body="{ data }: { data: Document }">
-            <TruncatedText :text="data.file_name" max-width="16rem" class="font-medium text-ink" />
-          </template>
-        </Column>
-        <Column header="Type">
-          <template #body="{ data }: { data: Document }">
-            <Tag
-              :value="DOCUMENT_TYPE_LABELS[data.file_type]"
-              :severity="documentTypeSeverity(data.file_type)"
-            />
-          </template>
-        </Column>
-        <Column header="Uploaded">
-          <template #body="{ data }: { data: Document }">
-            {{ formatUploadedAt(data.created_at) }}
-          </template>
-        </Column>
-        <Column header="" style="width: 11rem">
-          <template #body="{ data }: { data: Document }">
-            <div class="flex justify-end gap-1">
-              <Button
-                v-if="data.file_type === 'resume'"
-                v-tooltip.bottom="tooltip('View AI analysis')"
-                icon="pi pi-sparkles"
-                aria-label="View AI analysis"
-                link
-                size="small"
-                @click="openAnalysisModal(data)"
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="store.items"
+          :loading="store.listStatus === 'loading'"
+          size="small"
+          striped-rows
+          aria-label="All your documents"
+        >
+          <Column header="File name">
+            <template #body="{ data }: { data: Document }">
+              <TruncatedText
+                :text="data.file_name"
+                max-width="16rem"
+                class="font-medium text-ink"
               />
-              <Button
-                v-tooltip.bottom="tooltip('Download document')"
-                icon="pi pi-download"
-                aria-label="Download document"
-                link
-                size="small"
-                :loading="store.downloadingId === data.id"
-                @click="handleDownload(data)"
+            </template>
+          </Column>
+          <Column header="Type">
+            <template #body="{ data }: { data: Document }">
+              <Tag
+                :value="DOCUMENT_TYPE_LABELS[data.file_type]"
+                :severity="documentTypeSeverity(data.file_type)"
               />
-              <Button
-                v-tooltip.bottom="tooltip('Edit document type')"
-                icon="pi pi-pencil"
-                aria-label="Edit document type"
-                link
-                size="small"
-                @click="openEditDialog(data)"
-              />
-              <Button
-                v-tooltip.bottom="tooltip('Delete document')"
-                icon="pi pi-trash"
-                aria-label="Delete document"
-                text
-                severity="danger"
-                size="small"
-                @click="confirmDelete(data)"
-              />
-            </div>
-          </template>
-        </Column>
-      </DataTable>
+            </template>
+          </Column>
+          <Column header="Uploaded">
+            <template #body="{ data }: { data: Document }">
+              {{ formatUploadedAt(data.created_at) }}
+            </template>
+          </Column>
+          <Column header="" style="width: 11rem">
+            <template #body="{ data }: { data: Document }">
+              <div class="flex justify-end gap-1">
+                <Button
+                  v-if="data.file_type === 'resume'"
+                  v-tooltip.bottom="tooltip('View AI analysis')"
+                  icon="pi pi-sparkles"
+                  aria-label="View AI analysis"
+                  link
+                  size="small"
+                  @click="openAnalysisModal(data)"
+                />
+                <Button
+                  v-tooltip.bottom="tooltip('Download document')"
+                  icon="pi pi-download"
+                  aria-label="Download document"
+                  link
+                  size="small"
+                  :loading="store.downloadingId === data.id"
+                  @click="handleDownload(data)"
+                />
+                <Button
+                  v-tooltip.bottom="tooltip('Edit document type')"
+                  icon="pi pi-pencil"
+                  aria-label="Edit document type"
+                  link
+                  size="small"
+                  @click="openEditDialog(data)"
+                />
+                <Button
+                  v-tooltip.bottom="tooltip('Delete document')"
+                  icon="pi pi-trash"
+                  aria-label="Delete document"
+                  text
+                  severity="danger"
+                  size="small"
+                  @click="confirmDelete(data)"
+                />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
 
       <Paginator
         :rows="store.pageSize"
