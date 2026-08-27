@@ -43,24 +43,34 @@ class WrappingTabSelector extends StatelessWidget {
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: Wrap(
-        // Wrap's default alignment (start) hugs the chips to the left,
-        // dumping all the leftover row width on the right only - center
-        // each row instead so the empty space is even on both sides.
-        alignment: WrapAlignment.center,
-        spacing: 4,
-        runSpacing: 4,
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            ChoiceChip(
-              label: Text(labels[i]),
-              selected: i == selectedIndex,
-              showCheckmark: false,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              onSelected: (_) => onSelected(i),
-            ),
-        ],
+      // Center wraps the content in loose constraints, so Wrap shrinks to
+      // fit itself (sized to its widest row) instead of being stretched
+      // to the full container width - that shrunk block is then centered
+      // as one unit. Without this, Wrap would report its own size as the
+      // full container width and center each row independently within
+      // that, which looks wrong the moment there's more than one row: a
+      // lone second-row chip (e.g. "Documents") would center itself on
+      // the whole screen instead of relative to the row above it.
+      child: Center(
+        child: Wrap(
+          // Only matters for a row narrower than the widest one (i.e. the
+          // block's own shrink-wrapped width) - centers it relative to
+          // that block rather than left-aligning it under the wider row.
+          alignment: WrapAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            for (var i = 0; i < labels.length; i++)
+              ChoiceChip(
+                label: Text(labels[i]),
+                selected: i == selectedIndex,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onSelected: (_) => onSelected(i),
+              ),
+          ],
+        ),
       ),
     );
   }
