@@ -163,10 +163,19 @@ class _InterviewsPanelState extends ConsumerState<InterviewsPanel> {
         Positioned(
           right: 16,
           bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _openAddSheet,
-            icon: const Icon(Icons.event_outlined),
-            label: const Text('Add interview'),
+          // See contacts_panel.dart's FAB for why: this Stack gets no
+          // automatic gesture-nav-bar inset the way a Scaffold's own
+          // floatingActionButton slot would, so a real device with
+          // gesture navigation hides the FAB behind it.
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: FloatingActionButton.extended(
+              onPressed: _openAddSheet,
+              icon: const Icon(Icons.event_outlined),
+              label: const Text('Add interview'),
+            ),
           ),
         ),
       ],

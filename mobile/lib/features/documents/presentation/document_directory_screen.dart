@@ -319,10 +319,18 @@ class _DocumentDirectoryScreenState
           Positioned(
             right: 16,
             bottom: 16,
-            child: FloatingActionButton.extended(
-              onPressed: _openUploadSheet,
-              icon: const Icon(Icons.upload_file_outlined),
-              label: const Text('Upload document'),
+            // See contact_directory_screen.dart's FAB for why: this Stack
+            // gets no automatic gesture-nav-bar inset the way Scaffold's
+            // own floatingActionButton slot would.
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: FloatingActionButton.extended(
+                onPressed: _openUploadSheet,
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Upload document'),
+              ),
             ),
           ),
         ],

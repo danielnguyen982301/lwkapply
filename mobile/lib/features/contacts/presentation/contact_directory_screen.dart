@@ -223,10 +223,20 @@ class _ContactDirectoryScreenState
           Positioned(
             right: 16,
             bottom: 16,
-            child: FloatingActionButton.extended(
-              onPressed: _openAddSheet,
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('Add contact'),
+            // This body is a raw Stack rather than Scaffold's own
+            // floatingActionButton slot, so it gets no automatic
+            // gesture-nav-bar inset — a plain `bottom: 16` hides the FAB
+            // behind a real device's gesture nav bar even though it looks
+            // fine on an emulator without one.
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: FloatingActionButton.extended(
+                onPressed: _openAddSheet,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add contact'),
+              ),
             ),
           ),
         ],
