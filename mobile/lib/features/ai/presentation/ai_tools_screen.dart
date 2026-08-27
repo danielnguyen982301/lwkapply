@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/uniform_scale_tab_bar.dart';
 import '../../settings/presentation/settings_icon_button.dart';
 import '../data/ats_scores_api.dart';
 import '../data/resume_analyses_api.dart';
@@ -109,26 +110,9 @@ class _AiToolsScreenState extends ConsumerState<AiToolsScreen>
       appBar: AppBar(
         title: const Text('AI Tools'),
         actions: const [SettingsIconButton()],
-        bottom: TabBar(
+        bottom: UniformScaleTabBar(
           controller: _tabController,
-          // See application_form_screen.dart's TabBar for why: equal-width
-          // slots plus a fixed-width Tab(text:) can ellipsize a longer
-          // label like "Resume Analyses" on a real device's font scale or
-          // screen width even when it looks fine on an emulator.
-          tabs: const [
-            Tab(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('Resume Analyses'),
-              ),
-            ),
-            Tab(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('ATS Scores'),
-              ),
-            ),
-          ],
+          labels: const ['Resume Analyses', 'ATS Scores'],
         ),
       ),
       body: TabBarView(
