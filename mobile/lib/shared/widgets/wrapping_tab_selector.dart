@@ -37,7 +37,7 @@ class WrappingTabSelector extends StatelessWidget {
         color: colorScheme.surface,
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
