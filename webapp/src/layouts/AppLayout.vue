@@ -130,7 +130,7 @@ const userMenuItems: MenuItem[] = [
             class="shrink-0"
           />
           <span class="min-w-0 flex-1 truncate text-sm font-medium">
-            {{ auth.user?.first_name }} {{ auth.user?.last_name }}
+            {{ auth.user?.first_name }}
             <span class="font-normal text-paper/60">· Free</span>
           </span>
           <i class="pi pi-chevron-down shrink-0 text-xs text-paper/60" aria-hidden="true" />
