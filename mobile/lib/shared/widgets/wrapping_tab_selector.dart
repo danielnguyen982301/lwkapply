@@ -33,6 +33,11 @@ class WrappingTabSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
+      // Without an explicit width, a Container sizes to its child (the
+      // Wrap, which shrink-wraps its chips) rather than the space its
+      // Column parent actually has - so the bottom border only spanned
+      // the chips' own width instead of the full row.
+      width: double.infinity,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
