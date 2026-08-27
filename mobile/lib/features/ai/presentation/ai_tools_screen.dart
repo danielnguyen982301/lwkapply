@@ -111,9 +111,23 @@ class _AiToolsScreenState extends ConsumerState<AiToolsScreen>
         actions: const [SettingsIconButton()],
         bottom: TabBar(
           controller: _tabController,
+          // See application_form_screen.dart's TabBar for why: equal-width
+          // slots plus a fixed-width Tab(text:) can ellipsize a longer
+          // label like "Resume Analyses" on a real device's font scale or
+          // screen width even when it looks fine on an emulator.
           tabs: const [
-            Tab(text: 'Resume Analyses'),
-            Tab(text: 'ATS Scores'),
+            Tab(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Resume Analyses'),
+              ),
+            ),
+            Tab(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('ATS Scores'),
+              ),
+            ),
           ],
         ),
       ),
