@@ -41,27 +41,44 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    subject: str, token_version: int = 0, expires_delta: Optional[timedelta] = None
+) -> str:
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    payload = {"sub": subject, "exp": expire, "type": "access"}
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "type": "access",
+        "token_version": token_version,
+    }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, token_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    payload = {"sub": subject, "exp": expire, "type": "refresh"}
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "type": "refresh",
+        "token_version": token_version,
+    }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_password_reset_token(subject: str) -> str:
+def create_password_reset_token(subject: str, token_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
     )
-    payload = {"sub": subject, "exp": expire, "type": "password_reset"}
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "type": "password_reset",
+        "token_version": token_version,
+    }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

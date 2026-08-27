@@ -158,7 +158,9 @@ def auth_headers():
     app.api.deps.get_current_user rather than bypassing it."""
 
     def _auth_headers(user: User) -> dict[str, str]:
-        token = create_access_token(subject=str(user.id))
+        token = create_access_token(
+            subject=str(user.id), token_version=user.token_version
+        )
         return {"Authorization": f"Bearer {token}"}
 
     return _auth_headers

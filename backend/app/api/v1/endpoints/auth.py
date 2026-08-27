@@ -53,7 +53,10 @@ router = APIRouter()
 
 
 def _issue_tokens(
-    user_id, csrf_token: str, refresh_token: Optional[str] = None
+    user_id,
+    token_version: int,
+    csrf_token: str,
+    refresh_token: Optional[str] = None,
 ) -> TokenResponse:
     """Builds the JSON response body for /login and /refresh.
 
@@ -65,7 +68,7 @@ def _issue_tokens(
     docstring for why.
     """
     return TokenResponse(
-        access_token=create_access_token(str(user_id)),
+        access_token=create_access_token(str(user_id), token_version=token_version),
         refresh_token=refresh_token,
         csrf_token=csrf_token,
     )
@@ -157,7 +160,7 @@ def login(
 
     _maybe_update_timezone(db, user, payload.timezone)
 
-    refresh_token = create_refresh_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id), token_version=user.token_version)
     csrf_token = generate_csrf_token()
 
     # Always set the cookie pair, even on a mobile request - mobile just
@@ -167,6 +170,7 @@ def login(
 
     return _issue_tokens(
         user.id,
+        token_version=user.token_version,
         csrf_token=csrf_token,
         refresh_token=refresh_token if is_mobile_client(request) else None,
     )
@@ -221,13 +225,22 @@ def refresh(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
+    # A stale token_version means this refresh token predates the user's
+    # last password reset (see User.token_version's docstring) - without
+    # this check, a reset wouldn't actually stop a device that was
+    # already logged in from minting fresh access tokens forever.
+    if token_payload.get("token_version") != user.token_version:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
     _maybe_update_timezone(db, user, payload.timezone if payload else None)
 
     # Rotate both the refresh token and the CSRF token on every refresh —
     # if a refresh token is ever replayed after rotation, this makes the
     # replay detectable (the old one no longer validates) rather than
     # silently accepted.
-    new_refresh_token = create_refresh_token(str(user.id))
+    new_refresh_token = create_refresh_token(
+        str(user.id), token_version=user.token_version
+    )
     new_csrf_token = generate_csrf_token()
 
     # Always set the cookie pair, same reasoning as /login - mobile
@@ -236,6 +249,7 @@ def refresh(
 
     return _issue_tokens(
         user.id,
+        token_version=user.token_version,
         csrf_token=new_csrf_token,
         refresh_token=new_refresh_token if mobile else None,
     )

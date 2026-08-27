@@ -45,6 +45,13 @@ def get_current_user(
     if user is None or not user.is_active:
         raise CREDENTIALS_EXCEPTION
 
+    # A stale token_version means this token predates the user's last
+    # password reset (see User.token_version's docstring) - reject it
+    # the same as any other invalid credential, so a reset actually logs
+    # out every session, not just the ones with tokens already expired.
+    if payload.get("token_version") != user.token_version:
+        raise CREDENTIALS_EXCEPTION
+
     return user
 
 

@@ -61,6 +61,20 @@ class TestAccessToken:
         assert payload["sub"] == "user-123"
         assert payload["type"] == "access"
 
+    def test_access_token_defaults_token_version_to_zero(self):
+        token = security.create_access_token(subject="user-123")
+        payload = security.decode_token(token)
+
+        assert payload is not None
+        assert payload["token_version"] == 0
+
+    def test_access_token_round_trips_token_version(self):
+        token = security.create_access_token(subject="user-123", token_version=3)
+        payload = security.decode_token(token)
+
+        assert payload is not None
+        assert payload["token_version"] == 3
+
     def test_expired_access_token_fails_to_decode(self):
         token = security.create_access_token(
             subject="user-123", expires_delta=timedelta(seconds=-1)
