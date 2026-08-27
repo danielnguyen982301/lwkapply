@@ -148,7 +148,9 @@ const userMenuItems: MenuItem[] = [
     </Menu>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex items-center justify-end border-b border-slate/10 bg-white px-6 py-3">
+      <header
+        class="sticky top-0 flex items-center justify-end border-b border-slate/10 bg-white px-6 py-3"
+      >
         <NotificationBell />
       </header>
 
