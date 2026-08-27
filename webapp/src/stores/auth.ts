@@ -5,7 +5,7 @@ import type {
   AccessTokenResponse,
   AccountDeletePayload,
   LoginPayload,
-  PasswordChangePayload,
+  PasswordResetConfirmPayload,
   ProfileUpdatePayload,
   RegisterPayload,
   User,
@@ -40,6 +40,11 @@ interface AuthState {
   avatarStatus: RequestStatus
   avatarError: string | null
 
+  // Status of the logged-in "Reset password" button (see
+  // PasswordSettingsCard.vue) - requesting the email, not changing the
+  // password directly. The public forgot-password flow's own
+  // request/confirm calls reuse the top-level status/error above
+  // instead, same as login/register do.
   passwordStatus: RequestStatus
   passwordError: string | null
 
@@ -107,6 +112,39 @@ export const useAuthStore = defineStore('auth', {
       try {
         await api.post('/auth/register', { ...payload, timezone: getBrowserTimezone() })
         await this.login({ email: payload.email, password: payload.password })
+      } catch (err) {
+        this.status = 'error'
+        this.error = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    /** ForgotPasswordView's submit handler. Always resolves on a 202,
+     * whether or not the email has an account (see
+     * request_password_reset's own docstring on why) - the view should
+     * show the same "check your email" message either way, never
+     * branch on whether the account existed. */
+    async requestPasswordReset(email: string) {
+      this.status = 'loading'
+      this.error = null
+      try {
+        await api.post('/auth/password-reset/request', { email })
+        this.status = 'idle'
+      } catch (err) {
+        this.status = 'error'
+        this.error = extractErrorMessage(err)
+        throw err
+      }
+    },
+
+    /** ResetPasswordView's submit handler - the token comes from the
+     * emailed link's ?token= query param. */
+    async confirmPasswordReset(payload: PasswordResetConfirmPayload) {
+      this.status = 'loading'
+      this.error = null
+      try {
+        await api.post('/auth/password-reset/confirm', payload)
+        this.status = 'idle'
       } catch (err) {
         this.status = 'error'
         this.error = extractErrorMessage(err)
@@ -211,11 +249,15 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async changePassword(payload: PasswordChangePayload) {
+    /** Settings page's "Reset password" button - emails the logged-in
+     * user a reset link, same flow as forgot-password rather than a
+     * direct current+new-password form (see app/api/v1/endpoints/
+     * users.py::request_own_password_reset). */
+    async requestOwnPasswordReset() {
       this.passwordStatus = 'loading'
       this.passwordError = null
       try {
-        await api.post('/users/me/password', payload)
+        await api.post('/users/me/password-reset/request')
         this.passwordStatus = 'idle'
       } catch (err) {
         this.passwordStatus = 'error'
