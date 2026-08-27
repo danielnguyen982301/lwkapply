@@ -51,6 +51,13 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_timezone: ^5.1.0
 
+  # Deep linking - lets the OS hand the emailed password-reset link
+  # (https://lwkapply.vercel.app/reset-password?token=...) straight to
+  # this app instead of only a browser. See android/app/src/main/
+  # AndroidManifest.xml's intent-filter and
+  # features/auth/data/deep_link_service.dart.
+  app_links: ^6.3.2
+
   # Push notifications (Phase B, Android only for now - see TODO.md's
   # reminder-system plan for why iOS is deferred: it needs a paid Apple
   # Developer Program membership for the APNs key FCM relays through).

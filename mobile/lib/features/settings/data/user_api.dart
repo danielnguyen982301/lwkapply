@@ -13,9 +13,10 @@ class UserException implements Exception {
 }
 
 /// Raw HTTP calls against `/users/me` and its sub-resources
-/// (backend/app/api/v1/endpoints/users.py) — profile, password, avatar,
-/// and account deletion. Uses the shared, authenticated `apiClientProvider`
-/// Dio instance, same as every other feature's `*Api` class.
+/// (backend/app/api/v1/endpoints/users.py) — profile, password reset
+/// request, avatar, and account deletion. Uses the shared, authenticated
+/// `apiClientProvider` Dio instance, same as every other feature's
+/// `*Api` class.
 class UserApi {
   UserApi(this._dio);
 
@@ -49,21 +50,15 @@ class UserApi {
     }
   }
 
-  /// Mirrors `POST /users/me/password`. Requires the current password
-  /// even though the request is already bearer-authenticated — a change
-  /// like this shouldn't be possible from just a leaked access token.
-  Future<void> changePassword({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
+  /// Mirrors `POST /users/me/password-reset/request` - the Settings
+  /// screen's "Reset password" button (see ResetPasswordRequestScreen).
+  /// No current-password field: email possession is the proof of
+  /// identity for a change either way (same emailed-link flow
+  /// ForgotPasswordScreen kicks off for a logged-out visitor), so this
+  /// replaces what used to be an inline current+new-password form.
+  Future<void> requestPasswordReset() async {
     try {
-      await _dio.post<void>(
-        '/users/me/password',
-        data: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
-        },
-      );
+      await _dio.post<void>('/users/me/password-reset/request');
     } on DioException catch (e) {
       throw UserException(_messageFor(e));
     }
@@ -103,8 +98,10 @@ class UserApi {
   }
 
   /// Mirrors `DELETE /users/me` (204 No Content) — password-confirmed,
-  /// irreversible, same re-proof-of-password reasoning as
-  /// [changePassword].
+  /// irreversible. Unlike [requestPasswordReset], this one still
+  /// requires the current password directly: an irreversible action
+  /// shouldn't gain a second, weaker path just because password resets
+  /// moved to email-only.
   Future<void> deleteAccount({required String password}) async {
     try {
       await _dio.delete<void>('/users/me', data: {'password': password});
