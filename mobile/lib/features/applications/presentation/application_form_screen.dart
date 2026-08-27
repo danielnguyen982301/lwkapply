@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/uniform_scale_tab_bar.dart';
 import '../../contacts/presentation/contacts_panel.dart';
 import '../../documents/presentation/documents_panel.dart';
 import '../../interviews/presentation/interviews_panel.dart';
@@ -274,41 +275,13 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
         // loading/retry state across the whole screen instead (see
         // _buildBody), same as before this tabs change.
         bottom: (widget.isEditing && canShowForm)
-            ? TabBar(
-                controller: _tabController,
-                // Equal-width (non-scrollable) tabs fill the bar, but a
-                // fixed-width Tab(text:) forces "Interviews"/"Documents"
-                // into ellipsis once that slot shrinks below the label's
-                // natural width — a real device's font scaling or screen
-                // width, not the emulator's, is what triggers it. Each
-                // FittedBox instead scales its label down just enough to
-                // fit its own slot, so all four stay full-width and equal
-                // but never clip.
-                tabs: const [
-                  Tab(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text('Details'),
-                    ),
-                  ),
-                  Tab(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text('Contacts'),
-                    ),
-                  ),
-                  Tab(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text('Interviews'),
-                    ),
-                  ),
-                  Tab(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text('Documents'),
-                    ),
-                  ),
+            ? UniformScaleTabBar(
+                controller: _tabController!,
+                labels: const [
+                  'Details',
+                  'Contacts',
+                  'Interviews',
+                  'Documents',
                 ],
               )
             : null,
