@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.cookies import clear_auth_cookies
-from app.core.security import hash_password, verify_password
+from app.core.security import verify_password
 from app.models.device_token import DeviceToken, DevicePlatform
 from app.models.document import Document
 from app.models.user import User
@@ -23,12 +23,12 @@ from app.models.user_settings import UserSettings
 from app.schemas.device_token import DeviceTokenRegister
 from app.schemas.user import (
     AccountDeleteRequest,
-    PasswordChangeRequest,
     UserProfileUpdate,
     UserRead,
 )
 from app.schemas.user_settings import UserSettingsRead, UserSettingsUpdate
 from app.services import r2
+from app.services.password_reset import send_password_reset_email
 from app.utils.timezone import is_valid_timezone
 
 logger = logging.getLogger(__name__)
@@ -92,19 +92,20 @@ def update_profile(
     return _serialize_user(current_user)
 
 
-@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(
-    payload: PasswordChangeRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not verify_password(payload.current_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Incorrect password")
-
-    current_user.password_hash = hash_password(payload.new_password)
-    db.add(current_user)
-    db.commit()
-    return None
+@router.post("/me/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+def request_own_password_reset(current_user: User = Depends(get_current_user)):
+    """Logged-in equivalent of POST /auth/password-reset/request - the
+    Settings page's "Reset password" button (see
+    PasswordSettingsCard.vue / ChangePasswordScreen.dart). There's no
+    authenticated "change password" endpoint that takes the current
+    password directly: email possession is the proof of identity for a
+    change either way, so unifying onto one flow means one code path to
+    keep secure instead of two (see app/api/v1/endpoints/auth.py's
+    module docstring). Not rate-limited like the public endpoint -
+    the caller is already a known, authenticated account, not an
+    arbitrary email, so there's no enumeration risk to guard against."""
+    send_password_reset_email(current_user)
+    return {"message": "Check your email for a reset link."}
 
 
 @router.post("/me/avatar", response_model=UserRead)

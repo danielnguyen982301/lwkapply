@@ -1,7 +1,7 @@
 """
 Integration tests for /users/me and its sub-resources
-(app/api/v1/endpoints/users.py): profile update, password change, avatar
-upload/delete, notification settings, and account deletion.
+(app/api/v1/endpoints/users.py): profile update, password reset request,
+avatar upload/delete, notification settings, and account deletion.
 
 Uses the same fixtures as the other endpoint test files (client,
 db_session, make_user, auth_headers - see conftest.py), plus a local,
@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 import pytest
 
 import app.services.r2 as r2_service
-from app.core.security import verify_password
 from app.models.document import Document, DocumentType
 from app.models.user import User
 
@@ -146,39 +145,33 @@ class TestUpdateProfile:
         assert user.timezone_is_manual is False
 
 
-class TestChangePassword:
-    def test_wrong_current_password_is_rejected(self, client, make_user, auth_headers):
-        user = make_user(password="correct-horse-battery-staple")
-
-        response = client.post(
-            f"{USERS_URL}/me/password",
-            json={
-                "current_password": "wrong-password",
-                "new_password": "new-password-123",
-            },
-            headers=auth_headers(user),
-        )
-
-        assert response.status_code == 400
-
-    def test_correct_current_password_updates_the_hash(
-        self, client, db_session, make_user, auth_headers
+class TestRequestOwnPasswordReset:
+    def test_sends_reset_email_and_returns_202(
+        self, client, make_user, auth_headers, monkeypatch
     ):
-        user = make_user(password="correct-horse-battery-staple")
+        import app.api.v1.endpoints.users as users_module
+
+        send_mock = MagicMock(return_value=True)
+        monkeypatch.setattr(users_module, "send_password_reset_email", send_mock)
+        user = make_user()
 
         response = client.post(
-            f"{USERS_URL}/me/password",
-            json={
-                "current_password": "correct-horse-battery-staple",
-                "new_password": "new-password-123",
-            },
-            headers=auth_headers(user),
+            f"{USERS_URL}/me/password-reset/request", headers=auth_headers(user)
         )
 
-        assert response.status_code == 204
-        db_session.refresh(user)
-        assert verify_password("new-password-123", user.password_hash)
-        assert not verify_password("correct-horse-battery-staple", user.password_hash)
+        assert response.status_code == 202
+        send_mock.assert_called_once_with(user)
+
+    def test_requires_authentication(self, client, monkeypatch):
+        import app.api.v1.endpoints.users as users_module
+
+        monkeypatch.setattr(
+            users_module, "send_password_reset_email", MagicMock(return_value=True)
+        )
+
+        response = client.post(f"{USERS_URL}/me/password-reset/request")
+
+        assert response.status_code == 401
 
 
 class TestAvatar:

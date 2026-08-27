@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from app.schemas.user import (
     AccountDeleteRequest,
-    PasswordChangeRequest,
     UserCreate,
     UserProfileUpdate,
 )
@@ -65,18 +64,6 @@ class TestUserProfileUpdateValidation:
         # unused.
         payload = UserProfileUpdate(**{"first_name": "Jane", "avatar_url": "evil-key"})
         assert not hasattr(payload, "avatar_url")
-
-
-class TestPasswordChangeRequestValidation:
-    def test_valid_payload_is_accepted(self):
-        payload = PasswordChangeRequest(
-            current_password="old-password", new_password="new-password-123"
-        )
-        assert payload.new_password == "new-password-123"
-
-    def test_new_password_shorter_than_minimum_is_rejected(self):
-        with pytest.raises(ValidationError):
-            PasswordChangeRequest(current_password="old-password", new_password="short")
 
 
 class TestAccountDeleteRequestValidation:

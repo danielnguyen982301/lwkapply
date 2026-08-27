@@ -7,11 +7,23 @@ Design notes:
   to mint new access tokens). This limits the blast radius if an
   access token leaks.
 - Password reset uses a signed, time-limited JWT emailed to the user
-  rather than a DB-stored token, so no extra table is needed. In
-  production, sending the token is the caller's job (email service /
-  Celery task) - this endpoint only issues it and logs a stub.
+  rather than a DB-stored token, so no extra table is needed - see
+  app/services/password_reset.py for how the token is built and sent.
+  It's also the only way to change a password at all: there's no
+  authenticated "change password" endpoint requiring the current
+  password, on either client (see PasswordSettingsCard.vue /
+  ChangePasswordScreen.dart's "reset password" button) - proof of
+  identity here is possession of the inbox, not the old password.
 - We never reveal whether an email exists in the system on the
-  "forgot password" endpoint, to avoid user enumeration.
+  "forgot password" endpoint, to avoid user enumeration. Rate limited
+  by email and IP (app/services/rate_limit.py) for the same reason: an
+  attacker who can't tell success from failure could otherwise still
+  infer existence by spamming one address until it 429s.
+- Confirming a reset bumps User.token_version, which (a) invalidates
+  every other access/refresh token already issued to that user - see
+  app/api/deps.py::get_current_user and this module's /refresh - and
+  (b) makes the reset token itself single-use, since a replayed token
+  carries the now-stale version.
 """
 
 import logging
@@ -21,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.cookies import (
     REFRESH_COOKIE_NAME,
     generate_csrf_token,
@@ -46,6 +59,13 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserCreate, UserRead
+from app.services.password_reset import send_password_reset_email
+from app.services.rate_limit import (
+    RateLimitExceeded,
+    check_and_increment,
+    password_reset_email_key,
+    password_reset_ip_key,
+)
 from app.utils.timezone import is_valid_timezone
 
 logger = logging.getLogger(__name__)
@@ -257,14 +277,31 @@ def refresh(
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
 def request_password_reset(
-    payload: PasswordResetRequest, db: Session = Depends(get_db)
+    payload: PasswordResetRequest, request: Request, db: Session = Depends(get_db)
 ):
+    client_ip = request.client.host if request.client else "unknown"
+    try:
+        check_and_increment(
+            password_reset_ip_key(client_ip), settings.PASSWORD_RESET_DAILY_LIMIT_PER_IP
+        )
+        check_and_increment(
+            password_reset_email_key(payload.email),
+            settings.PASSWORD_RESET_DAILY_LIMIT_PER_EMAIL,
+        )
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many reset requests. Please try again later.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
+
     user = db.execute(select(User).where(User.email == payload.email)).scalars().first()
     if user:
-        # reset_token = create_password_reset_token(str(user.id))
-        # TODO: enqueue a Celery task to email `reset_token` to the user.
-        logger.info("Password reset token generated for user_id=%s", user.id)
-    # Always return the same response, whether or not the email exists.
+        send_password_reset_email(user)
+        logger.info("Password reset requested for user_id=%s", user.id)
+    # Always return the same response, whether or not the email exists -
+    # see this module's docstring on why (also why the rate limit above
+    # runs regardless of whether `user` turns out to exist).
     return {"message": "If that email exists, a reset link has been sent."}
 
 
@@ -281,10 +318,15 @@ def confirm_password_reset(
         .scalars()
         .first()
     )
-    if not user:
+    if not user or token_payload.get("token_version") != user.token_version:
+        # The token_version mismatch branch covers two cases: a reset
+        # already happened since this token was issued (bumped by the
+        # line below, last time), or this exact token was already used
+        # once - either way it's stale, not just "wrong user".
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user.password_hash = hash_password(payload.new_password)
+    user.token_version += 1
     db.add(user)
     db.commit()
     return {"message": "Password has been reset successfully."}
