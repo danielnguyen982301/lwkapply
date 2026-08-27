@@ -177,7 +177,10 @@ const activityChartOptions = {
             application that reached "Interviewing" before being rejected counts once, under
             Rejected below, not under Interviewing.
           </p>
-          <div v-if="offRamps.length" class="mt-3 flex gap-4 border-t border-slate/10 pt-3 text-sm">
+          <div
+            v-if="offRamps.length"
+            class="mt-3 flex flex-wrap gap-4 border-t border-slate/10 pt-3 text-sm"
+          >
             <span v-for="stage in offRamps" :key="stage.status" class="text-slate">
               {{ funnelStageLabel(stage.status) }}:
               <span class="font-medium text-ink">{{ stage.count }}</span>

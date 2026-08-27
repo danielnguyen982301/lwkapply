@@ -89,7 +89,7 @@ const onPasswordSubmit = handlePasswordSubmit(async (formValues) => {
         />
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="flex flex-col gap-1">
           <label for="settings-new-password" class="text-sm font-medium text-ink">
             New password

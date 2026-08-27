@@ -125,7 +125,7 @@ onBeforeUnmount(() => {
   <Card>
     <template #content>
       <div class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="font-display text-lg font-semibold text-ink">Documents</h2>
           <div class="flex gap-2">
             <Button

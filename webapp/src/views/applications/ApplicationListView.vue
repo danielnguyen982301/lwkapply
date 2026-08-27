@@ -105,7 +105,7 @@ function confirmDelete(app: Application) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="font-display text-xl font-semibold text-ink">Applications</h1>
       <Button label="New Application" as="RouterLink" :to="{ name: 'application-new' }" />
     </div>
@@ -190,81 +190,86 @@ function confirmDelete(app: Application) {
     </div>
 
     <div v-else class="space-y-0">
-      <DataTable
-        :value="store.items"
-        :loading="store.listStatus === 'loading'"
-        size="small"
-        striped-rows
-        selection-mode="single"
-        aria-label="Your job applications"
-        @row-click="handleRowClick"
-      >
-        <Column field="application_name" header="Application name">
-          <template #body="{ data }: { data: Application }">
-            <TruncatedText :text="data.application_name" max-width="12rem" />
-          </template>
-        </Column>
-        <Column field="company" header="Company">
-          <template #body="{ data }: { data: Application }">
-            <RouterLink
-              :to="{ name: 'application-detail', params: { id: data.id } }"
-              class="block max-w-[12rem] truncate font-medium text-ink hover:underline"
-              :title="data.company"
-            >
-              {{ data.company }}
-            </RouterLink>
-          </template>
-        </Column>
-        <Column field="position" header="Position">
-          <template #body="{ data }: { data: Application }">
-            <TruncatedText :text="data.position" max-width="12rem" />
-          </template>
-        </Column>
-        <Column field="location" header="Location">
-          <template #body="{ data }: { data: Application }">
-            <TruncatedText :text="data.location" max-width="10rem" />
-          </template>
-        </Column>
-        <Column field="status" header="Status">
-          <template #body="{ data }: { data: Application }">
-            <ApplicationStatusTag :status="data.status" />
-          </template>
-        </Column>
-        <Column header="Salary">
-          <template #body="{ data }: { data: Application }">
-            {{ formatSalary(data.salary_min, data.salary_max) }}
-          </template>
-        </Column>
-        <Column header="Applied">
-          <template #body="{ data }: { data: Application }">
-            {{ formatDate(data.applied_date) }}
-          </template>
-        </Column>
-        <Column header-class="text-right" body-class="text-right">
-          <template #body="{ data }: { data: Application }">
-            <div class="flex justify-end gap-1">
-              <Button
-                v-tooltip.bottom="tooltip('Edit application')"
-                icon="pi pi-pencil"
-                aria-label="Edit application"
-                as="RouterLink"
+      <!-- Wide (8-column) table doesn't reflow on narrow screens - it
+           scrolls horizontally within this wrapper instead of squeezing
+           columns unreadably thin or breaking the page layout. -->
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="store.items"
+          :loading="store.listStatus === 'loading'"
+          size="small"
+          striped-rows
+          selection-mode="single"
+          aria-label="Your job applications"
+          @row-click="handleRowClick"
+        >
+          <Column field="application_name" header="Application name">
+            <template #body="{ data }: { data: Application }">
+              <TruncatedText :text="data.application_name" max-width="12rem" />
+            </template>
+          </Column>
+          <Column field="company" header="Company">
+            <template #body="{ data }: { data: Application }">
+              <RouterLink
                 :to="{ name: 'application-detail', params: { id: data.id } }"
-                link
-                size="small"
-              />
-              <Button
-                v-tooltip.bottom="tooltip('Delete application')"
-                icon="pi pi-trash"
-                aria-label="Delete application"
-                text
-                severity="danger"
-                size="small"
-                @click="confirmDelete(data)"
-              />
-            </div>
-          </template>
-        </Column>
-      </DataTable>
+                class="block max-w-[12rem] truncate font-medium text-ink hover:underline"
+                :title="data.company"
+              >
+                {{ data.company }}
+              </RouterLink>
+            </template>
+          </Column>
+          <Column field="position" header="Position">
+            <template #body="{ data }: { data: Application }">
+              <TruncatedText :text="data.position" max-width="12rem" />
+            </template>
+          </Column>
+          <Column field="location" header="Location">
+            <template #body="{ data }: { data: Application }">
+              <TruncatedText :text="data.location" max-width="10rem" />
+            </template>
+          </Column>
+          <Column field="status" header="Status">
+            <template #body="{ data }: { data: Application }">
+              <ApplicationStatusTag :status="data.status" />
+            </template>
+          </Column>
+          <Column header="Salary">
+            <template #body="{ data }: { data: Application }">
+              {{ formatSalary(data.salary_min, data.salary_max) }}
+            </template>
+          </Column>
+          <Column header="Applied">
+            <template #body="{ data }: { data: Application }">
+              {{ formatDate(data.applied_date) }}
+            </template>
+          </Column>
+          <Column header-class="text-right" body-class="text-right">
+            <template #body="{ data }: { data: Application }">
+              <div class="flex justify-end gap-1">
+                <Button
+                  v-tooltip.bottom="tooltip('Edit application')"
+                  icon="pi pi-pencil"
+                  aria-label="Edit application"
+                  as="RouterLink"
+                  :to="{ name: 'application-detail', params: { id: data.id } }"
+                  link
+                  size="small"
+                />
+                <Button
+                  v-tooltip.bottom="tooltip('Delete application')"
+                  icon="pi pi-trash"
+                  aria-label="Delete application"
+                  text
+                  severity="danger"
+                  size="small"
+                  @click="confirmDelete(data)"
+                />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
 
       <Paginator
         :rows="store.pageSize"

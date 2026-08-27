@@ -75,7 +75,7 @@ async function onStatusSelect(app: Application, newStatus: ApplicationStatus) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="font-display text-xl font-semibold text-ink">Applications</h1>
       <Button label="New Application" as="RouterLink" :to="{ name: 'application-new' }" />
     </div>

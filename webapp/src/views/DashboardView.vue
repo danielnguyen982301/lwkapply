@@ -69,14 +69,19 @@ const summaryCards = computed(() => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="font-display text-xl font-semibold text-ink">
           Welcome back{{ auth.user?.first_name ? `, ${auth.user.first_name}` : '' }}
         </h1>
         <p class="mt-1 text-sm text-slate">Here's where your job search stands.</p>
       </div>
-      <Button label="New Application" as="RouterLink" :to="{ name: 'application-new' }" />
+      <Button
+        label="New Application"
+        as="RouterLink"
+        :to="{ name: 'application-new' }"
+        class="self-start"
+      />
     </div>
 
     <AnalyticsSection
