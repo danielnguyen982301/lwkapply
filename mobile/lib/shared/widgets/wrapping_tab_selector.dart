@@ -56,7 +56,7 @@ class WrappingTabSelector extends StatelessWidget {
           // Only matters for a row narrower than the widest one (i.e. the
           // block's own shrink-wrapped width) - centers it relative to
           // that block rather than left-aligning it under the wider row.
-          alignment: WrapAlignment.center,
+          alignment: WrapAlignment.start,
           spacing: 4,
           runSpacing: 4,
           children: [
