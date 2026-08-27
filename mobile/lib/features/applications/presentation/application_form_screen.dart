@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../shared/widgets/uniform_scale_tab_bar.dart';
+import '../../../shared/widgets/wrapping_tab_selector.dart';
 import '../../contacts/presentation/contacts_panel.dart';
 import '../../documents/presentation/documents_panel.dart';
 import '../../interviews/presentation/interviews_panel.dart';
@@ -17,8 +17,10 @@ import 'application_formatting.dart';
 enum _LoadStatus { idle, loading, error }
 
 /// Tab order for the editing view — index must match `_tabController`'s
-/// `length` and the `Tab`/`TabBarView` children lists below.
+/// `length` and the `WrappingTabSelector`/`TabBarView` children lists
+/// below.
 const _detailsTabIndex = 0;
+const _tabLabels = ['Details', 'Contacts', 'Interviews', 'Documents'];
 
 /// One shared form for both Create and Edit, following the same
 /// "single component, two routes" shape as webapp's
@@ -27,9 +29,12 @@ const _detailsTabIndex = 0;
 /// When editing an existing application, this now mirrors
 /// ApplicationFormView.vue's four-tab layout (Details / Contacts /
 /// Interviews / Documents) rather than just the Details form: a
-/// `TabController` drives an `AppBar`-bottom `TabBar` plus a
-/// `TabBarView`, with Contacts/Interviews/Documents only reachable once
-/// an application actually exists — same `!isNew && applicationId`
+/// `TabController` drives a `WrappingTabSelector` (see that widget's doc
+/// comment for why it's chips-in-a-`Wrap` rather than a `TabBar` — in
+/// short, a fixed-width TabBar can't keep an arbitrary, growing number of
+/// full-length labels both legible and fully visible on a phone screen)
+/// plus a `TabBarView`, with Contacts/Interviews/Documents only reachable
+/// once an application actually exists — same `!isNew && applicationId`
 /// gating ContactsPanel.vue/InterviewsPanel.vue/DocumentsPanel.vue use
 /// on web. A brand-new (not-yet-created) application only ever shows
 /// the plain Details form, no tabs — there's nowhere to nest a contact,
@@ -269,22 +274,6 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
               onPressed: _isDeleting ? null : _confirmDelete,
             ),
         ],
-        // Tabs only appear once editing an application that's actually
-        // loaded — a brand-new application (widget.isEditing == false)
-        // never shows them, and a still-loading/failed fetch shows the
-        // loading/retry state across the whole screen instead (see
-        // _buildBody), same as before this tabs change.
-        bottom: (widget.isEditing && canShowForm)
-            ? UniformScaleTabBar(
-                controller: _tabController!,
-                labels: const [
-                  'Details',
-                  'Contacts',
-                  'Interviews',
-                  'Documents',
-                ],
-              )
-            : null,
       ),
       body: _buildBody(),
       // "Save Changes"/"Add Application" only applies to the Details
@@ -342,13 +331,24 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
     }
 
     if (widget.isEditing) {
-      return TabBarView(
-        controller: _tabController,
+      return Column(
         children: [
-          _buildDetailsForm(),
-          ContactsPanel(applicationId: widget.applicationId!),
-          InterviewsPanel(applicationId: widget.applicationId!),
-          DocumentsPanel(applicationId: widget.applicationId!),
+          WrappingTabSelector(
+            labels: _tabLabels,
+            selectedIndex: _tabController!.index,
+            onSelected: (i) => _tabController!.animateTo(i),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildDetailsForm(),
+                ContactsPanel(applicationId: widget.applicationId!),
+                InterviewsPanel(applicationId: widget.applicationId!),
+                DocumentsPanel(applicationId: widget.applicationId!),
+              ],
+            ),
+          ),
         ],
       );
     }
