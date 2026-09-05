@@ -147,15 +147,24 @@ class _ApplicationPickerState extends ConsumerState<ApplicationPicker> {
                   // AtsScoresTab's create sheet) — surfacing it here up
                   // front avoids a later "no job_url" 422 surprise,
                   // mirroring ApplicationPicker.vue's Tag hint.
+                  // hasJobUrl's colors are hardcoded (not scheme.*), so
+                  // branch on brightness explicitly - a light-mode-only
+                  // .shade50 background would wash out against a dark
+                  // scaffold otherwise; the false branch already uses
+                  // scheme.* and needs no change.
                   trailing: Chip(
                     label: Text(hasJobUrl ? 'Has job URL' : 'No job URL'),
                     backgroundColor: hasJobUrl
-                        ? Colors.green.shade50
+                        ? (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.green.shade900
+                            : Colors.green.shade50)
                         : Theme.of(context).colorScheme.surfaceContainerHighest,
                     labelStyle: TextStyle(
                       fontSize: 11,
                       color: hasJobUrl
-                          ? Colors.green.shade800
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.green.shade100
+                              : Colors.green.shade800)
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     visualDensity: VisualDensity.compact,
