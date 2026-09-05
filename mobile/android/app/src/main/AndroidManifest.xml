@@ -31,16 +31,31 @@
                  only a browser - see features/auth/data/
                  deep_link_service.dart, which app_links hands this to.
 
-                 No android:autoVerify/assetlinks.json here, so this
-                 isn't a fully-verified Android App Link - since the app
-                 has no Play Store listing or release-signing setup yet
-                 to publish a Digital Asset Links file against, Android
-                 instead shows its normal disambiguation dialog
-                 ("Open with: Chrome / LwkApply") when the app is
-                 installed, which is sufficient for this app's current
-                 sideloaded-APK distribution. Revisit with autoVerify +
-                 a hosted assetlinks.json if that ever changes. -->
-            <intent-filter android:label="Reset password">
+                 android:autoVerify="true" makes this a real Android App
+                 Link, verified against webapp/public/.well-known/
+                 assetlinks.json (served at https://lwkapply.vercel.app/
+                 .well-known/assetlinks.json). Without a verified App
+                 Link, Android 12+ never offers this app as a handler
+                 for an https:// link at all - no disambiguation dialog,
+                 it just always opens in the browser (a pre-Android-12
+                 behavior this comment used to assume still applied) -
+                 and Gmail's own in-app link handling (Chrome Custom
+                 Tabs) only ever hands off to a *verified* App Link
+                 regardless of Android version, so this was silently
+                 broken end-to-end until verification was added.
+
+                 assetlinks.json's sha256_cert_fingerprints currently
+                 points at this dev machine's auto-generated debug
+                 keystore (~/.android/debug.keystore) - see
+                 android/app/build.gradle.kts's release buildType, which
+                 deliberately reuses the debug signingConfig since this
+                 app has no separate release keystore (sideloaded APK
+                 only, no Play Store listing). Regenerate that keystore
+                 (or move to a real release keystore) and this stops
+                 verifying until assetlinks.json's fingerprint is
+                 updated to match - get the current one via `./gradlew
+                 signingReport` from mobile/android. -->
+            <intent-filter android:autoVerify="true" android:label="Reset password">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>

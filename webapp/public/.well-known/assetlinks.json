@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.danielnguyen982301.mobile",
+      "sha256_cert_fingerprints": [
+        "A6:19:C7:D3:A8:A8:24:AD:67:8D:A3:45:27:1D:F4:99:82:EC:63:73:B3:C3:8A:39:4D:F1:75:33:26:2F:07:75"
+      ]
+    }
+  }
+]

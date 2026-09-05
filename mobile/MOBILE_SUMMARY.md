@@ -90,14 +90,22 @@ start.
   matching intent-filter on `MainActivity` in
   `android/app/src/main/AndroidManifest.xml` — and pushes
   `/reset-password?token=...`, same "capture a `GoRouter` reference"
-  shape as `PushService`'s FCM tap-to-deep-link handling. Not a verified
-  Android App Link (no `assetlinks.json`/`autoVerify`) since there's no
-  release-signing/Play Store setup to publish one against yet — Android
-  falls back to its normal disambiguation dialog when the app is
-  installed. There's no dedicated screen for completing the API
-  contract from a *typed-in* token; if the link is ever opened somewhere
-  this app isn't installed to intercept it, the same URL still works as
-  a normal page in the web app.
+  shape as `PushService`'s FCM tap-to-deep-link handling. A real,
+  verified Android App Link (`android:autoVerify="true"` on the
+  intent-filter, checked against `webapp/public/.well-known/
+  assetlinks.json`) — this turned out to be required, not optional: an
+  unverified intent-filter is invisible to Android 12+'s link
+  resolution entirely (no disambiguation dialog, the link just always
+  opens in the browser), and Gmail's own in-app link handling (Chrome
+  Custom Tabs) only ever hands off to a verified App Link regardless of
+  Android version. `assetlinks.json`'s fingerprint currently points at
+  this project's debug keystore (see the intent-filter's own comment in
+  `AndroidManifest.xml` for why, and how to regenerate it) — there's no
+  release-signing/Play Store setup yet, only a sideloaded APK. There's
+  no dedicated screen for completing the API contract from a *typed-in*
+  token; if the link is ever opened somewhere this app isn't installed
+  to intercept it, the same URL still works as a normal page in the web
+  app.
 
 - **Token storage strategy** (the one real architecture decision here):
   access token lives in memory only (inside `AuthController`'s Riverpod
