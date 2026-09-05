@@ -29,13 +29,11 @@
   - **Mobile**: new `ForgotPasswordScreen`/`ResetPasswordScreen`, a
     "Forgot password?" link on `LoginScreen`, and `ChangePasswordScreen`
     replaced by `ResetPasswordRequestScreen`. The emailed link
-    (`https://lwkapply.vercel.app/reset-password?token=...`) can open
+    (`https://lwkapply.vercel.app/reset-password?token=...`) opens
     directly into the app via a new Android intent-filter + the
     `app_links` package (`DeepLinkService`), rather than only a
-    browser — not a fully-verified Android App Link (no
-    `assetlinks.json`/`autoVerify`, since there's no release-signing/
-    Play Store setup to publish one against yet), so Android falls back
-    to its normal disambiguation dialog when the app is installed.
+    browser — see the Fixed section below for how that actually got
+    working end to end.
 
 ### Changed
 
@@ -71,6 +69,21 @@
 
 ### Fixed
 
+- **The mobile password-reset deep link opened in the browser instead
+  of the app.** The intent-filter added for it wasn't a verified
+  Android App Link (no `android:autoVerify`/`assetlinks.json`), and it
+  turns out that's not optional: Android 12+ never offers an unverified
+  app as a handler for an `https://` link at all — no disambiguation
+  dialog, it just always opens in the browser — and Gmail's own in-app
+  link handling (Chrome Custom Tabs) only ever hands off to a *verified*
+  App Link regardless of Android version, so this was broken
+  end-to-end regardless of OS version. Fixed by adding
+  `android:autoVerify="true"` to the intent-filter and hosting
+  `webapp/public/.well-known/assetlinks.json`, verified against the
+  fingerprint of this project's debug keystore (no release-signing/Play
+  Store setup exists yet — see the intent-filter's own comment in
+  `AndroidManifest.xml` for what breaks this if that keystore ever
+  changes, and how to fix it).
 - **CSRF double-submit was completely broken in production.** The
   `csrf_token` cookie required frontend JS to read it via
   `document.cookie` and echo it back as `X-CSRF-Token`, which only
