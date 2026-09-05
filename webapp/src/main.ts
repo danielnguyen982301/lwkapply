@@ -7,12 +7,14 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { useThemeStore } from './stores/theme'
 import 'primeicons/primeicons.css'
 import './style.css'
 
 const app = createApp(App)
 
 app.use(createPinia())
+useThemeStore().init()
 
 app.use(router)
 app.use(PrimeVue, {
