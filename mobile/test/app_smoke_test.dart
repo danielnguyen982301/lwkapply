@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lwkapply_mobile/app/app.dart';
+import 'package:lwkapply_mobile/core/storage/shared_preferences_provider.dart';
 import 'package:lwkapply_mobile/features/auth/data/token_storage.dart';
 
 /// In-memory stand-in for the real `flutter_secure_storage`-backed
@@ -34,10 +36,18 @@ void main() {
     // main() normally loads this from an asset; set it directly for tests.
     dotenv.testLoad(fileInput: 'API_BASE_URL=http://localhost:8000/api/v1');
 
+    // Same reasoning as _FakeTokenStorage above - widget tests have no real
+    // platform channel behind shared_preferences either, so seed an
+    // in-memory instance via the plugin's own testing hook rather than
+    // hitting a real store.
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           tokenStorageProvider.overrideWithValue(_FakeTokenStorage()),
+          sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: const JobTrackerApp(),
       ),

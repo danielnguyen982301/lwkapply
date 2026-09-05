@@ -111,8 +111,17 @@ class AtsScoreResultCard extends StatelessWidget {
                 Chip(
                   label: Text(keyword),
                   visualDensity: VisualDensity.compact,
-                  backgroundColor: Colors.green.shade50,
-                  labelStyle: TextStyle(color: Colors.green.shade800),
+                  // Hardcoded (not scheme.*), so branch on brightness
+                  // explicitly - a light-mode-only .shade50 background
+                  // would wash out against a dark scaffold otherwise.
+                  backgroundColor: theme.brightness == Brightness.dark
+                      ? Colors.green.shade900
+                      : Colors.green.shade50,
+                  labelStyle: TextStyle(
+                    color: theme.brightness == Brightness.dark
+                        ? Colors.green.shade100
+                        : Colors.green.shade800,
+                  ),
                 ),
             ],
           ),

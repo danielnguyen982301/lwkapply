@@ -9,6 +9,7 @@ import Menu from 'primevue/menu'
 import Tag from 'primevue/tag'
 import type { MenuItem } from 'primevue/menuitem'
 import NotificationBell from '@/components/notifications/NotificationBell.vue'
+import ThemeToggle from '@/components/common/ThemeToggle.vue'
 
 type NavItem = {
   name: string
@@ -116,13 +117,13 @@ const userMenuItems: MenuItem[] = [
          hidden (and unrendered) at `lg`+ where the sidebar is permanent. -->
     <div
       v-if="mobileNavOpen"
-      class="fixed inset-0 z-30 bg-ink/40 lg:hidden"
+      class="fixed inset-0 z-30 bg-sidebar/40 lg:hidden"
       aria-hidden="true"
       @click="mobileNavOpen = false"
     />
 
     <aside
-      class="fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 -translate-x-full flex-col bg-ink text-paper transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 -translate-x-full flex-col bg-sidebar text-sidebar-fg transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:translate-x-0"
       :class="mobileNavOpen && 'translate-x-0'"
       aria-label="Primary navigation"
     >
@@ -139,7 +140,7 @@ const userMenuItems: MenuItem[] = [
           :class="
             item.disabled
               ? 'pointer-events-none opacity-40'
-              : 'hover:bg-white/10 aria-[current=page]:bg-teal aria-[current=page]:text-ink'
+              : 'hover:bg-white/10 aria-[current=page]:bg-teal aria-[current=page]:text-sidebar'
           "
         >
           {{ item.label }}
@@ -164,9 +165,9 @@ const userMenuItems: MenuItem[] = [
           />
           <span class="min-w-0 flex-1 truncate text-sm font-medium">
             {{ auth.user?.first_name }}
-            <span class="font-normal text-paper/60">· Free</span>
+            <span class="font-normal text-sidebar-fg/60">· Free</span>
           </span>
-          <i class="pi pi-chevron-down shrink-0 text-xs text-paper/60" aria-hidden="true" />
+          <i class="pi pi-chevron-down shrink-0 text-xs text-sidebar-fg/60" aria-hidden="true" />
         </button>
       </div>
     </aside>
@@ -182,7 +183,7 @@ const userMenuItems: MenuItem[] = [
 
     <div class="flex min-w-0 flex-1 flex-col">
       <header
-        class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate/10 bg-white px-4 py-3 sm:px-6"
+        class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate/10 bg-surface px-4 py-3 sm:px-6"
       >
         <Button
           icon="pi pi-bars"
@@ -193,7 +194,8 @@ const userMenuItems: MenuItem[] = [
           aria-label="Open navigation menu"
           @click="mobileNavOpen = true"
         />
-        <div class="ml-auto">
+        <div class="ml-auto flex items-center gap-1">
+          <ThemeToggle />
           <NotificationBell />
         </div>
       </header>

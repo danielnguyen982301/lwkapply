@@ -4,18 +4,22 @@ import Chart from 'primevue/chart'
 import SelectButton from 'primevue/selectbutton'
 
 import { useAnalyticsStore } from '@/stores/analytics'
+import { useThemeStore } from '@/stores/theme'
 import AnalyticsSection from '@/components/analytics/AnalyticsSection.vue'
 import StatCard from '@/components/analytics/StatCard.vue'
 import {
+  chartGridColor,
+  chartTextColor,
   formatPercent,
   funnelStageColor,
   funnelStageLabel,
-  INTERVIEW_RESULT_COLORS,
+  interviewResultColor,
   INTERVIEW_RESULT_LABELS,
   INTERVIEW_RESULT_ORDER,
 } from '@/lib/analytics-ui'
 
 const store = useAnalyticsStore()
+const theme = useThemeStore()
 
 onMounted(() => {
   store.fetchAll()
@@ -47,22 +51,29 @@ const funnelChartData = computed(() => {
     datasets: [
       {
         data: stages.map((s) => s.count),
-        backgroundColor: stages.map((s) => funnelStageColor(s.status)),
+        backgroundColor: stages.map((s) => funnelStageColor(s.status, theme.isDark)),
         borderRadius: 4,
       },
     ],
   }
 })
 
-const funnelChartOptions = {
+// A plain object here (rather than computed) wouldn't react to
+// theme.isDark changing after the chart's first render - Chart.js reads
+// tick/legend colors from these options, not from CSS, so the toggle
+// needs to actually recompute them.
+const funnelChartOptions = computed(() => ({
   indexAxis: 'y' as const,
   plugins: { legend: { display: false } },
   scales: {
-    x: { ticks: { precision: 0 }, grid: { display: false } },
-    y: { grid: { display: false } },
+    x: {
+      ticks: { precision: 0, color: chartTextColor(theme.isDark) },
+      grid: { display: false },
+    },
+    y: { ticks: { color: chartTextColor(theme.isDark) }, grid: { display: false } },
   },
   maintainAspectRatio: false,
-}
+}))
 
 const offRamps = computed(() => store.funnel?.off_ramps ?? [])
 
@@ -76,16 +87,23 @@ const interviewChartData = computed(() => {
     datasets: [
       {
         data: INTERVIEW_RESULT_ORDER.map((key) => byResult[key]),
-        backgroundColor: INTERVIEW_RESULT_ORDER.map((key) => INTERVIEW_RESULT_COLORS[key]),
+        backgroundColor: INTERVIEW_RESULT_ORDER.map((key) =>
+          interviewResultColor(key, theme.isDark),
+        ),
       },
     ],
   }
 })
 
-const interviewChartOptions = {
-  plugins: { legend: { position: 'bottom' as const, labels: { boxWidth: 10 } } },
+const interviewChartOptions = computed(() => ({
+  plugins: {
+    legend: {
+      position: 'bottom' as const,
+      labels: { boxWidth: 10, color: chartTextColor(theme.isDark) },
+    },
+  },
   maintainAspectRatio: false,
-}
+}))
 
 // --- Activity ---------------------------------------------------------------
 
@@ -109,21 +127,24 @@ const activityChartData = computed(() => {
       {
         label: 'Applications',
         data: buckets.map((b) => b.applications_created),
-        backgroundColor: '#2A9D8F',
+        backgroundColor: theme.isDark ? '#35B0A2' : '#2A9D8F', // teal / dark-mode teal
         borderRadius: 4,
       },
     ],
   }
 })
 
-const activityChartOptions = {
+const activityChartOptions = computed(() => ({
   plugins: { legend: { display: false } },
   scales: {
-    y: { ticks: { precision: 0 }, grid: { color: '#EEF0F3' } },
-    x: { grid: { display: false } },
+    y: {
+      ticks: { precision: 0, color: chartTextColor(theme.isDark) },
+      grid: { color: chartGridColor(theme.isDark) },
+    },
+    x: { ticks: { color: chartTextColor(theme.isDark) }, grid: { display: false } },
   },
   maintainAspectRatio: false,
-}
+}))
 </script>
 
 <template>

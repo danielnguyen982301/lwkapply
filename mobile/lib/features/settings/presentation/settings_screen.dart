@@ -65,6 +65,11 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Notification preferences'),
             onTap: () => context.push('/settings/notification-preferences'),
           ),
+          ListTile(
+            leading: const Icon(Icons.dark_mode_outlined),
+            title: const Text('Appearance'),
+            onTap: () => context.push('/settings/appearance'),
+          ),
           const Divider(),
           ListTile(
             leading: Icon(Icons.delete_outline, color: theme.colorScheme.error),

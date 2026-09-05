@@ -76,6 +76,7 @@ dependencies:
   # Intl.DateTimeFormat shortOffset. Dart's core DateTime has no
   # named-timezone support at all without this.
   timezone: ^0.10.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

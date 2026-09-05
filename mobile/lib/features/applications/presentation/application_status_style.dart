@@ -10,34 +10,43 @@ import '../domain/application.dart';
 extension ApplicationStatusStyle on ApplicationStatus {
   Color backgroundColor(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // scheme.* containers already adapt to dark mode on their own
+    // (ColorScheme.fromSeed(brightness: dark) - see core/theme/app_theme.dart);
+    // the hardcoded .shade50/.shade800 pairs below don't, so each branches
+    // explicitly - a light-mode-only .shade50 background would look
+    // washed-out against a dark scaffold otherwise.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return switch (this) {
       ApplicationStatus.saved ||
       ApplicationStatus.withdrawn =>
         scheme.surfaceContainerHighest,
-      ApplicationStatus.applied => Colors.blue.shade50,
+      ApplicationStatus.applied =>
+        isDark ? Colors.blue.shade900 : Colors.blue.shade50,
       ApplicationStatus.phoneScreen ||
       ApplicationStatus.interviewing =>
-        Colors.orange.shade50,
+        isDark ? Colors.orange.shade900 : Colors.orange.shade50,
       ApplicationStatus.offer ||
       ApplicationStatus.accepted =>
-        Colors.green.shade50,
+        isDark ? Colors.green.shade900 : Colors.green.shade50,
       ApplicationStatus.rejected => scheme.errorContainer,
     };
   }
 
   Color foregroundColor(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return switch (this) {
       ApplicationStatus.saved ||
       ApplicationStatus.withdrawn =>
         scheme.onSurfaceVariant,
-      ApplicationStatus.applied => Colors.blue.shade800,
+      ApplicationStatus.applied =>
+        isDark ? Colors.blue.shade100 : Colors.blue.shade800,
       ApplicationStatus.phoneScreen ||
       ApplicationStatus.interviewing =>
-        Colors.orange.shade800,
+        isDark ? Colors.orange.shade100 : Colors.orange.shade800,
       ApplicationStatus.offer ||
       ApplicationStatus.accepted =>
-        Colors.green.shade800,
+        isDark ? Colors.green.shade100 : Colors.green.shade800,
       ApplicationStatus.rejected => scheme.onErrorContainer,
     };
   }

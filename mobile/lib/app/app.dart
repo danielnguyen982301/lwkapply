@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 
 import '../core/theme/app_theme.dart';
+import '../features/settings/presentation/theme_mode_controller.dart';
 import 'router.dart';
 
 class JobTrackerApp extends ConsumerWidget {
@@ -12,11 +13,14 @@ class JobTrackerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeModeControllerProvider);
 
     return MaterialApp.router(
       title: 'LwkApply',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       routerConfig: router,
       // form_builder_validators renders its default error messages through
       // FormBuilderLocalizations — required even though our validators

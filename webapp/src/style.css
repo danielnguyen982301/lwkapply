@@ -2,13 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design-token values, as space-separated RGB triples (not hex) so
+   Tailwind's `rgb(var(--color-x) / <alpha-value>)` config
+   (tailwind.config.js) can apply opacity modifiers. `.app-dark` below
+   overrides these for dark mode — toggled by src/stores/theme.ts and
+   matched by PrimeVue's `darkModeSelector` (src/main.ts). `--color-sidebar`/
+   `--color-sidebar-fg` are deliberately NOT defined here: they're plain,
+   theme-invariant Tailwind colors (tailwind.config.js), not CSS variables,
+   since AppLayout.vue's nav panel never changes color between themes. */
 :root {
-  --color-ink: #14213d;
-  --color-paper: #f7f8fa;
-  --color-slate: #5c677d;
-  --color-teal: #2a9d8f;
-  --color-amber: #e9a23b;
-  --color-coral: #e15554;
+  --color-ink: 20 33 61; /* #14213D */
+  --color-paper: 247 248 250; /* #F7F8FA */
+  --color-surface: 255 255 255; /* #FFFFFF — cards sit one step lighter than the paper page */
+  --color-slate: 92 103 125; /* #5C677D */
+  --color-slate-light: 141 150 168; /* #8D96A8 */
+  --color-teal: 42 157 143; /* #2A9D8F */
+  --color-teal-dark: 31 122 111; /* #1F7A6F */
+  --color-amber: 233 162 59; /* #E9A23B */
+  --color-coral: 225 85 84; /* #E15554 */
+}
+
+.app-dark {
+  --color-ink: 231 234 240; /* #E7EAF0 — light neutral text on a dark page */
+  --color-paper: 15 19 27; /* #0F131B — deep near-black, navy-tinted bg */
+  --color-surface: 26 32 41; /* #1A2029 — cards one step lighter than the page, same relative direction as light mode */
+  --color-slate: 151 161 181; /* #97A1B5 — lightened for legible secondary text */
+  --color-slate-light: 183 190 205; /* #B7BECD */
+  --color-teal: 53 176 162; /* #35B0A2 — brightened for contrast on dark bg */
+  --color-teal-dark: 42 143 131; /* #2A8F83 */
+  --color-amber: 240 178 94; /* #F0B25E — brightened */
+  --color-coral: 235 110 108; /* #EB6E6C — softened/brightened */
 }
 
 /* Visible keyboard focus everywhere — never rely on the browser default

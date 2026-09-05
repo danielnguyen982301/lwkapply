@@ -7,18 +7,24 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { useThemeStore } from './stores/theme'
 import 'primeicons/primeicons.css'
 import './style.css'
 
 const app = createApp(App)
 
 app.use(createPinia())
+useThemeStore().init()
 
 app.use(router)
 app.use(PrimeVue, {
   theme: {
     preset: Aura,
-    options: { darkModeSelector: false }, // dark mode: revisit post-MVP
+    // Class selector, not the 'system' default — src/stores/theme.ts
+    // toggles '.app-dark' on <html> manually (persisted, with a
+    // system-preference fallback), same selector Tailwind's own
+    // `darkMode` config uses (tailwind.config.js) so both stay in sync.
+    options: { darkModeSelector: '.app-dark' },
   },
 })
 app.use(ConfirmationService)
