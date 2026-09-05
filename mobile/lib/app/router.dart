@@ -8,6 +8,7 @@ import '../features/ai/presentation/resume_analysis_detail_screen.dart';
 import '../features/analytics/presentation/analytics_screen.dart';
 import '../features/applications/presentation/application_form_screen.dart';
 import '../features/applications/presentation/applications_list_screen.dart';
+import '../features/auth/data/deep_link_service.dart';
 import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
@@ -44,6 +45,21 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/applications',
     refreshListenable: _AuthControllerListenable(ref),
     redirect: (context, state) {
+      // A cold-start deep link (the emailed password-reset link) wins
+      // over every other redirect decision below, including the
+      // still-restoring-session check right after this - main.dart
+      // awaits DeepLinkService.initialize() to completion before
+      // runApp(), so this already reflects the launch intent (or its
+      // absence) at this very first redirect evaluation, with no
+      // dependency on AuthController's async session-restore having
+      // settled yet. See consumePendingLocation's doc comment for the
+      // race this replaced.
+      final pendingDeepLink =
+          ref.read(deepLinkServiceProvider).consumePendingLocation();
+      if (pendingDeepLink != null) {
+        return pendingDeepLink;
+      }
+
       final authState = ref.read(authControllerProvider);
       const guestRoutes = {
         '/login',
