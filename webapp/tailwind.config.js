@@ -17,6 +17,13 @@ export default {
         // modifiers (`bg-ink/40`, `text-paper/60`, used throughout) working.
         ink: 'rgb(var(--color-ink) / <alpha-value>)', // primary text, nav, headings — trust/authority
         paper: 'rgb(var(--color-paper) / <alpha-value>)', // app background — cool, quiet, not stark white
+        // Elevated surfaces (cards, table/paginator chrome, the app header)
+        // — deliberately a different value from `paper` in both themes, not
+        // an alias for it: a card needs to read as distinct from the page
+        // it sits on, which a shared background color can't do on its own
+        // (a thin border alone isn't enough separation, especially once a
+        // dark page removes the light-mode white-vs-off-white cue too).
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
         slate: {
           DEFAULT: 'rgb(var(--color-slate) / <alpha-value>)', // secondary text, captions
           light: 'rgb(var(--color-slate-light) / <alpha-value>)',

@@ -20,7 +20,7 @@ async function onRequestReset() {
 </script>
 
 <template>
-  <section class="rounded-card border border-slate/10 bg-paper p-4">
+  <section class="rounded-card border border-slate/10 bg-surface p-4">
     <h2 class="font-display text-sm font-semibold text-ink">Password</h2>
     <p class="mt-1 text-sm text-slate">We'll email you a link to set a new password.</p>
 

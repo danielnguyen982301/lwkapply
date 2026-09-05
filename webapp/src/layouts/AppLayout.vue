@@ -183,7 +183,7 @@ const userMenuItems: MenuItem[] = [
 
     <div class="flex min-w-0 flex-1 flex-col">
       <header
-        class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate/10 bg-paper px-4 py-3 sm:px-6"
+        class="sticky top-0 z-20 flex items-center gap-3 border-b border-slate/10 bg-surface px-4 py-3 sm:px-6"
       >
         <Button
           icon="pi pi-bars"

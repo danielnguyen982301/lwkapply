@@ -13,6 +13,7 @@
 :root {
   --color-ink: 20 33 61; /* #14213D */
   --color-paper: 247 248 250; /* #F7F8FA */
+  --color-surface: 255 255 255; /* #FFFFFF — cards sit one step lighter than the paper page */
   --color-slate: 92 103 125; /* #5C677D */
   --color-slate-light: 141 150 168; /* #8D96A8 */
   --color-teal: 42 157 143; /* #2A9D8F */
@@ -24,6 +25,7 @@
 .app-dark {
   --color-ink: 231 234 240; /* #E7EAF0 — light neutral text on a dark page */
   --color-paper: 15 19 27; /* #0F131B — deep near-black, navy-tinted bg */
+  --color-surface: 26 32 41; /* #1A2029 — cards one step lighter than the page, same relative direction as light mode */
   --color-slate: 151 161 181; /* #97A1B5 — lightened for legible secondary text */
   --color-slate-light: 183 190 205; /* #B7BECD */
   --color-teal: 53 176 162; /* #35B0A2 — brightened for contrast on dark bg */

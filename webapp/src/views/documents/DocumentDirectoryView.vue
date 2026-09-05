@@ -193,7 +193,7 @@ function handleDownload(doc: Document) {
     <div
       v-else-if="store.listStatus === 'loading' && store.items.length === 0"
       aria-live="polite"
-      class="flex justify-center rounded-card border border-slate/10 bg-paper p-10"
+      class="flex justify-center rounded-card border border-slate/10 bg-surface p-10"
     >
       <ProgressSpinner aria-label="Loading documents" />
     </div>
@@ -306,7 +306,7 @@ function handleDownload(doc: Document) {
         :first="paginatorFirst"
         template="FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
         current-page-report-template="Page {currentPage} of {totalPages}"
-        class="border-x border-b border-slate/10 bg-paper"
+        class="border-x border-b border-slate/10 bg-surface"
         @page="onPageChange"
       />
     </div>

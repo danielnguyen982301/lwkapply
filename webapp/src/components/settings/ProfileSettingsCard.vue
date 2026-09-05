@@ -151,7 +151,7 @@ function confirmRemoveAvatar() {
 </script>
 
 <template>
-  <section class="rounded-card border border-slate/10 bg-paper p-4">
+  <section class="rounded-card border border-slate/10 bg-surface p-4">
     <h2 class="font-display text-sm font-semibold text-ink">Profile</h2>
 
     <div class="mt-4 flex items-center gap-4">

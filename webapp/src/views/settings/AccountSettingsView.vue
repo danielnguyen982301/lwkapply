@@ -26,7 +26,7 @@ const deleteDialogVisible = ref(false)
     <NotificationSettingsCard />
 
     <!-- Danger zone -->
-    <section class="rounded-card border border-coral/30 bg-paper p-4">
+    <section class="rounded-card border border-coral/30 bg-surface p-4">
       <h2 class="font-display text-sm font-semibold text-coral">Danger zone</h2>
       <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p class="max-w-md text-sm text-slate">
