@@ -709,6 +709,80 @@ matching every other feature's "one store per resource" convention.
   requirement for an irreversible action; success clears local session
   state and redirects to `/login`
 
+### Dark mode
+
+Previously deferred (`main.ts` used to set `darkModeSelector: false` —
+"revisit post-MVP"); now implemented as System/Light/Dark, matching
+mobile's `ThemeMode` for parity across both clients.
+
+- **Mechanism**: Tailwind's class strategy
+  (`darkMode: ['selector', '.app-dark']`, `tailwind.config.js`) and
+  PrimeVue's matching `darkModeSelector: '.app-dark'` (`main.ts`), so
+  both theming systems flip together off one class on `<html>`.
+- **Design tokens as CSS variables, not plain hex** (`src/style.css`):
+  `ink`/`paper`/`slate`/`teal`/`amber`/`coral` are now
+  `rgb(var(--color-x) / <alpha-value>)` in `tailwind.config.js`,
+  backed by RGB-triple custom properties on `:root` (light) and
+  `.app-dark` (dark) — the `<alpha-value>` placeholder is what keeps
+  existing opacity-modifier classes (`bg-ink/40`, `text-paper/60`)
+  working once the underlying value can change per theme.
+- **`AppLayout.vue`'s sidebar needed decoupling first.** `ink`/`paper`
+  are used everywhere else as the standard "dark text on light page"
+  pair that should invert together — except in the sidebar, where
+  `bg-ink`/`text-paper` are a *permanently* dark-navy nav panel with
+  light text that must never flip. Fixed by moving the sidebar (and its
+  mobile-drawer scrim) onto two new **fixed**, non-swapping Tailwind
+  colors, `sidebar`/`sidebar-fg` (plain hex, not CSS variables) —
+  everywhere else, `ink`/`paper` were free to become real light/dark
+  semantic tokens.
+- **A second surface/chrome pass, after initial user feedback**: cards,
+  `DataTable`/`Paginator` chrome, and the header were first moved onto
+  `bg-paper` (the page-background token) to fix them staying pinned to
+  a literal `bg-white` that didn't invert for dark mode at all. That
+  visually worked for the header (paper's light value is close enough
+  to white), but made every card blend into the page — no shadow, and
+  a `border-slate/10` alone isn't enough separation once the light-mode
+  white-vs-off-white cue is gone too. Fixed with a dedicated `surface`
+  token (white in light mode, one step lighter than the dark-mode page
+  background in dark mode — same relative "elevated" relationship in
+  both themes), used by every card/table/paginator surface and
+  `AppLayout.vue`'s header. `paper` itself stays reserved for genuine
+  full-page backgrounds (`AuthLayout.vue`, `NotFoundView.vue`) and a
+  couple of deliberate hover-overlay/recessed-inset-panel spots
+  (`NotificationBell.vue`, `DashboardView.vue`,
+  `AtsScoreDisplay.vue`'s job-description box) that were never part of
+  either bug.
+- **`stores/theme.ts`** — same Options-API `defineStore` shape every
+  other store uses. `mode: 'system' | 'light' | 'dark'`, persisted to
+  `localStorage` (this app's first use of it — a display preference
+  isn't sensitive, unlike the access token `stores/auth.ts`
+  deliberately keeps out of any storage). An `isDark` getter resolves
+  `'system'` against `window.matchMedia('(prefers-color-scheme: dark)')`,
+  with a `change` listener so it tracks a live OS-theme change, not
+  just the value at load. `index.html` carries a small inline
+  `<script>` that applies the persisted/system class synchronously
+  before Vue mounts, so there's no flash of the wrong theme on load;
+  the store re-reads the same key on `init()` (called from `main.ts`)
+  and takes over from there.
+- **`components/common/ThemeToggle.vue`** — header icon button (next
+  to `NotificationBell`, same trigger-`Button` + `Popover` shape) with
+  System/Light/Dark options.
+- **Analytics charts, made theme-aware** (`src/lib/analytics-ui.ts`,
+  `AnalyticsDashboardView.vue`): Chart.js draws into a `<canvas>` 2D
+  context and can't resolve CSS custom properties, so its colors are
+  static hex, invisible to the variable swap above. Added dark-mode
+  counterparts for the funnel-stage gradient and interview-result
+  colors (compressed/brightened so the gradient's darkest stops don't
+  blend into the dark canvas background), plus explicit gridline/tick/
+  legend-label colors that were previously unset (silently defaulting
+  to a light-only gray). The three chart-options builders
+  (`funnelChartOptions`/`interviewChartOptions`/`activityChartOptions`)
+  are `computed()`, not plain objects, specifically so they react to
+  `themeStore.isDark` instead of being frozen at first render.
+- **Not browser-tested as part of this pass** — verified via
+  `type-check`/`lint`/`format:check` only, per this project's own
+  established preference for this app.
+
 ## What's deliberately not here yet
 
 - RBAC-aware UI — explicitly skipped per current backend scope

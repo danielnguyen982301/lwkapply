@@ -35,6 +35,34 @@
     browser — see the Fixed section below for how that actually got
     working end to end.
 
+- **Dark mode, on web and mobile — System/Light/Dark on both, matching
+  Flutter's own `ThemeMode` enum.** Previously deferred on web
+  (`darkModeSelector: false` — "revisit post-MVP") and not started on
+  mobile. Full detail in `WEBAPP_SUMMARY.md`'s and `MOBILE_SUMMARY.md`'s
+  own "Dark mode" sections; summary here:
+  - **Web**: Tailwind's class strategy (`.app-dark` on `<html>`) plus a
+    matching PrimeVue `darkModeSelector`, with the existing design
+    tokens (`ink`/`paper`/`slate`/`teal`/`amber`/`coral`) moved onto CSS
+    variables so they can invert per theme. New `stores/theme.ts`
+    (persisted to `localStorage`, with a live system-preference
+    fallback) and a header `ThemeToggle.vue`. Needed two follow-up
+    passes after initial user feedback: `AppLayout.vue`'s sidebar had to
+    be moved onto new fixed `sidebar`/`sidebar-fg` colors first (it's a
+    permanently-dark nav panel, not something that should flip), and a
+    dedicated `surface` token had to be added afterward so cards/tables
+    read as distinct from the page again, once they no longer had a
+    literal `bg-white` to fall back on. Chart.js's Analytics charts
+    needed their own explicit dark-mode color/gridline/legend values,
+    since Chart.js can't read CSS variables at all.
+  - **Mobile**: new `AppTheme.dark`, a `ThemeModeController`
+    (`shared_preferences`-backed — new dependency, the existing
+    `flutter_secure_storage` is the wrong tool for a non-secret
+    preference), and a new "Appearance" settings screen. Also fixed
+    several status/score chip colors (`ApplicationStatusStyle`,
+    `AIJobStatusStyle`, a couple of inline chips) that hardcoded a
+    light-mode-only `.shade50`/`.shade800` pairing and would have
+    washed out against a dark scaffold otherwise.
+
 ### Changed
 
 - **Reminder emails switched to the Gmail API** — deployment-driven:

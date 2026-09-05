@@ -1005,6 +1005,75 @@ sent in the request body when present. Server-side validation
 real IANA name" — this client-side helper just best-effort reports
 whatever the device gives back.
 
+### Dark mode
+
+`AppTheme` previously only defined `.light`; now also `.dark`
+(`core/theme/app_theme.dart`), same `ColorScheme.fromSeed` seed color
+with `brightness: Brightness.dark` — matching webapp's System/Light/
+Dark parity, via Flutter's own `ThemeMode` enum rather than a
+hand-rolled union.
+
+- **`core/storage/shared_preferences_provider.dart`** — new
+  `sharedPreferencesProvider`, the first use of `shared_preferences`
+  in this app (added as a dependency for this). The only existing
+  local persistence, `flutter_secure_storage`, is Keychain/Keystore-
+  backed encryption via `TokenStorage` — the wrong, overkill tool for
+  a non-secret UI preference. Since `MaterialApp.router`'s `themeMode`
+  needs a value on its very first build (before any async gap could
+  resolve), the instance is resolved once in `main.dart`
+  (`await SharedPreferences.getInstance()`) *before* the
+  `ProviderContainer` is built, then supplied via
+  `sharedPreferencesProvider.overrideWithValue(prefs)` — the provider
+  itself throws if read without that override, so a missing wire-up
+  fails loudly rather than silently losing the persisted preference.
+- **`features/settings/presentation/theme_mode_controller.dart`** —
+  `ThemeModeController extends StateNotifier<ThemeMode>`, same
+  app-lifetime, **not** `.autoDispose` shape as `AuthController`/
+  `NotificationsController` (the preference has to be available on
+  every screen, not scoped to one pushed screen's lifetime). Reads its
+  initial value synchronously from the already-resolved
+  `SharedPreferences` in its constructor (no async loading dance
+  inside the controller itself), persists via `setThemeMode()`.
+- **`app/app.dart`**: `MaterialApp.router` gained `darkTheme:
+  AppTheme.dark` and `themeMode: ref.watch(themeModeControllerProvider)`.
+- **`features/settings/presentation/appearance_screen.dart`** (new,
+  route `/settings/appearance`) — System/Light/Dark via
+  `RadioListTile<ThemeMode>` inside a `RadioGroup<ThemeMode>` ancestor
+  (the current, non-deprecated way to share one selection across
+  several tiles as of Flutter 3.32+ — each tile's own `groupValue`/
+  `onChanged` params are deprecated now). Applies instantly on tap, no
+  Save button — unlike `NotificationPreferencesScreen`'s local-form-
+  plus-Save shape, there's nothing else on this screen to batch the
+  change with and no network round-trip to wait on, matching webapp's
+  `ThemeToggle.vue` popover UX. Reached via a new "Appearance"
+  `ListTile` on `settings_screen.dart`, alongside the other pushed
+  sub-screens.
+- **Fixed hardcoded status/score chip colors that don't adapt on their
+  own** — `Theme.of(context).colorScheme` containers (the `_ResultChip`/
+  `_TypeChip` duplicates across Interviews/Documents/Analytics) already
+  adapt automatically via `ColorScheme.fromSeed(brightness: dark)` and
+  needed no changes, but several spots hardcode a fixed light-mode-only
+  `.shade50`/`.shade800` pairing instead: `application_status_style.dart`
+  (`ApplicationStatusStyle`), `ai_job_status_style.dart`
+  (`AIJobStatusStyle` and the free function `atsScoreColor()`),
+  `ats_score_result_card.dart`'s matched-keyword chip, and
+  `application_picker.dart`'s "Has job URL" chip. Each now branches on
+  `Theme.of(context).brightness` to swap in a dark-appropriate pairing
+  (Material's usual `.shade900` background / `.shade100`-`.shade200`
+  text convention) instead, so they don't wash out against a dark
+  scaffold — same color families (blue/orange/green), just re-paired
+  per brightness.
+- **`test/app_smoke_test.dart`** needed the same override treatment as
+  its existing fake `TokenStorage` — building `JobTrackerApp` without
+  overriding the new `sharedPreferencesProvider` throws (see above), so
+  the test now seeds an in-memory instance via
+  `SharedPreferences.setMockInitialValues({})` before pumping the
+  widget tree.
+- **Not device/simulator-tested as part of this pass** — this
+  environment's Xcode setup couldn't attach to the iOS Simulator
+  (command-line tools only, no full Xcode install); verified via
+  `flutter analyze`/`flutter test`/`dart format` only.
+
 ## Not yet implemented
 
 - In-app document download / offline document storage — downloads
@@ -1150,7 +1219,11 @@ mobile/
       network/api_client.dart      # shared Dio instance (token interceptors -
                                     # reads/writes session_providers.dart's leaf
                                     # providers directly, never authControllerProvider)
-      theme/app_theme.dart
+      storage/shared_preferences_provider.dart  # sharedPreferencesProvider -
+                                    # overridden in main.dart with an already-
+                                    # resolved instance before runApp (see Dark
+                                    # mode above)
+      theme/app_theme.dart          # AppTheme.light/.dark
       utils/timezone.dart          # getDeviceTimezone() via flutter_timezone
     shared/
       widgets/coming_soon_screen.dart  # no longer referenced by router.dart
@@ -1176,10 +1249,13 @@ mobile/
                                        # the "Home" tab (Interviews/Contacts/
                                        # Documents/Analytics/AI Tools cards)
       settings/
-        presentation/                 # settings_screen.dart (currently just
-                                       # logout), settings_icon_button.dart
+        presentation/                 # settings_screen.dart (account-settings
+                                       # menu), settings_icon_button.dart
                                        # (shared AppBar action every top-level
-                                       # screen should use)
+                                       # screen should use), theme_mode_controller.dart
+                                       # (ThemeMode, SharedPreferences-backed - see
+                                       # Dark mode above), appearance_screen.dart
+                                       # (System/Light/Dark picker)
       analytics/
         data/                        # analytics_api.dart (GET /analytics/
                                        # summary, /funnel, /activity, /interviews)
