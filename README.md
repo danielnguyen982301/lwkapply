@@ -4,10 +4,10 @@ A full-stack job application management platform designed to help job seekers or
 
 **Live:** [https://lwkapply.vercel.app](https://lwkapply.vercel.app)
 
-> Interview-reminder emails currently tend to land in spam — expected
-> for a personal study project without its own verified sending
-> domain, not a bug. See the Email section under Deployment below for
-> why.
+> Emails sent by the app — interview reminders, password-reset links,
+> anything else — currently tend to land in spam — expected for a
+> personal study project without its own verified sending domain, not
+> a bug. See the Email section under Deployment below for why.
 
 ## Overview
 
@@ -144,12 +144,17 @@ most transactional-email providers — requires verifying your own
 sending domain before it'll deliver to arbitrary recipients, and this
 project doesn't have (or want to pay for) one. Render also blocks
 outbound SMTP ports on free web services, closing off a plain SMTP
-fallback too. Reminder emails go through the Gmail API instead — free,
+fallback too. Every transactional email the app sends — interview
+reminders and password-reset confirmation links alike — goes through
+the Gmail API instead (`backend/app/services/password_reset.py` for
+resets, `backend/app/tasks/reminders_inline.py` for reminders): free,
 no domain required, and still carries Gmail's own authentication since
 it's genuinely sent through Google's servers. See
 `backend/BACKEND_SUMMARY.md`'s "Email backend" section for the full
-story. Because there's no verified domain behind it, these emails
-commonly land in spam — expected here, not a bug.
+story. Because there's no verified domain behind it, all of these
+emails commonly land in spam — expected here, not a bug. If you're
+testing password reset yourself, check spam before assuming the send
+failed.
 
 ### CI/CD
 
