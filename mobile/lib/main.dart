@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'app/router.dart';
 import 'core/config/env_config.dart';
+import 'features/auth/data/deep_link_service.dart';
 import 'features/notifications/data/push_service.dart';
 
 Future<void> main() async {
@@ -34,9 +35,9 @@ Future<void> main() async {
   // local-notifications plugin (which PushService.initialize sets up)
   // is ready before any foreground message could plausibly arrive.
   final container = ProviderContainer();
-  await container.read(pushServiceProvider).initialize(
-        container.read(routerProvider),
-      );
+  final router = container.read(routerProvider);
+  await container.read(pushServiceProvider).initialize(router);
+  await container.read(deepLinkServiceProvider).initialize(router);
 
   runApp(
     UncontrolledProviderScope(

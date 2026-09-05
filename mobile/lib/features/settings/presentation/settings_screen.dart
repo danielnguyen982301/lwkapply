@@ -57,7 +57,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ListTile(
             leading: const Icon(Icons.lock_outline),
-            title: const Text('Change password'),
+            title: const Text('Reset password'),
             onTap: () => context.push('/settings/password'),
           ),
           ListTile(

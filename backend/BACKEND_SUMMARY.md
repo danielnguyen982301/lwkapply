@@ -814,12 +814,14 @@ since that only guards the two cookie-authenticated endpoints
   write-only from a client's perspective — `User.timezone` existed since
   the original auto-detect work, but no response ever included it) — a
   client can now actually show/edit the stored value instead of guessing.
-- **`POST /users/me/password`** (`current_password`/`new_password`) —
-  requires the current password even though the request is already
-  bearer-authenticated; a change like this shouldn't be possible from
-  just a leaked access token alone. `400` (not `401`) on mismatch — this
-  is a bad form input on an authenticated request, not a credentials
-  failure.
+- **`POST /users/me/password-reset/request`** — the Settings page's
+  "Reset password" button; logged-in equivalent of the public
+  `/auth/password-reset/request` below, sourcing the email from the
+  bearer token instead of the request body. No current-password field
+  and not rate limited (the caller is already a known authenticated
+  account, not an arbitrary email) — see `password-reset/request`'s own
+  entry for why proving the current password directly was dropped
+  entirely rather than kept alongside this.
 - **`POST /users/me/avatar`** / **`DELETE /users/me/avatar`** — see the
   R2 section below.
 - **`DELETE /users/me`** (`password`) — same re-proof-of-password
@@ -1677,7 +1679,24 @@ backend/
 - JWTs are typed (`access` / `refresh` / `password_reset`) so a stolen
   refresh token can't be replayed as an access token, etc.
 - `password-reset/request` always returns the same response regardless of
-  whether the email exists, to prevent user enumeration.
+  whether the email exists, to prevent user enumeration. Rate limited by
+  email and IP (`app/services/rate_limit.py`'s generic
+  `check_and_increment`) for the same reason — an attacker who can't
+  tell success from failure could otherwise still infer existence by
+  spamming one address until it 429s.
+- `User.token_version`, bumped on every successful
+  `password-reset/confirm`, is embedded in every access/refresh/
+  password-reset JWT and checked against the DB column on use
+  (`get_current_user`, `/auth/refresh`, `confirm_password_reset`). This
+  is what makes a password reset actually invalidate every other
+  already-issued session (tokens are otherwise stateless and
+  unrevoked) and what makes a reset token single-use (a replayed token
+  carries the now-stale version).
+- There's no authenticated "change password" endpoint that takes the
+  current password directly — `POST /users/me/password-reset/request`
+  (the logged-in "Reset password" button) and the public
+  `password-reset/request` both funnel through the same emailed-link
+  flow, so there's one code path to keep secure instead of two.
 - All application and interview queries filter by the authenticated user
   (via a join to `applications.user_id` where the resource isn't owned
   directly) at the DB layer, not just hidden in the response, to prevent

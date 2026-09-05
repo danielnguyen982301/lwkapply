@@ -54,6 +54,17 @@ class User(Base, UUIDMixin, TimestampMixin):
     # clobbering that explicit choice with the browser's auto-detected
     # value on the next login/refresh.
     timezone_is_manual: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Bumped on every successful password reset (see
+    # app/api/v1/endpoints/auth.py::confirm_password_reset). Embedded in
+    # every access/refresh/password-reset JWT at issuance time and
+    # checked against this column on use (app/api/deps.py,
+    # app/api/v1/endpoints/auth.py) - a mismatch means the token predates
+    # the last reset. Since tokens are otherwise stateless and
+    # unrevoked, this is what makes a reset invalidate every
+    # already-issued session, and also what makes a reset token
+    # single-use (confirming one bumps this, so replaying the same token
+    # fails the version check on the second attempt).
+    token_version: Mapped[int] = mapped_column(default=0, nullable=False)
 
     applications: Mapped[list["Application"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

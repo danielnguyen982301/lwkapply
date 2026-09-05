@@ -68,7 +68,12 @@ const onFormSubmit = handleSubmit(async (formValues) => {
     </div>
 
     <div class="flex flex-col gap-1">
-      <label for="password" class="text-sm font-medium text-ink">Password</label>
+      <div class="flex items-center justify-between">
+        <label for="password" class="text-sm font-medium text-ink">Password</label>
+        <RouterLink to="/forgot-password" class="text-sm font-medium text-teal">
+          Forgot password?
+        </RouterLink>
+      </div>
       <CustomPassword
         input-id="password"
         name="password"

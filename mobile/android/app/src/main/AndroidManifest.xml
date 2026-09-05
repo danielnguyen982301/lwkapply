@@ -24,6 +24,31 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Lets the password-reset link emailed to the user
+                 (https://lwkapply.vercel.app/reset-password?token=...,
+                 built by backend/app/services/password_reset.py) open
+                 straight into this app's ResetPasswordScreen instead of
+                 only a browser - see features/auth/data/
+                 deep_link_service.dart, which app_links hands this to.
+
+                 No android:autoVerify/assetlinks.json here, so this
+                 isn't a fully-verified Android App Link - since the app
+                 has no Play Store listing or release-signing setup yet
+                 to publish a Digital Asset Links file against, Android
+                 instead shows its normal disambiguation dialog
+                 ("Open with: Chrome / LwkApply") when the app is
+                 installed, which is sufficient for this app's current
+                 sideloaded-APK distribution. Revisit with autoVerify +
+                 a hosted assetlinks.json if that ever changes. -->
+            <intent-filter android:label="Reset password">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="lwkapply.vercel.app"
+                    android:pathPrefix="/reset-password"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

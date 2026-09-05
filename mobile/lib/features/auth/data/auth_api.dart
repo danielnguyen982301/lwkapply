@@ -132,6 +132,40 @@ class AuthApi {
     }
   }
 
+  /// Mirrors `POST /auth/password-reset/request` - ForgotPasswordScreen's
+  /// submit handler. Always resolves on a 202, whether or not the email
+  /// has an account (see that endpoint's own docstring on why) - the
+  /// caller should show the same "check your email" message either way,
+  /// never branch on whether the account existed.
+  Future<void> requestPasswordReset({required String email}) async {
+    try {
+      await _dio.post<void>(
+        '/auth/password-reset/request',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
+  /// Mirrors `POST /auth/password-reset/confirm` - ResetPasswordScreen's
+  /// submit handler. `token` comes from the emailed link's ?token= query
+  /// param, delivered to this app via DeepLinkService rather than typed
+  /// in by hand.
+  Future<void> confirmPasswordReset({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post<void>(
+        '/auth/password-reset/confirm',
+        data: {'token': token, 'new_password': newPassword},
+      );
+    } on DioException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
+  }
+
   Future<void> logout({required String refreshToken}) async {
     try {
       await _dio.post<void>(

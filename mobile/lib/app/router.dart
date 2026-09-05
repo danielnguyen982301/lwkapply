@@ -10,16 +10,18 @@ import '../features/applications/presentation/application_form_screen.dart';
 import '../features/applications/presentation/applications_list_screen.dart';
 import '../features/auth/domain/auth_state.dart';
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
+import '../features/auth/presentation/reset_password_screen.dart';
 import '../features/contacts/presentation/contact_directory_screen.dart';
 import '../features/documents/presentation/document_directory_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/interviews/presentation/interview_directory_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
-import '../features/settings/presentation/change_password_screen.dart';
 import '../features/settings/presentation/notification_preferences_screen.dart';
 import '../features/settings/presentation/profile_screen.dart';
+import '../features/settings/presentation/reset_password_request_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import 'app_shell.dart';
 
@@ -43,7 +45,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: _AuthControllerListenable(ref),
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
-      const guestRoutes = {'/login', '/register'};
+      const guestRoutes = {
+        '/login',
+        '/register',
+        '/forgot-password',
+        '/reset-password',
+      };
       final isGuestRoute = guestRoutes.contains(state.matchedLocation);
 
       if (authState.status == AuthStatus.unknown) {
@@ -68,6 +75,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        name: 'forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      // `token` arrives either via DeepLinkService (the emailed link,
+      // handled by AndroidManifest's intent-filter) or is absent/blank
+      // if someone reaches this route some other way - ResetPasswordScreen
+      // itself renders the "invalid link" state for that case rather
+      // than this route redirecting, so there's one place that explains
+      // it instead of a bare 404.
+      GoRoute(
+        path: '/reset-password',
+        name: 'reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'],
+        ),
       ),
       // Create/Edit are deliberately top-level routes, not nested inside
       // the Applications branch below: pushing here covers the whole
@@ -177,7 +202,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/password',
         name: 'settings-password',
-        builder: (context, state) => const ChangePasswordScreen(),
+        builder: (context, state) => const ResetPasswordRequestScreen(),
       ),
       GoRoute(
         path: '/settings/notification-preferences',

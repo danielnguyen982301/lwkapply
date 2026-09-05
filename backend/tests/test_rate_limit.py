@@ -19,6 +19,8 @@ from app.services.rate_limit import (
     RateLimitExceeded,
     ai_usage_key,
     check_and_increment,
+    password_reset_email_key,
+    password_reset_ip_key,
 )
 
 
@@ -60,3 +62,28 @@ class TestAiUsageKey:
 
     def test_different_users_produce_different_keys(self):
         assert ai_usage_key(uuid.uuid4()) != ai_usage_key(uuid.uuid4())
+
+
+class TestPasswordResetEmailKey:
+    def test_same_email_same_day_produces_the_same_key(self):
+        assert password_reset_email_key("a@example.com") == password_reset_email_key(
+            "a@example.com"
+        )
+
+    def test_is_case_insensitive(self):
+        assert password_reset_email_key("A@Example.com") == password_reset_email_key(
+            "a@example.com"
+        )
+
+    def test_different_emails_produce_different_keys(self):
+        assert password_reset_email_key("a@example.com") != password_reset_email_key(
+            "b@example.com"
+        )
+
+
+class TestPasswordResetIpKey:
+    def test_same_ip_same_day_produces_the_same_key(self):
+        assert password_reset_ip_key("1.2.3.4") == password_reset_ip_key("1.2.3.4")
+
+    def test_different_ips_produce_different_keys(self):
+        assert password_reset_ip_key("1.2.3.4") != password_reset_ip_key("5.6.7.8")

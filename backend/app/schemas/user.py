@@ -84,20 +84,6 @@ class UserProfileUpdate(BaseModel):
     timezone: str | None = None
 
 
-class PasswordChangeRequest(BaseModel):
-    """Body for POST /users/me/password - requires proving the current
-    password even though the request is already bearer-authenticated,
-    since a change like this shouldn't be possible from just a leaked
-    access token alone."""
-
-    current_password: str
-    new_password: str = Field(min_length=8, max_length=128)
-
-    _validate_password_bytes = field_validator("new_password")(
-        validate_password_byte_length
-    )
-
-
 class AccountDeleteRequest(BaseModel):
     """Body for DELETE /users/me - same reasoning as
     PasswordChangeRequest: an irreversible action shouldn't be possible

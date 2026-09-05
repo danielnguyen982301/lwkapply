@@ -83,3 +83,23 @@ def ai_usage_key(user_id: uuid.UUID) -> str:
     endpoint, since both draw on the same underlying Gemini cost."""
     today = datetime.now(timezone.utc).date().isoformat()
     return f"ai_rate_limit:{user_id}:{today}"
+
+
+def password_reset_email_key(email: str) -> str:
+    """Caps reset emails per target inbox per UTC day, regardless of
+    whether that email actually has an account - see
+    app/api/v1/endpoints/auth.py::request_password_reset, which always
+    returns the same response either way, so this counter can't be used
+    to infer account existence either. Lowercased since email lookups
+    elsewhere (User.email) are effectively case-insensitive in practice
+    (no two accounts differing only by case)."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    return f"pwreset_email:{email.lower()}:{today}"
+
+
+def password_reset_ip_key(ip: str) -> str:
+    """Coarser companion to password_reset_email_key - caps total reset
+    requests from one source IP per UTC day, so someone can't work
+    around the per-email cap by spraying many different addresses."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    return f"pwreset_ip:{ip}:{today}"

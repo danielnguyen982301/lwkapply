@@ -290,16 +290,23 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
       (`flutter_form_builder`), silent session restore on app start,
       refresh token in `flutter_secure_storage`, bearer + refresh-on-401
       Dio interceptor — see MOBILE_SUMMARY.md
-- [ ] Password-reset-by-email UI — a separate, still-open gap from the
-      "change password while logged in" flow below; no backend endpoint
-      for an actual forgot-password flow exists yet either
+- [x] Password reset — `ForgotPasswordScreen` + `ResetPasswordScreen`,
+      reachable from `LoginScreen`'s "Forgot password?" link and from
+      the emailed reset link itself via a new Android intent-filter +
+      `DeepLinkService` (`app_links`). Backend's
+      `POST /auth/password-reset/{request,confirm}` now actually sends
+      the email and enforces single-use/session-invalidating tokens
+      (`User.token_version`) instead of being a stub. The old
+      current-password-required "change password" flow is gone
+      entirely — see the next line.
 - [x] Settings screen — grew from a logout-only menu into the full
       account-settings screen: `ProfileScreen` (avatar, name, an
       explicit auto-detect-timezone toggle + searchable timezone
-      picker), `ChangePasswordScreen`, `NotificationPreferencesScreen`
-      (master + per-channel toggles, custom reminder lead time), and
-      `DeleteAccountDialog` (password-reconfirmed) — see
-      MOBILE_SUMMARY.md's "Settings screen"
+      picker), `ResetPasswordRequestScreen` (emails a reset link rather
+      than taking the current password inline — see the password-reset
+      line above), `NotificationPreferencesScreen` (master + per-channel
+      toggles, custom reminder lead time), and `DeleteAccountDialog`
+      (password-reconfirmed) — see MOBILE_SUMMARY.md's "Settings screen"
 - [x] In-app notification feed (bell icon + Unread/Read list) —
       `NotificationBellButton`/`NotificationsScreen`, full-width tabs +
       infinite scroll, polling `GET /notifications/unread-count` every

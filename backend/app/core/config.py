@@ -151,6 +151,14 @@ class Settings(BaseSettings):
     # this setting or the rate-limit service itself.
     AI_FREE_TIER_DAILY_LIMIT: int = 10
 
+    # --- Password reset rate limiting (app/services/rate_limit.py,
+    # app/api/v1/endpoints/auth.py::request_password_reset). Two separate
+    # caps: per-email (stops one inbox from being spammed with reset
+    # links) and per-IP (stops working around the per-email cap by
+    # spraying many different addresses from one source).
+    PASSWORD_RESET_DAILY_LIMIT_PER_EMAIL: int = 5
+    PASSWORD_RESET_DAILY_LIMIT_PER_IP: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

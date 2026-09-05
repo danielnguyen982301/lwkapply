@@ -51,16 +51,20 @@ export interface ProfileUpdatePayload {
   timezone?: string | null
 }
 
-// Body for POST /users/me/password. Requires the current password even
-// though the request is already bearer-authenticated (see
-// PasswordChangeRequest in app/schemas/user.py).
-export interface PasswordChangePayload {
-  current_password: string
+// Body for POST /auth/password-reset/confirm (app/schemas/auth.py::
+// PasswordResetConfirm). No equivalent payload type is needed for
+// POST /auth/password-reset/request or POST /users/me/password-reset/
+// request - the former takes just `{ email }` inline, the latter takes
+// no body at all (the target user comes from the bearer token).
+export interface PasswordResetConfirmPayload {
+  token: string
   new_password: string
 }
 
-// Body for DELETE /users/me — same re-prove-the-password reasoning as
-// PasswordChangePayload above.
+// Body for DELETE /users/me - deleting the account still requires
+// re-proving the current password (unlike a password reset, this can't
+// be replaced by an emailed link without adding a second confirmation
+// step to an already-irreversible action).
 export interface AccountDeletePayload {
   password: string
 }

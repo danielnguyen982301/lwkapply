@@ -16,6 +16,11 @@ function makeTestRouter(initialPath = '/login') {
     routes: [
       { path: '/login', name: 'login', component: LoginView },
       { path: '/register', name: 'register', component: { template: '<div />' } },
+      {
+        path: '/forgot-password',
+        name: 'forgot-password',
+        component: { template: '<div />' },
+      },
       { path: '/', name: 'dashboard', component: { template: '<div>dashboard</div>' } },
       { path: '/applications/:id', name: 'application-detail', component: { template: '<div />' } },
     ],
