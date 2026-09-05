@@ -25,8 +25,26 @@ const FUNNEL_STAGE_COLORS: Record<ApplicationStatus, string> = {
   withdrawn: '#8D96A8', // slate.light (tailwind.config.js)
 }
 
-export function funnelStageColor(status: ApplicationStatus): string {
-  return FUNNEL_STAGE_COLORS[status]
+// Dark-mode counterpart - not the same values, a compressed-and-brightened
+// version of the same gradient. The light palette's darkest stops
+// (accepted #1F7A6F, close in luminance to a near-black canvas) would
+// nearly disappear against style.css's `.app-dark` background
+// (--color-paper: #0F131B), so every stop here stays well above that
+// floor - same relative ordering (saved lightest -> accepted most
+// saturated), just re-anchored to stay visible on a dark canvas.
+const FUNNEL_STAGE_COLORS_DARK: Record<ApplicationStatus, string> = {
+  saved: '#7FC9BE',
+  applied: '#63BBAE',
+  phone_screen: '#4FADA0',
+  interviewing: '#35B0A2', // dark-mode teal (style.css .app-dark --color-teal)
+  offer: '#2F9C90',
+  accepted: '#2A8F83', // dark-mode teal.dark (style.css .app-dark --color-teal-dark)
+  rejected: '#EB6E6C', // dark-mode coral (style.css .app-dark --color-coral)
+  withdrawn: '#97A1B5', // dark-mode slate (style.css .app-dark --color-slate)
+}
+
+export function funnelStageColor(status: ApplicationStatus, isDark = false): string {
+  return (isDark ? FUNNEL_STAGE_COLORS_DARK : FUNNEL_STAGE_COLORS)[status]
 }
 
 export function funnelStageLabel(status: ApplicationStatus): string {
@@ -42,11 +60,40 @@ export const INTERVIEW_RESULT_LABELS = {
 
 export const INTERVIEW_RESULT_ORDER = ['pending', 'passed', 'failed', 'cancelled'] as const
 
-export const INTERVIEW_RESULT_COLORS: Record<(typeof INTERVIEW_RESULT_ORDER)[number], string> = {
+const INTERVIEW_RESULT_COLORS: Record<(typeof INTERVIEW_RESULT_ORDER)[number], string> = {
   pending: '#8D96A8', // slate.light
   passed: '#2A9D8F', // teal
   failed: '#E15554', // coral
   cancelled: '#5C677D', // slate
+}
+
+// Dark-mode counterpart, same reasoning as FUNNEL_STAGE_COLORS_DARK above -
+// reuses style.css's `.app-dark` values for the same tokens.
+const INTERVIEW_RESULT_COLORS_DARK: Record<(typeof INTERVIEW_RESULT_ORDER)[number], string> = {
+  pending: '#B7BECD', // dark-mode slate.light
+  passed: '#35B0A2', // dark-mode teal
+  failed: '#EB6E6C', // dark-mode coral
+  cancelled: '#97A1B5', // dark-mode slate
+}
+
+export function interviewResultColor(
+  key: (typeof INTERVIEW_RESULT_ORDER)[number],
+  isDark = false,
+): string {
+  return (isDark ? INTERVIEW_RESULT_COLORS_DARK : INTERVIEW_RESULT_COLORS)[key]
+}
+
+// Chart chrome (gridlines, axis ticks, legend labels) - chart.js defaults
+// these to a color tuned for a light canvas only, and won't pick up a dark
+// background on its own. `paper`/`slate`'s dark-mode values (style.css
+// .app-dark) don't work directly here (a gridline needs to sit *between*
+// the two, not equal either), so these are their own explicit pair.
+export function chartGridColor(isDark = false): string {
+  return isDark ? '#242B38' : '#EEF0F3'
+}
+
+export function chartTextColor(isDark = false): string {
+  return isDark ? '#97A1B5' : '#5C677D' // slate / dark-mode slate
 }
 
 /** `0.734` -> `"73%"`; null (no data yet) -> `"—"`. Shared by every
