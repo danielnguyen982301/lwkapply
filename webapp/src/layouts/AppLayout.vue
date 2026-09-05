@@ -9,6 +9,7 @@ import Menu from 'primevue/menu'
 import Tag from 'primevue/tag'
 import type { MenuItem } from 'primevue/menuitem'
 import NotificationBell from '@/components/notifications/NotificationBell.vue'
+import ThemeToggle from '@/components/common/ThemeToggle.vue'
 
 type NavItem = {
   name: string
@@ -193,7 +194,8 @@ const userMenuItems: MenuItem[] = [
           aria-label="Open navigation menu"
           @click="mobileNavOpen = true"
         />
-        <div class="ml-auto">
+        <div class="ml-auto flex items-center gap-1">
+          <ThemeToggle />
           <NotificationBell />
         </div>
       </header>
