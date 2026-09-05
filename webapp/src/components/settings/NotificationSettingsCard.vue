@@ -108,7 +108,7 @@ const onSettingsSubmit = handleSettingsSubmit(async (formValues) => {
 </script>
 
 <template>
-  <section class="rounded-card border border-slate/10 bg-white p-4">
+  <section class="rounded-card border border-slate/10 bg-paper p-4">
     <h2 class="font-display text-sm font-semibold text-ink">Notification preferences</h2>
     <p class="mt-1 text-sm text-slate">
       Interview reminders — how far ahead, and where they show up.

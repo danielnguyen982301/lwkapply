@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
     <div
       v-else-if="store.listStatus === 'loading' && store.items.length === 0"
       aria-live="polite"
-      class="flex justify-center rounded-card border border-slate/10 bg-white p-10"
+      class="flex justify-center rounded-card border border-slate/10 bg-paper p-10"
     >
       <ProgressSpinner aria-label="Loading resume analyses" />
     </div>
@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
         :first="paginatorFirst"
         template="FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
         current-page-report-template="Page {currentPage} of {totalPages}"
-        class="border-x border-b border-slate/10 bg-white"
+        class="border-x border-b border-slate/10 bg-paper"
         @page="onPageChange"
       />
     </div>

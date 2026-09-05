@@ -99,7 +99,7 @@ async function onStatusSelect(app: Application, newStatus: ApplicationStatus) {
     <div
       v-else-if="store.boardStatus === 'loading' && store.boardItems.length === 0"
       aria-live="polite"
-      class="flex justify-center rounded-card border border-slate/10 bg-white p-10"
+      class="flex justify-center rounded-card border border-slate/10 bg-paper p-10"
     >
       <ProgressSpinner aria-label="Loading board" />
     </div>

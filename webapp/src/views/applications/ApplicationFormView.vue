@@ -241,7 +241,7 @@ watch(
     <div
       v-else-if="!isNew && store.currentStatus === 'loading' && !values.company"
       aria-live="polite"
-      class="flex justify-center rounded-card border border-slate/10 bg-white p-10"
+      class="flex justify-center rounded-card border border-slate/10 bg-paper p-10"
     >
       <ProgressSpinner aria-label="Loading application" />
     </div>

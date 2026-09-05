@@ -17,7 +17,7 @@ const emit = defineEmits<{ retry: [] }>()
 </script>
 
 <template>
-  <section class="rounded-card border border-slate/10 bg-white p-4">
+  <section class="rounded-card border border-slate/10 bg-paper p-4">
     <h2 class="font-display text-sm font-semibold text-ink">{{ title }}</h2>
 
     <Message v-if="status === 'error'" severity="error" :closable="false" class="mt-3">
