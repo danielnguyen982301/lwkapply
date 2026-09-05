@@ -3,11 +3,25 @@
         android:label="LwkApply"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- launchMode is now "singleTask" (was "singleTop", and an
+             empty taskAffinity used to sit alongside it - both Flutter's
+             own template defaults) - needed once the password-reset
+             intent-filter below was added. An external app (Gmail)
+             launching this Activity via ACTION_VIEW is a cross-app
+             launch, and an empty task affinity told Android this
+             Activity never belongs to an existing task, so every such
+             launch spawned a brand new task/process alongside whatever
+             instance of the app was already running - visible as two
+             separate "LwkApply" entries in Recents. Dropping that
+             attribute restores the normal, package-scoped task
+             affinity, and singleTask makes Android route the Intent
+             into that existing instance's onNewIntent() instead - see
+             features/auth/data/deep_link_service.dart's uriLinkStream
+             listener, which app_links wires up to exactly that. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"

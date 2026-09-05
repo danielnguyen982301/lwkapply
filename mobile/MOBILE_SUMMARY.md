@@ -88,11 +88,10 @@ start.
   (the `app_links` package) listens for the OS handing this app the
   `https://lwkapply.vercel.app/reset-password?token=...` URL — see the
   matching intent-filter on `MainActivity` in
-  `android/app/src/main/AndroidManifest.xml` — and pushes
-  `/reset-password?token=...`, same "capture a `GoRouter` reference"
-  shape as `PushService`'s FCM tap-to-deep-link handling. A real,
-  verified Android App Link (`android:autoVerify="true"` on the
-  intent-filter, checked against `webapp/public/.well-known/
+  `android/app/src/main/AndroidManifest.xml`, same "capture a
+  `GoRouter` reference" shape as `PushService`'s FCM tap-to-deep-link
+  handling. A real, verified Android App Link (`android:autoVerify="true"`
+  on the intent-filter, checked against `webapp/public/.well-known/
   assetlinks.json`) — this turned out to be required, not optional: an
   unverified intent-filter is invisible to Android 12+'s link
   resolution entirely (no disambiguation dialog, the link just always
@@ -101,11 +100,22 @@ start.
   Android version. `assetlinks.json`'s fingerprint currently points at
   this project's debug keystore (see the intent-filter's own comment in
   `AndroidManifest.xml` for why, and how to regenerate it) — there's no
-  release-signing/Play Store setup yet, only a sideloaded APK. There's
-  no dedicated screen for completing the API contract from a *typed-in*
-  token; if the link is ever opened somewhere this app isn't installed
-  to intercept it, the same URL still works as a normal page in the web
-  app.
+  release-signing/Play Store setup yet, only a sideloaded APK.
+  `launchMode="singleTask"` on `MainActivity` (not Flutter's default
+  `singleTop` + an empty `taskAffinity`) so a cross-app launch from
+  Gmail routes into the already-running instance's `onNewIntent()`
+  instead of spawning a duplicate task — see the manifest's own
+  comment; this bit in production before it was caught. A cold-start
+  link is staged as a *pending location*
+  (`DeepLinkService.consumePendingLocation()`) that `router.dart`'s
+  `redirect` consumes at its very first evaluation, before any
+  auth-state check — pushing it directly after the first frame (the
+  original approach) reliably lost the race against the auth guard's
+  own redirect-to-`/login` for a not-yet-authenticated visitor. There's
+  no dedicated screen for completing the API contract from a
+  *typed-in* token; if the link is ever opened somewhere this app
+  isn't installed to intercept it, the same URL still works as a
+  normal page in the web app.
 
 - **Token storage strategy** (the one real architecture decision here):
   access token lives in memory only (inside `AuthController`'s Riverpod

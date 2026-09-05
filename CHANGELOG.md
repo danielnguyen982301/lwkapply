@@ -69,6 +69,24 @@
 
 ### Fixed
 
+- **The verified mobile password-reset deep link (previous entry)
+  opened a duplicate app instance, and landed on the login screen
+  instead of the reset screen.** Two separate bugs surfaced once the
+  link started actually reaching the app:
+  - MainActivity's `taskAffinity=""` (a Flutter template default) told
+    Android a cross-app launch like Gmail's never belongs to an
+    existing task, so every tap spawned a brand new task/process
+    alongside whatever instance was already running. Fixed by switching
+    `launchMode` to `singleTask` and dropping the empty task affinity,
+    so Android routes the Intent into the existing instance instead.
+  - `DeepLinkService` deferred the navigation to `ResetPasswordScreen`
+    until after the first rendered frame - by then, the router's own
+    redirect had already sent the still-unauthenticated visitor from
+    the default `/applications` location to `/login`, and the deferred
+    push just landed on top of it. Fixed by staging a cold-start link
+    as a pending location `router.dart`'s `redirect` consumes at its
+    very first evaluation (before any auth-state check), instead of
+    pushing it after the fact.
 - **The mobile password-reset deep link opened in the browser instead
   of the app.** The intent-filter added for it wasn't a verified
   Android App Link (no `android:autoVerify`/`assetlinks.json`), and it
