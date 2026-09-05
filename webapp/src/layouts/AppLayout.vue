@@ -190,7 +190,7 @@ const userMenuItems: MenuItem[] = [
           severity="secondary"
           text
           rounded
-          class="lg:hidden"
+          class="lg:!hidden"
           aria-label="Open navigation menu"
           @click="mobileNavOpen = true"
         />
