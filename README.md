@@ -9,9 +9,16 @@ A full-stack job application management platform designed to help job seekers or
 > personal study project without its own verified sending domain, not
 > a bug. See the Email section under Deployment below for why.
 
+## Learning Notes
+
+A section of what I learned from this project.
+Full notes are in [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md): the core
+concepts and important notes of each technology (FastAPI, SQLAlchemy/Alembic,
+Celery, Vue, Flutter/Riverpod), problems and fixes.
+
 ## Overview
 
-Job Application Tracker provides a centralized workspace for managing the entire job application lifecycle, from saving opportunities to accepting offers.
+LwkApply provides a centralized workspace for managing the entire job application lifecycle, from saving opportunities to accepting offers.
 
 The project is built as a modern multi-platform application consisting of:
 
@@ -187,6 +194,7 @@ In Active Development
 
 
 See:
-- docs/ARCHITECTURE.md
-- docs/ROADMAP.md
-- TODO.md
+- [docs/DECISIONS.md](docs/DECISIONS.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/ROADMAP.md](docs/ROADMAP.md)
+- [TODO.md](TODO.md)
