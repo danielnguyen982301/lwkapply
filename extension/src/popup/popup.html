@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LwkApply</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>LwkApply</h1>
+      <button type="button" id="logout-btn" class="link-btn" hidden>Log out</button>
+    </header>
+
+    <section id="login-view" hidden>
+      <form id="login-form">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required autocomplete="username" />
+
+        <label for="login-password">Password</label>
+        <input
+          type="password"
+          id="login-password"
+          required
+          autocomplete="current-password"
+        />
+
+        <button type="submit">Log in</button>
+        <p class="error" id="login-error" hidden></p>
+      </form>
+    </section>
+
+    <section id="capture-view" hidden>
+      <form id="capture-form">
+        <label for="field-company">Company</label>
+        <input type="text" id="field-company" required />
+
+        <label for="field-position">Position</label>
+        <input type="text" id="field-position" required />
+
+        <label for="field-location">Location</label>
+        <input type="text" id="field-location" />
+
+        <div class="salary-row">
+          <div>
+            <label for="field-salary-min">Salary min</label>
+            <input type="number" id="field-salary-min" min="0" />
+          </div>
+          <div>
+            <label for="field-salary-max">Salary max</label>
+            <input type="number" id="field-salary-max" min="0" />
+          </div>
+        </div>
+
+        <label for="field-job-url">Job URL</label>
+        <input type="url" id="field-job-url" />
+
+        <label for="field-notes">Notes</label>
+        <textarea id="field-notes" rows="2"></textarea>
+
+        <button type="submit">Save to LwkApply</button>
+        <p class="error" id="capture-error" hidden></p>
+        <p class="success" id="capture-success" hidden></p>
+      </form>
+    </section>
+
+    <section id="unsupported-view" hidden>
+      <p>Open a VietnamWorks job posting, then click this icon again to capture it.</p>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
