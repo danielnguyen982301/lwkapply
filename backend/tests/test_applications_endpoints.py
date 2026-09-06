@@ -93,6 +93,32 @@ class TestCreateApplication:
         assert response.status_code == 201
         assert response.json()["application_name"] == "Referral via Jane"
 
+    def test_source_round_trips(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["source"] == "vietnamworks"
+
+    def test_source_defaults_to_null(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={"company": "Initech", "position": "Backend Engineer"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["source"] is None
+
     def test_missing_company_is_rejected(self, client, make_user, auth_headers):
         user = make_user()
         response = client.post(

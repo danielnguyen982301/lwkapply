@@ -93,6 +93,12 @@ class Application(Base, UUIDMixin, TimestampMixin):
     # client-side concern (see webapp's application-ui.ts).
     application_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Where this row was created from - "manual" (or null) for the normal
+    # in-app create flow, otherwise a free-form site slug like
+    # "vietnamworks" or "linkedin" from a browser-extension quick-capture.
+    # Deliberately a free string rather than an enum: new sites should be
+    # addable on the client side without a migration.
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[ApplicationStatus] = mapped_column(
         Enum(
             ApplicationStatus,

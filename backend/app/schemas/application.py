@@ -44,6 +44,7 @@ class ApplicationBase(SalaryRangeValidationMixin):
     applied_date: date | None = None
     job_url: str | None = Field(default=None, max_length=1000)
     notes: str | None = None
+    source: str | None = Field(default=None, max_length=100)
 
 
 class ApplicationCreate(ApplicationBase):
