@@ -248,6 +248,10 @@ export interface Application {
   applied_date: string | null
   job_url: string | null
   notes: string | null
+  /** Free-form origin, e.g. "vietnamworks" — null for the normal in-app
+   * create flow, otherwise wherever a client (e.g. a future browser
+   * extension) sourced the application from. Immutable after creation. */
+  source: string | null
   created_at: string
   updated_at: string
 }
@@ -291,10 +295,13 @@ export interface ApplicationCreatePayload {
   applied_date?: string | null
   job_url?: string | null
   notes?: string | null
+  source?: string | null
 }
 
-// Mirrors ApplicationUpdate: identical fields, all optional. The backend
-// uses `exclude_unset=True`, so only keys actually present in the request
-// body are touched — omit a field here rather than sending `undefined`/
-// `null` for "don't change this".
-export type ApplicationUpdatePayload = Partial<ApplicationCreatePayload>
+// Mirrors ApplicationUpdate: same fields as create, all optional, minus
+// `source` — ApplicationUpdate isn't a subclass of ApplicationBase and
+// deliberately excludes it, since origin is set once at creation and
+// isn't meant to change afterward. The backend uses `exclude_unset=True`,
+// so only keys actually present in the request body are touched — omit a
+// field here rather than sending `undefined`/`null` for "don't change this".
+export type ApplicationUpdatePayload = Partial<Omit<ApplicationCreatePayload, 'source'>>
