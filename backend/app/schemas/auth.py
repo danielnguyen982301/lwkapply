@@ -18,8 +18,9 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    # Only ever populated for mobile-client requests (see
-    # app/api/deps.py::is_mobile_client). Web must keep getting its
+    # Only ever populated for token-based-client requests - mobile app,
+    # browser extension (see app/api/deps.py::is_token_based_client). Web
+    # must keep getting its
     # refresh token exclusively via the httpOnly cookie - populating this
     # unconditionally would let any XSS payload on the web app read the
     # refresh token straight out of the fetch response, defeating the

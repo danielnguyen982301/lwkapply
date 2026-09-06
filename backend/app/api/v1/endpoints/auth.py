@@ -40,7 +40,7 @@ from app.core.cookies import (
     set_auth_cookies,
     clear_auth_cookies,
 )
-from app.api.deps import is_mobile_client, verify_csrf_unless_mobile
+from app.api.deps import is_token_based_client, verify_csrf_unless_token_based
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -80,12 +80,12 @@ def _issue_tokens(
 ) -> TokenResponse:
     """Builds the JSON response body for /login and /refresh.
 
-    `refresh_token` must only ever be passed by mobile call sites (see
-    `is_mobile_client`) - never pass it unconditionally, or web's fetch
-    response would carry the refresh token in plaintext JSON, defeating
-    the httpOnly-cookie protection entirely. `csrf_token` is the opposite
-    - always pass it, both client types - see TokenResponse.csrf_token's
-    docstring for why.
+    `refresh_token` must only ever be passed by token-based call sites
+    (mobile app, browser extension - see `is_token_based_client`) - never
+    pass it unconditionally, or web's fetch response would carry the
+    refresh token in plaintext JSON, defeating the httpOnly-cookie
+    protection entirely. `csrf_token` is the opposite - always pass it,
+    every client type - see TokenResponse.csrf_token's docstring for why.
     """
     return TokenResponse(
         access_token=create_access_token(str(user_id), token_version=token_version),
@@ -183,16 +183,17 @@ def login(
     refresh_token = create_refresh_token(str(user.id), token_version=user.token_version)
     csrf_token = generate_csrf_token()
 
-    # Always set the cookie pair, even on a mobile request - mobile just
-    # ignores it, and it keeps this one code path identical for both
-    # client types. Only the JSON body branches on client type below.
+    # Always set the cookie pair, even on a token-based-client request -
+    # mobile/extension just ignore it, and it keeps this one code path
+    # identical for every client type. Only the JSON body branches on
+    # client type below.
     set_auth_cookies(response, refresh_token, csrf_token)
 
     return _issue_tokens(
         user.id,
         token_version=user.token_version,
         csrf_token=csrf_token,
-        refresh_token=refresh_token if is_mobile_client(request) else None,
+        refresh_token=refresh_token if is_token_based_client(request) else None,
     )
 
 
@@ -203,7 +204,7 @@ def refresh(
     payload: Optional[RefreshRequest] = None,
     db: Session = Depends(get_db),
 ):
-    """Deliberately *not* behind verify_csrf_unless_mobile, unlike /logout.
+    """Deliberately *not* behind verify_csrf_unless_token_based, unlike /logout.
 
     This is the call app boot uses to turn a stored refresh-token cookie
     back into a session (see webapp's authStore.bootstrap()) - the whole
@@ -218,12 +219,13 @@ def refresh(
     legitimate session gets invalidated by an extra rotation happening in
     the background.
     """
-    mobile = is_mobile_client(request)
+    token_based = is_token_based_client(request)
 
-    if mobile:
-        # Mobile has no cookie to read from - it sends the refresh token
-        # explicitly in the body instead (see mobile/lib/features/auth/
-        # data/auth_api.dart::refresh).
+    if token_based:
+        # Mobile/extension have no cookie to read from - they send the
+        # refresh token explicitly in the body instead (see
+        # mobile/lib/features/auth/data/auth_api.dart::refresh and
+        # extension/src/background/api.js).
         token = payload.refresh_token if payload else None
     else:
         token = request.cookies.get(REFRESH_COOKIE_NAME)
@@ -263,15 +265,15 @@ def refresh(
     )
     new_csrf_token = generate_csrf_token()
 
-    # Always set the cookie pair, same reasoning as /login - mobile
-    # ignores it, one code path for both client types.
+    # Always set the cookie pair, same reasoning as /login - token-based
+    # clients ignore it, one code path for every client type.
     set_auth_cookies(response, new_refresh_token, new_csrf_token)
 
     return _issue_tokens(
         user.id,
         token_version=user.token_version,
         csrf_token=new_csrf_token,
-        refresh_token=new_refresh_token if mobile else None,
+        refresh_token=new_refresh_token if token_based else None,
     )
 
 
@@ -335,7 +337,7 @@ def confirm_password_reset(
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(verify_csrf_unless_mobile)],
+    dependencies=[Depends(verify_csrf_unless_token_based)],
 )
 def logout(response: Response):
     # No server-side refresh-token store exists for either client type -

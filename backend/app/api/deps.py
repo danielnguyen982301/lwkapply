@@ -22,11 +22,16 @@ CREDENTIALS_EXCEPTION = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
-# Sent by the mobile client (see mobile/lib/features/auth/data/auth_api.dart)
-# on every auth request, so the API can tell a native client apart from a
-# browser without relying on User-Agent sniffing.
-MOBILE_CLIENT_HEADER = "x-client-platform"
+# Sent by clients that can't rely on the web SPA's httpOnly-cookie
+# session - the mobile app (see mobile/lib/features/auth/data/auth_api.dart)
+# and the browser extension's background service worker (see
+# extension/src/background/api.js) - on every auth request, so the API
+# can tell them apart from the web app without relying on User-Agent
+# sniffing.
+CLIENT_PLATFORM_HEADER = "x-client-platform"
 MOBILE_CLIENT_VALUE = "mobile"
+EXTENSION_CLIENT_VALUE = "extension"
+TOKEN_BASED_CLIENT_VALUES = {MOBILE_CLIENT_VALUE, EXTENSION_CLIENT_VALUE}
 
 
 def get_current_user(
@@ -67,11 +72,17 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-def is_mobile_client(request: Request) -> bool:
-    """True if this request came from the mobile app rather than the web
-    app. Header lookups on `request.headers` are case-insensitive, so this
-    matches regardless of how the client capitalizes it."""
-    return request.headers.get(MOBILE_CLIENT_HEADER, "").lower() == MOBILE_CLIENT_VALUE
+def is_token_based_client(request: Request) -> bool:
+    """True if this request came from the mobile app or browser extension
+    rather than the web app - clients that authenticate via an explicit
+    refresh token in the request/response body instead of the web SPA's
+    httpOnly-cookie + CSRF-double-submit flow. Header lookups on
+    `request.headers` are case-insensitive, so this matches regardless of
+    how the client capitalizes it."""
+    return (
+        request.headers.get(CLIENT_PLATFORM_HEADER, "").lower()
+        in TOKEN_BASED_CLIENT_VALUES
+    )
 
 
 def verify_csrf(request: Request) -> None:
@@ -107,17 +118,18 @@ def verify_csrf(request: Request) -> None:
         )
 
 
-def verify_csrf_unless_mobile(request: Request) -> None:
-    """Same endpoint(s) as `verify_csrf`, but skips the check for the
-    mobile client.
+def verify_csrf_unless_token_based(request: Request) -> None:
+    """Same endpoint(s) as `verify_csrf`, but skips the check for
+    token-based clients.
 
     CSRF double-submit exists to stop a *browser* from silently riding an
     httpOnly cookie it holds for our site into a request from some other
-    site's page. The mobile app never holds that cookie meaningfully - it
-    presents its refresh token explicitly in the request body instead - so
-    there's no cookie for a hostile page to ride in the first place. Web
-    requests still go through the full check unchanged.
+    site's page. The mobile app and browser extension never hold that
+    cookie meaningfully - they present a refresh token explicitly in the
+    request body instead - so there's no cookie for a hostile page to
+    ride in the first place. Web requests still go through the full
+    check unchanged.
     """
-    if is_mobile_client(request):
+    if is_token_based_client(request):
         return
     verify_csrf(request)
