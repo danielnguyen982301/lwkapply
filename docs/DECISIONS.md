@@ -27,7 +27,7 @@
   independently-testable functions; why a FastAPI process has to stay
   stateless behind a load balancer; why `response_model` is a security
   boundary, not just documentation. Full detail, with code citations, in
-  [LEARNING_NOTES.md's FastAPI section](LEARNING_NOTES.md#fastapi).
+  [STUDY_NOTES.md's FastAPI section](STUDY_NOTES.md#fastapi).
 
 ---
 
@@ -53,8 +53,8 @@
   ORM's own relationship semantics and the database's own constraints (the
   `IntegrityError` case study), lazy loading hiding N+1 queries, and why
   Alembic's `autogenerate` output still needs a human read-through. Full
-  detail in [LEARNING_NOTES.md's SQLAlchemy/Alembic
-  section](LEARNING_NOTES.md#sqlalchemy-alembic-postgresql).
+  detail in [STUDY_NOTES.md's SQLAlchemy/Alembic
+  section](STUDY_NOTES.md#sqlalchemy-alembic-postgresql).
 
 ---
 
@@ -82,8 +82,8 @@
   primitives against their React equivalents (`ref`/`useState`,
   `onMounted`/`useEffect`, and so on), grounded in real code in this
   project (`webapp/src/layouts/AppLayout.vue`, the chart theming fix). Full
-  detail in [LEARNING_NOTES.md's Vue 3
-  section](LEARNING_NOTES.md#vue-3-versus-react).
+  detail in [STUDY_NOTES.md's Vue 3
+  section](STUDY_NOTES.md#vue-3-versus-react).
 
 ---
 
@@ -113,8 +113,8 @@
   and how a cold-start deep link can lose a race against the router's own
   redirect (fixed in commit
   [`ac19b4b`](https://github.com/danielnguyen982301/lwkapply/commit/ac19b4bf45756bbc1b0413fa7139a6fb08ff4eff)).
-  Full detail, with diagrams, in [LEARNING_NOTES.md's Flutter
-  section](LEARNING_NOTES.md#flutter--riverpod-versus-react-native).
+  Full detail, with diagrams, in [STUDY_NOTES.md's Flutter
+  section](STUDY_NOTES.md#flutter--riverpod-versus-react-native).
 
 ---
 

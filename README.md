@@ -9,10 +9,10 @@ A full-stack job application management platform designed to help job seekers or
 > personal study project without its own verified sending domain, not
 > a bug. See the Email section under Deployment below for why.
 
-## Learning Notes
+## Study Notes
 
 A section of what I learned from this project.
-Full notes are in [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md): the core
+Full notes are in [docs/STUDY_NOTES.md](docs/STUDY_NOTES.md): the core
 concepts and important notes of each technology (FastAPI, SQLAlchemy/Alembic,
 Celery, Vue, Flutter/Riverpod), problems and fixes.
 
