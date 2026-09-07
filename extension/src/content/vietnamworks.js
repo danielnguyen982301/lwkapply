@@ -93,19 +93,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 function handleAutoSaveResult(message) {
   if (!message.ok) {
-    showToast(`Couldn't save to LwkApply: ${message.error}`)
+    showToast(message.error)
     return
   }
-  showToast(message.message, {
-    undoLabel: 'Undo',
-    onUndo: async () => {
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_APPLICATION',
-        applicationId: message.applicationId,
-      })
-      await deleteCapturedJob(message.jobUrl)
-    },
+  const undo = message.undo
+  showToast(message.message, undo ? { undoLabel: 'Undo', onUndo: () => performUndo(undo) } : undefined)
+}
+
+// Two shapes coming from background.js: "delete" undoes a create (the
+// Save flow), "recreate" undoes a delete (the Unsave flow) by posting
+// the same job data again.
+async function performUndo(undo) {
+  if (undo.kind === 'delete') {
+    await chrome.runtime.sendMessage({
+      type: 'DELETE_APPLICATION',
+      applicationId: undo.applicationId,
+    })
+    await deleteCapturedJob(undo.jobUrl)
+    return
+  }
+
+  const result = await chrome.runtime.sendMessage({
+    type: 'CREATE_APPLICATION',
+    payload: undo.payload,
   })
+  if (result.ok) {
+    await setCapturedJob(undo.jobUrl, { applicationId: result.application.id, status: 'saved' })
+  }
 }
 
 // --- Auto-save on "Nộp đơn" (Apply) -------------------------------------

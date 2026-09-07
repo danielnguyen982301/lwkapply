@@ -70,36 +70,51 @@ async function deleteApplication(applicationId) {
   return { ok: true }
 }
 
-// --- Network-driven save ------------------------------------------------
+// --- Network-driven save/unsave ------------------------------------------
 //
-// Verified against a real save: clicking "Lưu công việc này" on
-// VietnamWorks fires POST https://ms.vietnamworks.com/api-gateway/v1.0/
-// save-job, returning {"meta":{"code":200,"message":"success"}} on
-// success. The whole point of keying off this instead of the page's
-// visible text/aria-label was to stop depending on VietnamWorks' DOM at
-// all for Save - so nothing here identifies *which button* was clicked.
-// This listener is the entire trigger: a confirmed 2xx on that tab is
-// enough on its own to ask that tab's content script what job is on the
-// page right now (reusing the existing SCRAPE_JOB handler, built
-// originally for the popup) and save it. No click listener, no
-// aria-label matching, no per-click "arming" - if this endpoint fires
-// for a tab, something on that page just got saved.
+// Verified against real clicks: "Lưu công việc này" (Save) fires POST
+// .../save-job, and clicking the same toggle again ("Unsave") fires
+// POST .../unsave-job - both return {"meta":{"code":200,...}} on
+// success. Neither listener below identifies *which element* was
+// clicked; a confirmed 2xx on either endpoint, for a given tab, is by
+// itself a complete signal of what just happened on that page. Each one
+// asks that tab's content script what job is on the page right now
+// (reusing the existing SCRAPE_JOB handler, built originally for the
+// popup) and acts on that - no click listener, no DOM matching, no
+// per-click coordination state.
 //
 // Apply has no verified network endpoint yet, so it's still the
 // DOM-heuristic click listener in vietnamworks.js.
 const SAVE_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v1.0/save-job*'
+const UNSAVE_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v1.0/unsave-job*'
 const CAPTURED_JOBS_KEY = 'lwkapply_captured_jobs' // must match the content script's key
 const MAX_TRACKED_JOBS = 500
 
 chrome.webRequest.onCompleted.addListener(
-  (details) => {
-    if (details.method !== 'POST') return
-    if (details.statusCode < 200 || details.statusCode >= 300) return
-    if (details.tabId < 0) return // not associated with a tab - nothing to scrape
-    handleConfirmedSave(details.tabId)
-  },
+  (details) => onConfirmedPost(details, handleConfirmedSave),
   { urls: [SAVE_JOB_ENDPOINT] },
 )
+
+chrome.webRequest.onCompleted.addListener(
+  (details) => onConfirmedPost(details, handleConfirmedUnsave),
+  { urls: [UNSAVE_JOB_ENDPOINT] },
+)
+
+function onConfirmedPost(details, handler) {
+  if (details.method !== 'POST') return
+  if (details.statusCode < 200 || details.statusCode >= 300) return
+  if (details.tabId < 0) return // not associated with a tab - nothing to scrape
+  handler(details.tabId)
+}
+
+async function scrapeTab(tabId) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'SCRAPE_JOB' })
+    return response?.job ?? null
+  } catch {
+    return null // no content script alive in this tab
+  }
+}
 
 async function handleConfirmedSave(tabId) {
   if (!(await auth.isLoggedIn())) {
@@ -111,18 +126,12 @@ async function handleConfirmedSave(tabId) {
     return
   }
 
-  let scraped
-  try {
-    scraped = await chrome.tabs.sendMessage(tabId, { type: 'SCRAPE_JOB' })
-  } catch {
-    return // no content script alive in this tab - nothing to scrape
-  }
-  const job = scraped?.job
+  const job = await scrapeTab(tabId)
   if (!job?.company || !job?.position) return // not enough to satisfy the backend
 
   if (await getCapturedJob(job.job_url)) return // already tracked
 
-  const result = await createApplication({
+  const payload = {
     company: job.company,
     position: job.position,
     location: job.location,
@@ -131,9 +140,15 @@ async function handleConfirmedSave(tabId) {
     job_url: job.job_url,
     notes: null,
     source: 'vietnamworks',
-  })
+  }
+
+  const result = await createApplication(payload)
   if (!result.ok) {
-    notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: false, error: result.error })
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: `Couldn't save to LwkApply: ${result.error}`,
+    })
     return
   }
 
@@ -142,8 +157,61 @@ async function handleConfirmedSave(tabId) {
     type: 'AUTO_SAVE_RESULT',
     ok: true,
     message: 'Saved to LwkApply',
-    applicationId: result.application.id,
-    jobUrl: job.job_url,
+    undo: { kind: 'delete', applicationId: result.application.id, jobUrl: job.job_url },
+  })
+}
+
+// Only removes what we're tracking as "saved". A job already marked
+// "applied" (or in any other status) stays untouched - unsaving on
+// VietnamWorks says nothing about withdrawing an application, so it
+// must never delete or otherwise touch a row past the saved stage. A
+// job we never tracked at all (saved outside the extension, or already
+// removed) is likewise left alone.
+async function handleConfirmedUnsave(tabId) {
+  const job = await scrapeTab(tabId)
+  if (!job?.job_url) return
+
+  const existing = await getCapturedJob(job.job_url)
+  if (!existing || existing.status !== 'saved') return
+
+  if (!(await auth.isLoggedIn())) {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: 'Log in to LwkApply (click the toolbar icon) to sync this removal.',
+    })
+    return
+  }
+
+  const result = await deleteApplication(existing.applicationId)
+  if (!result.ok) {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: `Couldn't remove from LwkApply: ${result.error}`,
+    })
+    return
+  }
+
+  await deleteCapturedJob(job.job_url)
+  notifyTab(tabId, {
+    type: 'AUTO_SAVE_RESULT',
+    ok: true,
+    message: 'Removed from LwkApply',
+    undo: {
+      kind: 'recreate',
+      jobUrl: job.job_url,
+      payload: {
+        company: job.company,
+        position: job.position,
+        location: job.location,
+        salary_min: job.salary_min,
+        salary_max: job.salary_max,
+        job_url: job.job_url,
+        notes: null,
+        source: 'vietnamworks',
+      },
+    },
   })
 }
 
@@ -166,5 +234,13 @@ async function setCapturedJob(jobUrl, entry) {
   if (keys.length > MAX_TRACKED_JOBS) {
     for (const key of keys.slice(0, keys.length - MAX_TRACKED_JOBS)) delete next[key]
   }
+  await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
+}
+
+async function deleteCapturedJob(jobUrl) {
+  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
+  if (!jobs?.[jobUrl]) return
+  const next = { ...jobs }
+  delete next[jobUrl]
   await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
 }
