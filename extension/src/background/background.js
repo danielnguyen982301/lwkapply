@@ -1,10 +1,10 @@
 import * as auth from './auth.js'
 import { parseJsonSafe, firstErrorMessage } from './http.js'
 
-// Popup (and, in future, an injected page button) talk to the API only
-// through this router - neither the popup nor the content script ever
-// touches a token directly, so a compromised job-site page can't read
-// them via the content script's execution context.
+// Popup and content scripts (the VietnamWorks auto-save flow) talk to
+// the API only through this router - neither of them ever touches a
+// token directly, so a compromised job-site page can't read one via the
+// content script's execution context.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   handleMessage(message)
     .then(sendResponse)
@@ -38,6 +38,17 @@ async function handleMessage(message) {
         return { ok: false, error: 'Unexpected response from server.' }
       }
       return { ok: true, application: body }
+    }
+
+    case 'DELETE_APPLICATION': {
+      const response = await auth.apiFetch(`/applications/${message.applicationId}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const body = await parseJsonSafe(response)
+        return { ok: false, error: firstErrorMessage(body) }
+      }
+      return { ok: true }
     }
 
     default:
