@@ -99,8 +99,20 @@ function parseSalaryCurrency(baseSalary) {
   return SALARY_CURRENCIES.has(upper) ? upper : null
 }
 
+// Drops the query string and fragment - verified against a real
+// listing that a job's canonical page renders identically without its
+// referral tracking params (?source=searchResults&searchType=2&...).
+// Now that external_id is the real identity (see extractJobIdFromUrl),
+// job_url is purely a "click through to the posting" convenience link,
+// so there's no reason to keep noise that varies by how the user got
+// there.
+function canonicalJobUrl() {
+  return window.location.origin + window.location.pathname
+}
+
 function scrapeJob() {
   const jobPosting = readJobPostingJsonLd()
+  const jobUrl = canonicalJobUrl()
 
   if (jobPosting) {
     return {
@@ -112,8 +124,8 @@ function scrapeJob() {
         null,
       ...parseSalary(jobPosting.baseSalary),
       salary_currency: parseSalaryCurrency(jobPosting.baseSalary),
-      job_url: window.location.href,
-      external_id: extractJobIdFromUrl(window.location.href),
+      job_url: jobUrl,
+      external_id: extractJobIdFromUrl(jobUrl),
     }
   }
 
@@ -127,8 +139,8 @@ function scrapeJob() {
     salary_currency: null,
     salary_min: null,
     salary_max: null,
-    job_url: window.location.href,
-    external_id: extractJobIdFromUrl(window.location.href),
+    job_url: jobUrl,
+    external_id: extractJobIdFromUrl(jobUrl),
   }
 }
 
