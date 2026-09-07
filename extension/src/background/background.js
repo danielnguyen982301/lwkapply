@@ -40,6 +40,21 @@ async function handleMessage(message) {
       return { ok: true, application: body }
     }
 
+    case 'UPDATE_APPLICATION': {
+      const response = await auth.apiFetch(`/applications/${message.applicationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(message.updates),
+      })
+      const body = await parseJsonSafe(response)
+      if (!response.ok) {
+        return { ok: false, error: firstErrorMessage(body) }
+      }
+      if (!body) {
+        return { ok: false, error: 'Unexpected response from server.' }
+      }
+      return { ok: true, application: body }
+    }
+
     case 'DELETE_APPLICATION': {
       const response = await auth.apiFetch(`/applications/${message.applicationId}`, {
         method: 'DELETE',

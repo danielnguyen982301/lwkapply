@@ -86,30 +86,51 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false
 })
 
-// --- Auto-save on a real "Nộp đơn" (Apply) submission -----------------
+// --- Auto-save on "Lưu công việc này" (Save) / "Nộp đơn" (Apply) ------
 //
-// IMPORTANT CALIBRATION NOTE: I built this against the page's *visible*
-// apply button and DOM structure (see scrapeJob() above), but never
-// completed a real apply flow to verify what actually happens after
-// submission - that needs a real VietnamWorks account, which I don't
-// have and can't fabricate one for. So rather than guess their internal
-// apply API endpoint (a URL I'd be making up, and a silent no-op if
-// wrong), this watches the *page* for a plausible completion signal:
-// the clicked button's own text/disabled state changing, or new text
-// matching a "success" pattern appearing anywhere on the page shortly
-// after the click. If a real apply produces neither - e.g. VietnamWorks
-// redirects to a different page instead of updating this one in place -
-// this silently won't fire. Please try it on a real posting and tell me
-// what actually happens (does the button relabel? does a toast appear?
-// does the URL change? what does devtools' Network tab show for the
-// request the click fires?) so the detection can be tightened.
+// Two independent triggers, tracked against the same job so they don't
+// create duplicate LwkApply entries for one posting:
+//   - Save button click -> confirmed  => create as status "saved"
+//   - Apply button click -> confirmed => if this job was already saved,
+//     PATCH that row to "applied" + today's date instead of creating a
+//     second one; otherwise create directly as "applied" (the existing
+//     behavior for a bare apply with no prior save).
+//
+// IMPORTANT CALIBRATION NOTE: both button selectors below are real
+// (read from a live posting on 2026-09-06 - Apply is a visible-text
+// button with class "apply-btn", Save is an icon-only button identified
+// by aria-label="Lưu công việc này"), but what happens *after* a
+// successful click is not verified - that needs a real, logged-in
+// VietnamWorks account submitting/saving for real, which wasn't
+// available to test against. So rather than guess at their internal
+// API, both SAVE_SIGNALS/APPLY_SIGNALS below watch the *page* for a
+// plausible completion signal: the clicked button's aria-label or
+// disabled state changing, or new text matching a "success" pattern
+// appearing nearby. Confirmed already: clicking Save while logged out
+// of VietnamWorks (not LwkApply - their own session) opens a login
+// modal rather than saving - neither pattern matches that modal's text,
+// so it correctly won't false-positive, but the real post-login success
+// state is still a guess. Try both buttons on a real posting and tell
+// me what actually happens (does the icon/aria-label change? does a
+// toast appear? what does devtools' Network tab show?) so detection can
+// be tightened.
 const APPLY_BUTTON_SELECTOR = '.apply-btn'
 const APPLY_INTENT_PATTERN = /nộp đơn|ứng tuyển/i
-const APPLY_SUCCESS_PATTERN =
-  /(ứng tuyển|nộp (đơn|hồ sơ)).{0,20}thành công|đã ứng tuyển|đã nộp đơn/i
+const SAVE_ARIA_PATTERN = /lưu công việc/i
 const CONFIRMATION_WINDOW_MS = 20_000
-const CAPTURED_URLS_KEY = 'lwkapply_auto_saved_urls'
-const MAX_TRACKED_URLS = 500
+const CAPTURED_JOBS_KEY = 'lwkapply_captured_jobs'
+const MAX_TRACKED_JOBS = 500
+
+const APPLY_SIGNALS = {
+  successTextPattern:
+    /(ứng tuyển|nộp (đơn|hồ sơ)).{0,20}thành công|đã ứng tuyển|đã nộp đơn/i,
+  ariaChangePattern: /đã ứng tuyển|đã nộp đơn/i,
+}
+
+const SAVE_SIGNALS = {
+  successTextPattern: /đã lưu (công việc|tin)|lưu (tin|việc làm) thành công/i,
+  ariaChangePattern: /bỏ lưu|đã lưu|hủy lưu/i,
+}
 
 function isApplyButton(target) {
   if (!(target instanceof Element)) return false
@@ -120,13 +141,24 @@ function isApplyButton(target) {
   return text.trim().length < 30 && APPLY_INTENT_PATTERN.test(text)
 }
 
+function isSaveButton(target) {
+  if (!(target instanceof Element)) return false
+  const button = target.closest('button,a')
+  const aria = button?.getAttribute('aria-label') ?? ''
+  return SAVE_ARIA_PATTERN.test(aria)
+}
+
 // Resolves true if a success signal shows up within the window, false
-// on timeout. Only inspects nodes actually added by each mutation batch
-// (not a full document.body.innerText re-scan every time) to keep this
-// cheap during whatever DOM churn the click itself causes.
-function watchForApplySuccess(clickedButton) {
+// on timeout. Watches the clicked button's own aria-label/disabled
+// state (via an attribute observer, since a toggle button like Save is
+// far more likely to flip an attribute than replace its text) and any
+// newly-added page text, rather than re-scanning the whole page on
+// every mutation.
+function watchForActionConfirmation(clickedButton, { successTextPattern, ariaChangePattern }) {
   return new Promise((resolve) => {
     let settled = false
+    const initialAria = clickedButton?.getAttribute('aria-label') ?? null
+
     const finish = (success) => {
       if (settled) return
       settled = true
@@ -135,15 +167,23 @@ function watchForApplySuccess(clickedButton) {
       resolve(success)
     }
 
+    const buttonNowConfirms = () => {
+      if (!clickedButton) return false
+      if (clickedButton.disabled) return true
+      const aria = clickedButton.getAttribute('aria-label')
+      if (aria && aria !== initialAria && ariaChangePattern.test(aria)) return true
+      return successTextPattern.test(clickedButton.innerText ?? '')
+    }
+
     const observer = new MutationObserver((mutations) => {
-      if (clickedButton && (clickedButton.disabled || APPLY_SUCCESS_PATTERN.test(clickedButton.innerText ?? ''))) {
+      if (buttonNowConfirms()) {
         finish(true)
         return
       }
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           const text = node.nodeType === Node.TEXT_NODE ? node.textContent : node.innerText
-          if (text && APPLY_SUCCESS_PATTERN.test(text)) {
+          if (text && successTextPattern.test(text)) {
             finish(true)
             return
           }
@@ -151,20 +191,39 @@ function watchForApplySuccess(clickedButton) {
       }
     })
 
-    observer.observe(document.body, { childList: true, subtree: true })
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-label', 'disabled'],
+    })
     const timer = setTimeout(() => finish(false), CONFIRMATION_WINDOW_MS)
   })
 }
 
-async function isAlreadyCaptured(jobUrl) {
-  const { [CAPTURED_URLS_KEY]: urls } = await chrome.storage.local.get(CAPTURED_URLS_KEY)
-  return Array.isArray(urls) && urls.includes(jobUrl)
+async function getCapturedJob(jobUrl) {
+  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
+  return jobs?.[jobUrl] ?? null
 }
 
-async function markCaptured(jobUrl) {
-  const { [CAPTURED_URLS_KEY]: urls } = await chrome.storage.local.get(CAPTURED_URLS_KEY)
-  const next = Array.isArray(urls) ? [...urls, jobUrl] : [jobUrl]
-  await chrome.storage.local.set({ [CAPTURED_URLS_KEY]: next.slice(-MAX_TRACKED_URLS) })
+async function setCapturedJob(jobUrl, entry) {
+  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
+  const next = { ...(jobs ?? {}), [jobUrl]: entry }
+  const keys = Object.keys(next)
+  if (keys.length > MAX_TRACKED_JOBS) {
+    // Object key order is insertion order for string keys, so the
+    // oldest-tracked jobs are simply the first N keys.
+    for (const key of keys.slice(0, keys.length - MAX_TRACKED_JOBS)) delete next[key]
+  }
+  await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
+}
+
+async function deleteCapturedJob(jobUrl) {
+  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
+  if (!jobs?.[jobUrl]) return
+  const next = { ...jobs }
+  delete next[jobUrl]
+  await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
 }
 
 function todayLocalIsoDate() {
@@ -172,15 +231,10 @@ function todayLocalIsoDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-async function captureAndSave(jobUrl) {
+function scrapedPayload(jobUrl) {
   const job = scrapeJob()
-  if (!job.company || !job.position) {
-    // Not enough scraped to satisfy the backend's required fields -
-    // skip rather than sending a request that's guaranteed to 422.
-    return
-  }
-
-  const payload = {
+  if (!job.company || !job.position) return null // guaranteed 422 otherwise
+  return {
     company: job.company,
     position: job.position,
     location: job.location,
@@ -189,9 +243,69 @@ async function captureAndSave(jobUrl) {
     job_url: jobUrl,
     notes: null,
     source: 'vietnamworks',
-    status: 'applied',
-    applied_date: todayLocalIsoDate(),
   }
+}
+
+async function handleSaveConfirmed(jobUrl) {
+  if (await getCapturedJob(jobUrl)) return // already tracked either way
+
+  const payload = scrapedPayload(jobUrl)
+  if (!payload) return
+
+  const result = await chrome.runtime.sendMessage({ type: 'CREATE_APPLICATION', payload })
+  if (!result.ok) {
+    showToast(`Couldn't save to LwkApply: ${result.error}`)
+    return
+  }
+
+  await setCapturedJob(jobUrl, { applicationId: result.application.id, status: 'saved' })
+  showToast('Saved to LwkApply', {
+    undoLabel: 'Undo',
+    onUndo: async () => {
+      await chrome.runtime.sendMessage({
+        type: 'DELETE_APPLICATION',
+        applicationId: result.application.id,
+      })
+      await deleteCapturedJob(jobUrl)
+    },
+  })
+}
+
+async function handleApplyConfirmed(jobUrl) {
+  const existing = await getCapturedJob(jobUrl)
+  if (existing?.status === 'applied') return // already recorded, don't double-fire
+
+  if (existing?.status === 'saved') {
+    const { applicationId } = existing
+    const result = await chrome.runtime.sendMessage({
+      type: 'UPDATE_APPLICATION',
+      applicationId,
+      updates: { status: 'applied', applied_date: todayLocalIsoDate() },
+    })
+    if (!result.ok) {
+      showToast(`Couldn't update LwkApply: ${result.error}`)
+      return
+    }
+    await setCapturedJob(jobUrl, { applicationId, status: 'applied' })
+    showToast('Marked as Applied on LwkApply', {
+      undoLabel: 'Undo',
+      onUndo: async () => {
+        await chrome.runtime.sendMessage({
+          type: 'UPDATE_APPLICATION',
+          applicationId,
+          updates: { status: 'saved', applied_date: null },
+        })
+        await setCapturedJob(jobUrl, { applicationId, status: 'saved' })
+      },
+    })
+    return
+  }
+
+  // No prior save on this job - create it directly as applied.
+  const payload = scrapedPayload(jobUrl)
+  if (!payload) return
+  payload.status = 'applied'
+  payload.applied_date = todayLocalIsoDate()
 
   const result = await chrome.runtime.sendMessage({ type: 'CREATE_APPLICATION', payload })
   if (!result.ok) {
@@ -199,34 +313,40 @@ async function captureAndSave(jobUrl) {
     return
   }
 
-  await markCaptured(jobUrl)
-  showToast('Saved to LwkApply', {
+  await setCapturedJob(jobUrl, { applicationId: result.application.id, status: 'applied' })
+  showToast('Saved to LwkApply as Applied', {
     undoLabel: 'Undo',
-    onUndo: () =>
-      chrome.runtime.sendMessage({
+    onUndo: async () => {
+      await chrome.runtime.sendMessage({
         type: 'DELETE_APPLICATION',
         applicationId: result.application.id,
-      }),
+      })
+      await deleteCapturedJob(jobUrl)
+    },
   })
 }
 
 document.addEventListener(
   'click',
   async (event) => {
-    if (!isApplyButton(event.target)) return
+    const isApply = isApplyButton(event.target)
+    const isSave = !isApply && isSaveButton(event.target)
+    if (!isApply && !isSave) return
+
+    const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' })
+    if (!authState?.loggedIn) return
 
     const jobUrl = window.location.href
-    const [authState, alreadyCaptured] = await Promise.all([
-      chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }),
-      isAlreadyCaptured(jobUrl),
-    ])
-    if (!authState?.loggedIn || alreadyCaptured) return
+    const clickedButton = event.target.closest('button,a')
+    const signals = isApply ? APPLY_SIGNALS : SAVE_SIGNALS
+    const confirmed = await watchForActionConfirmation(clickedButton, signals)
+    if (!confirmed) return
 
-    const clickedButton = event.target.closest(APPLY_BUTTON_SELECTOR) ?? event.target.closest('button,a')
-    const success = await watchForApplySuccess(clickedButton)
-    if (!success) return
-
-    await captureAndSave(jobUrl)
+    if (isApply) {
+      await handleApplyConfirmed(jobUrl)
+    } else {
+      await handleSaveConfirmed(jobUrl)
+    }
   },
   true, // capture phase, so this still observes the click even if the
   // page's own handler later calls stopPropagation()
