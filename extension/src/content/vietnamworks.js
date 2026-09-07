@@ -23,17 +23,39 @@ function readJobPostingJsonLd() {
   return null
 }
 
-// schema.org's BaseSalary can be a single numeric `value`, a
-// QuantitativeValue range (minValue/maxValue), or - as VietnamWorks does
-// for negotiable postings - a non-numeric string like "Thương lượng"
-// sitting in that same `value` slot. Only the numeric shapes map onto
-// our salary_min/salary_max.
+// schema.org's BaseSalary.value can be a plain number, a
+// QuantitativeValue range (minValue/maxValue), or a string. That string
+// case covers two very different things on VietnamWorks: "Thương
+// lượng" (negotiable - no digits at all, correctly null) and, verified
+// against a real listing ("Senior Web Developer - AI and Digital
+// Solutions", 2094252-jv), a pre-formatted range like
+// "$ 1,200-1,800 /tháng" that DOES carry real numbers, just not in a
+// numeric field. Pulling every digit run out of the string and taking
+// the min/max of them handles both a real range and a single figure
+// (e.g. "Up to $2,000") the same way, and naturally falls back to
+// null/null when there's nothing numeric in it at all.
+function parseSalaryFromString(text) {
+  const numbers = text.match(/\d[\d,.]*/g)
+  if (!numbers) return { salary_min: null, salary_max: null }
+
+  const parsed = numbers
+    .map((n) => Number(n.replace(/[,.]/g, '')))
+    .filter((n) => Number.isFinite(n) && n > 0)
+  if (parsed.length === 0) return { salary_min: null, salary_max: null }
+
+  return { salary_min: Math.min(...parsed), salary_max: Math.max(...parsed) }
+}
+
 function parseSalary(baseSalary) {
   const value = baseSalary?.value
   if (value == null) return { salary_min: null, salary_max: null }
 
   if (typeof value === 'number') {
     return { salary_min: value, salary_max: value }
+  }
+
+  if (typeof value === 'string') {
+    return parseSalaryFromString(value)
   }
 
   if (typeof value === 'object') {
@@ -45,9 +67,36 @@ function parseSalary(baseSalary) {
     if (typeof value.value === 'number') {
       return { salary_min: value.value, salary_max: value.value }
     }
+    if (typeof value.value === 'string') {
+      return parseSalaryFromString(value.value)
+    }
   }
 
   return { salary_min: null, salary_max: null }
+}
+
+// Mirrors backend/app/models/application.py::SalaryCurrency. Trusts
+// baseSalary.currency when it's one of these; otherwise omits the
+// field entirely from the scrape (see scrapedPayload) so the backend's
+// own USD default applies, rather than sending a value that would fail
+// ApplicationCreate's validation. Not independently verified against a
+// non-USD listing - every real posting checked so far reported "USD"
+// regardless of whether the displayed figure was USD or VND, so this
+// may be boilerplate on VietnamWorks' end rather than reliably accurate
+// for VND-denominated postings.
+const SALARY_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'CHF', 'SEK', 'NOK', 'DKK',
+  'ISK', 'PLN', 'CZK', 'HUF', 'RON', 'UAH', 'RUB', 'TRY', 'ILS', 'AED',
+  'SAR', 'EGP', 'NGN', 'KES', 'ZAR', 'INR', 'PKR', 'BDT', 'CNY', 'JPY',
+  'KRW', 'TWD', 'HKD', 'SGD', 'MYR', 'THB', 'VND', 'IDR', 'PHP', 'BRL',
+  'MXN', 'ARS', 'CLP', 'COP',
+])
+
+function parseSalaryCurrency(baseSalary) {
+  const currency = baseSalary?.currency
+  if (typeof currency !== 'string') return null
+  const upper = currency.toUpperCase()
+  return SALARY_CURRENCIES.has(upper) ? upper : null
 }
 
 function scrapeJob() {
@@ -62,6 +111,7 @@ function scrapeJob() {
         jobPosting.jobLocation?.address?.addressRegion ??
         null,
       ...parseSalary(jobPosting.baseSalary),
+      salary_currency: parseSalaryCurrency(jobPosting.baseSalary),
       job_url: window.location.href,
     }
   }
@@ -73,6 +123,7 @@ function scrapeJob() {
     company: null,
     position: document.querySelector('h1')?.innerText?.trim() ?? null,
     location: null,
+    salary_currency: null,
     salary_min: null,
     salary_max: null,
     job_url: window.location.href,
@@ -257,6 +308,10 @@ function scrapedPayload(jobUrl) {
     location: job.location,
     salary_min: job.salary_min,
     salary_max: job.salary_max,
+    // Omitted entirely when unknown rather than sent as null -
+    // ApplicationCreate's salary_currency has no None branch, it just
+    // defaults to USD when the key is absent.
+    ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
     job_url: jobUrl,
     notes: null,
     source: 'vietnamworks',

@@ -158,6 +158,10 @@ async function handleConfirmedSave(tabId) {
     location: job.location,
     salary_min: job.salary_min,
     salary_max: job.salary_max,
+    // Omitted entirely when unknown - ApplicationCreate's
+    // salary_currency has no None branch, it just defaults to USD when
+    // the key is absent.
+    ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
     job_url: job.job_url,
     notes: null,
     source: 'vietnamworks',
@@ -240,6 +244,7 @@ async function handleConfirmedUnsave(tabId) {
         location: job.location,
         salary_min: job.salary_min,
         salary_max: job.salary_max,
+        ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
         job_url: job.job_url,
         notes: null,
         source: 'vietnamworks',
