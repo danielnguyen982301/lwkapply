@@ -19,6 +19,7 @@ class ApplicationDraft {
     required this.status,
     required this.salaryMin,
     required this.salaryMax,
+    required this.salaryCurrency,
     required this.appliedDate,
     required this.jobUrl,
     required this.notes,
@@ -31,6 +32,7 @@ class ApplicationDraft {
   final ApplicationStatus status;
   final int? salaryMin;
   final int? salaryMax;
+  final SalaryCurrency salaryCurrency;
   final DateTime? appliedDate;
   final String? jobUrl;
   final String? notes;
@@ -43,6 +45,7 @@ class ApplicationDraft {
         'status': status.apiValue,
         'salary_min': salaryMin,
         'salary_max': salaryMax,
+        'salary_currency': salaryCurrency.apiValue,
         // Backend's `applied_date` is a plain `date`, not a `datetime` — send
         // only the date portion (YYYY-MM-DD), not a full ISO timestamp.
         'applied_date': appliedDate == null ? null : _dateOnly(appliedDate!),

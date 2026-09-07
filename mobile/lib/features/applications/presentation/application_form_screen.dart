@@ -89,6 +89,11 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
 
   bool _isDeleting = false;
 
+  // Drives the salary min/max fields' suffix so it updates live as the
+  // currency dropdown changes, without needing the two salary
+  // FormBuilderTextFields to be rebuilt through form state plumbing.
+  SalaryCurrency _selectedCurrency = SalaryCurrency.usd;
+
   @override
   void initState() {
     super.initState();
@@ -124,6 +129,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
       if (!mounted) return;
       setState(() {
         _existing = application;
+        _selectedCurrency = application.salaryCurrency;
         _loadStatus = _LoadStatus.idle;
       });
     } on ApplicationsException catch (e) {
@@ -164,6 +170,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
       status: values['status'] as ApplicationStatus,
       salaryMin: salaryMin,
       salaryMax: salaryMax,
+      salaryCurrency: values['salaryCurrency'] as SalaryCurrency,
       appliedDate: values['appliedDate'] as DateTime?,
       jobUrl: values['jobUrl'] as String?,
       notes: values['notes'] as String?,
@@ -430,6 +437,22 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
               ],
             ),
             const SizedBox(height: 16),
+            FormBuilderDropdown<SalaryCurrency>(
+              name: 'salaryCurrency',
+              initialValue: _existing?.salaryCurrency ?? SalaryCurrency.usd,
+              decoration: const InputDecoration(labelText: 'Currency'),
+              onChanged: (value) => setState(
+                () => _selectedCurrency = value ?? SalaryCurrency.usd,
+              ),
+              items: [
+                for (final currency in SalaryCurrency.values)
+                  DropdownMenuItem(
+                    value: currency,
+                    child: Text('${currency.apiValue} — ${currency.label}'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -437,9 +460,9 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
                   child: FormBuilderTextField(
                     name: 'salaryMin',
                     initialValue: _existing?.salaryMin?.toString(),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Min salary',
-                      prefixText: '\$ ',
+                      suffixText: ' ${_selectedCurrency.symbol}',
                     ),
                     keyboardType: TextInputType.number,
                     valueTransformer: (text) =>
@@ -454,9 +477,9 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
                   child: FormBuilderTextField(
                     name: 'salaryMax',
                     initialValue: _existing?.salaryMax?.toString(),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Max salary',
-                      prefixText: '\$ ',
+                      suffixText: ' ${_selectedCurrency.symbol}',
                     ),
                     keyboardType: TextInputType.number,
                     valueTransformer: (text) =>
