@@ -1,7 +1,10 @@
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
+  SALARY_CURRENCIES,
+  SALARY_CURRENCY_LABELS,
   type ApplicationStatus,
+  type SalaryCurrency,
 } from '@/types/application'
 
 /** PrimeVue Tag severities for each application status. */
@@ -50,4 +53,16 @@ export function applicationStatusFilterOptions(): StatusFilterOption[] {
       value: status,
     })),
   ]
+}
+
+export interface CurrencyOption {
+  label: string
+  value: SalaryCurrency
+}
+
+export function salaryCurrencyOptions(): CurrencyOption[] {
+  return SALARY_CURRENCIES.map((currency) => ({
+    label: `${currency} — ${SALARY_CURRENCY_LABELS[currency]}`,
+    value: currency,
+  }))
 }

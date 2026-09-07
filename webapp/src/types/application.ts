@@ -36,6 +36,200 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   withdrawn: 'Withdrawn',
 }
 
+// Mirrors backend/app/models/application.py::SalaryCurrency. A curated set
+// of major job-market currencies, not the full ISO 4217 list — extend here
+// (and in the backend enum + migration) if a currency outside this set
+// shows up on a job.
+export type SalaryCurrency =
+  | 'USD'
+  | 'EUR'
+  | 'GBP'
+  | 'CAD'
+  | 'AUD'
+  | 'NZD'
+  | 'CHF'
+  | 'SEK'
+  | 'NOK'
+  | 'DKK'
+  | 'ISK'
+  | 'PLN'
+  | 'CZK'
+  | 'HUF'
+  | 'RON'
+  | 'UAH'
+  | 'RUB'
+  | 'TRY'
+  | 'ILS'
+  | 'AED'
+  | 'SAR'
+  | 'EGP'
+  | 'NGN'
+  | 'KES'
+  | 'ZAR'
+  | 'INR'
+  | 'PKR'
+  | 'BDT'
+  | 'CNY'
+  | 'JPY'
+  | 'KRW'
+  | 'TWD'
+  | 'HKD'
+  | 'SGD'
+  | 'MYR'
+  | 'THB'
+  | 'VND'
+  | 'IDR'
+  | 'PHP'
+  | 'BRL'
+  | 'MXN'
+  | 'ARS'
+  | 'CLP'
+  | 'COP'
+
+export const SALARY_CURRENCIES: readonly SalaryCurrency[] = [
+  'USD',
+  'EUR',
+  'GBP',
+  'CAD',
+  'AUD',
+  'NZD',
+  'CHF',
+  'SEK',
+  'NOK',
+  'DKK',
+  'ISK',
+  'PLN',
+  'CZK',
+  'HUF',
+  'RON',
+  'UAH',
+  'RUB',
+  'TRY',
+  'ILS',
+  'AED',
+  'SAR',
+  'EGP',
+  'NGN',
+  'KES',
+  'ZAR',
+  'INR',
+  'PKR',
+  'BDT',
+  'CNY',
+  'JPY',
+  'KRW',
+  'TWD',
+  'HKD',
+  'SGD',
+  'MYR',
+  'THB',
+  'VND',
+  'IDR',
+  'PHP',
+  'BRL',
+  'MXN',
+  'ARS',
+  'CLP',
+  'COP',
+]
+
+export const SALARY_CURRENCY_LABELS: Record<SalaryCurrency, string> = {
+  USD: 'US Dollar',
+  EUR: 'Euro',
+  GBP: 'British Pound',
+  CAD: 'Canadian Dollar',
+  AUD: 'Australian Dollar',
+  NZD: 'New Zealand Dollar',
+  CHF: 'Swiss Franc',
+  SEK: 'Swedish Krona',
+  NOK: 'Norwegian Krone',
+  DKK: 'Danish Krone',
+  ISK: 'Icelandic Krona',
+  PLN: 'Polish Zloty',
+  CZK: 'Czech Koruna',
+  HUF: 'Hungarian Forint',
+  RON: 'Romanian Leu',
+  UAH: 'Ukrainian Hryvnia',
+  RUB: 'Russian Ruble',
+  TRY: 'Turkish Lira',
+  ILS: 'Israeli Shekel',
+  AED: 'UAE Dirham',
+  SAR: 'Saudi Riyal',
+  EGP: 'Egyptian Pound',
+  NGN: 'Nigerian Naira',
+  KES: 'Kenyan Shilling',
+  ZAR: 'South African Rand',
+  INR: 'Indian Rupee',
+  PKR: 'Pakistani Rupee',
+  BDT: 'Bangladeshi Taka',
+  CNY: 'Chinese Yuan',
+  JPY: 'Japanese Yen',
+  KRW: 'South Korean Won',
+  TWD: 'Taiwan Dollar',
+  HKD: 'Hong Kong Dollar',
+  SGD: 'Singapore Dollar',
+  MYR: 'Malaysian Ringgit',
+  THB: 'Thai Baht',
+  VND: 'Vietnamese Dong',
+  IDR: 'Indonesian Rupiah',
+  PHP: 'Philippine Peso',
+  BRL: 'Brazilian Real',
+  MXN: 'Mexican Peso',
+  ARS: 'Argentine Peso',
+  CLP: 'Chilean Peso',
+  COP: 'Colombian Peso',
+}
+
+// Symbol shown alongside salary_min/salary_max in the application form —
+// not necessarily the symbol used in-country, but the one job seekers
+// scanning a salary figure will recognize fastest.
+export const SALARY_CURRENCY_SYMBOLS: Record<SalaryCurrency, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  CAD: 'C$',
+  AUD: 'A$',
+  NZD: 'NZ$',
+  CHF: 'CHF',
+  SEK: 'kr',
+  NOK: 'kr',
+  DKK: 'kr',
+  ISK: 'kr',
+  PLN: 'zł',
+  CZK: 'Kč',
+  HUF: 'Ft',
+  RON: 'lei',
+  UAH: '₴',
+  RUB: '₽',
+  TRY: '₺',
+  ILS: '₪',
+  AED: 'AED',
+  SAR: 'SAR',
+  EGP: 'E£',
+  NGN: '₦',
+  KES: 'KSh',
+  ZAR: 'R',
+  INR: '₹',
+  PKR: '₨',
+  BDT: '৳',
+  CNY: 'CN¥',
+  JPY: '¥',
+  KRW: '₩',
+  TWD: 'NT$',
+  HKD: 'HK$',
+  SGD: 'S$',
+  MYR: 'RM',
+  THB: '฿',
+  VND: '₫',
+  IDR: 'Rp',
+  PHP: '₱',
+  BRL: 'R$',
+  MXN: 'MX$',
+  ARS: 'AR$',
+  CLP: 'CL$',
+  COP: 'CO$',
+}
+
 // Mirrors ApplicationRead (backend/app/schemas/application.py).
 export interface Application {
   id: string
@@ -49,6 +243,7 @@ export interface Application {
   status: ApplicationStatus
   salary_min: number | null
   salary_max: number | null
+  salary_currency: SalaryCurrency
   /** ISO date string, e.g. "2026-07-16" (backend `date`, not `datetime`). */
   applied_date: string | null
   job_url: string | null
@@ -92,6 +287,7 @@ export interface ApplicationCreatePayload {
   status?: ApplicationStatus
   salary_min?: number | null
   salary_max?: number | null
+  salary_currency?: SalaryCurrency
   applied_date?: string | null
   job_url?: string | null
   notes?: string | null
