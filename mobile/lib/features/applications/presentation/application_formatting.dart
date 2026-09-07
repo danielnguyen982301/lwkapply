@@ -1,18 +1,19 @@
 import 'package:intl/intl.dart';
 
+import '../domain/application.dart';
+
 /// Mirrors ApplicationListView.vue's `formatSalary`/`formatDate` helpers.
 ///
 /// `formatDate` now uses `intl`'s `DateFormat` rather than a hand-rolled
 /// month-name table — see interview_formatting.dart's doc comment for
 /// the same switch and the reasoning (locale-aware output, one fewer
-/// hand-maintained table). `formatSalary` is untouched: it's a currency
-/// string, not a date, and out of scope for this change.
+/// hand-maintained table).
 
 final _dateFormat = DateFormat('MMM d, y');
 
-String formatSalary(int? min, int? max) {
+String formatSalary(int? min, int? max, SalaryCurrency currency) {
   if (min == null && max == null) return '—';
-  String fmt(int n) => '\$${_withThousandsSeparator(n)}';
+  String fmt(int n) => '${_withThousandsSeparator(n)} ${currency.symbol}';
   if (min != null && max != null) {
     return min == max ? fmt(min) : '${fmt(min)} – ${fmt(max)}';
   }

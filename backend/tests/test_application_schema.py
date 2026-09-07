@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.models.application import ApplicationStatus
+from app.models.application import ApplicationStatus, SalaryCurrency
 from app.schemas.application import ApplicationCreate, ApplicationUpdate
 
 
@@ -66,6 +66,18 @@ class TestRequiredFields:
     def test_default_status_is_saved(self):
         app = ApplicationCreate(**_base_payload())
         assert app.status == ApplicationStatus.SAVED
+
+    def test_default_salary_currency_is_usd(self):
+        app = ApplicationCreate(**_base_payload())
+        assert app.salary_currency == SalaryCurrency.USD
+
+    def test_salary_currency_can_be_overridden(self):
+        app = ApplicationCreate(**_base_payload(salary_currency="EUR"))
+        assert app.salary_currency == SalaryCurrency.EUR
+
+    def test_invalid_salary_currency_is_rejected(self):
+        with pytest.raises(ValidationError):
+            ApplicationCreate(**_base_payload(salary_currency="XYZ"))
 
 
 class TestApplicationUpdateSalaryValidation:

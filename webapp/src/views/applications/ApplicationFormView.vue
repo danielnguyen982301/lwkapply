@@ -12,7 +12,7 @@ import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 
 import { useApplicationsStore } from '@/stores/applications'
-import { applicationStatusOptions } from '@/lib/application-ui'
+import { applicationStatusOptions, salaryCurrencyOptions } from '@/lib/application-ui'
 import { formatJSDate } from '@/lib/date-utils'
 import { tooltip } from '@/lib/tooltip'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
@@ -20,9 +20,12 @@ import InterviewsPanel from '@/components/applications/InterviewsPanel.vue'
 import DocumentsPanel from '@/components/applications/DocumentsPanel.vue'
 import {
   APPLICATION_STATUSES,
+  SALARY_CURRENCIES,
+  SALARY_CURRENCY_SYMBOLS,
   type Application,
   type ApplicationCreatePayload,
   type ApplicationStatus,
+  type SalaryCurrency,
 } from '@/types/application'
 import CustomInputText from '@/components/custom_form_fields/CustomInputText.vue'
 import CustomSelect from '@/components/custom_form_fields/CustomSelect.vue'
@@ -36,6 +39,7 @@ const store = useApplicationsStore()
 const confirm = useConfirm()
 
 const statusOptions = applicationStatusOptions()
+const currencyOptions = salaryCurrencyOptions()
 
 const isNew = computed(() => route.name === 'application-new')
 const applicationId = computed(() => (isNew.value ? null : String(route.params.id)))
@@ -48,6 +52,7 @@ interface FormValues {
   status: ApplicationStatus
   salary_min: number | null
   salary_max: number | null
+  salary_currency: SalaryCurrency
   applied_date: Date | null
   job_url: string
   notes: string
@@ -62,6 +67,7 @@ function blankForm(): FormValues {
     status: 'saved',
     salary_min: null,
     salary_max: null,
+    salary_currency: 'USD',
     applied_date: null,
     job_url: '',
     notes: '',
@@ -77,6 +83,7 @@ function populateForm(app: Application): FormValues {
     status: app.status,
     salary_min: app.salary_min,
     salary_max: app.salary_max,
+    salary_currency: app.salary_currency,
     applied_date: app.applied_date ? DateTime.fromISO(app.applied_date).toJSDate() : null,
     job_url: app.job_url ?? '',
     notes: app.notes ?? '',
@@ -93,6 +100,7 @@ const schema = toTypedSchema(
       status: z.enum(APPLICATION_STATUSES as [ApplicationStatus, ...ApplicationStatus[]]),
       salary_min: z.number().nullable(),
       salary_max: z.number().nullable(),
+      salary_currency: z.enum(SALARY_CURRENCIES as [SalaryCurrency, ...SalaryCurrency[]]),
       applied_date: z.date().nullable(),
       job_url: z.string().trim().optional().default(''),
       notes: z.string().trim().optional().default(''),
@@ -108,6 +116,8 @@ const { values, handleSubmit, errors, meta, resetForm } = useForm<FormValues>({
   validationSchema: schema,
   initialValues: { ...blankForm() },
 })
+
+const salarySuffix = computed(() => ` ${SALARY_CURRENCY_SYMBOLS[values.salary_currency]}`)
 
 async function loadApplication(id: string) {
   try {
@@ -128,6 +138,7 @@ function buildPayload(values: FormValues): ApplicationCreatePayload {
     status: values.status,
     salary_min: values.salary_min,
     salary_max: values.salary_max,
+    salary_currency: values.salary_currency,
     applied_date: values.applied_date ? formatJSDate(values.applied_date, 'yyyy-MM-dd') : null,
     job_url: values.job_url || null,
     notes: values.notes || null,
@@ -293,28 +304,49 @@ watch(
               />
             </div>
 
-            <div class="flex flex-col gap-1">
-              <label for="salary_min" class="text-sm font-medium text-ink">Salary min</label>
-              <CustomInputNumber
-                name="salary_min"
-                input-id="salary_min"
-                :min="0"
-                :invalid="!!errors.salary_min"
-                :aria-describedby="!!errors.salary_min ? 'salary-min-error' : undefined"
-                class="w-full"
-              />
-            </div>
+            <div class="flex flex-col gap-3 rounded-card border border-slate/15 p-3 sm:col-span-2">
+              <span class="text-sm font-medium text-ink">Salary</span>
 
-            <div class="flex flex-col gap-1">
-              <label for="salary_max" class="text-sm font-medium text-ink">Salary max</label>
-              <CustomInputNumber
-                name="salary_max"
-                input-id="salary_max"
-                :min="0"
-                :invalid="!!errors.salary_max"
-                :aria-describedby="!!errors.salary_max ? 'salary-max-error' : undefined"
-                class="w-full"
-              />
+              <div class="flex flex-col gap-1">
+                <label for="salary_currency" class="text-xs text-slate">Currency</label>
+                <CustomSelect
+                  name="salary_currency"
+                  input-id="salary_currency"
+                  :options="currencyOptions"
+                  option-label="label"
+                  option-value="value"
+                  filter
+                  class="w-full"
+                />
+              </div>
+
+              <div class="flex gap-3">
+                <div class="flex flex-1 flex-col gap-1">
+                  <label for="salary_min" class="text-xs text-slate">Min</label>
+                  <CustomInputNumber
+                    name="salary_min"
+                    input-id="salary_min"
+                    :min="0"
+                    :suffix="salarySuffix"
+                    :invalid="!!errors.salary_min"
+                    :aria-describedby="!!errors.salary_min ? 'salary-min-error' : undefined"
+                    class="w-full"
+                  />
+                </div>
+
+                <div class="flex flex-1 flex-col gap-1">
+                  <label for="salary_max" class="text-xs text-slate">Max</label>
+                  <CustomInputNumber
+                    name="salary_max"
+                    input-id="salary_max"
+                    :min="0"
+                    :suffix="salarySuffix"
+                    :invalid="!!errors.salary_max"
+                    :aria-describedby="!!errors.salary_max ? 'salary-max-error' : undefined"
+                    class="w-full"
+                  />
+                </div>
+              </div>
             </div>
 
             <div class="flex flex-col gap-1">

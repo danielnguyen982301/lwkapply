@@ -401,6 +401,7 @@ class _ApplicationCard extends StatelessWidget {
                     formatSalary(
                       application.salaryMin,
                       application.salaryMax,
+                      application.salaryCurrency,
                     ),
                     style: theme.textTheme.bodySmall,
                   ),

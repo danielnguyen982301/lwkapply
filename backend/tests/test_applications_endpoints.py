@@ -73,6 +73,7 @@ class TestCreateApplication:
         assert body["company"] == "Initech"
         assert body["position"] == "Backend Engineer"
         assert body["status"] == "saved"
+        assert body["salary_currency"] == "USD"
         assert body["user_id"] == str(user.id)
         assert body["application_name"] is None
         assert "id" in body
@@ -125,6 +126,33 @@ class TestCreateApplication:
                 "position": "Backend Engineer",
                 "salary_min": 150_000,
                 "salary_max": 100_000,
+            },
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+
+    def test_salary_currency_round_trips(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "salary_currency": "EUR",
+            },
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 201
+        assert response.json()["salary_currency"] == "EUR"
+
+    def test_invalid_salary_currency_is_rejected(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "salary_currency": "not-a-real-currency",
             },
             headers=auth_headers(user),
         )
@@ -328,6 +356,19 @@ class TestUpdateApplication:
 
         assert response.status_code == 200
         assert response.json()["application_name"] == "Second attempt"
+
+    def test_updates_salary_currency(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        application = _make_application(db_session, user)
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/{application.id}",
+            json={"salary_currency": "GBP"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["salary_currency"] == "GBP"
 
     def test_invalid_status_is_rejected(
         self, client, db_session, make_user, auth_headers
