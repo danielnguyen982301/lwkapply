@@ -82,38 +82,52 @@ function scrapeJob() {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'SCRAPE_JOB') {
     sendResponse({ ok: true, job: scrapeJob() })
+    return false
+  }
+  if (message.type === 'AUTO_SAVE_RESULT') {
+    handleAutoSaveResult(message)
+    return false
   }
   return false
 })
+
+function handleAutoSaveResult(message) {
+  if (!message.ok) {
+    showToast(`Couldn't save to LwkApply: ${message.error}`)
+    return
+  }
+  showToast(message.message, {
+    undoLabel: 'Undo',
+    onUndo: async () => {
+      await chrome.runtime.sendMessage({
+        type: 'DELETE_APPLICATION',
+        applicationId: message.applicationId,
+      })
+      await deleteCapturedJob(message.jobUrl)
+    },
+  })
+}
 
 // --- Auto-save on "Lưu công việc này" (Save) / "Nộp đơn" (Apply) ------
 //
 // Two independent triggers, tracked against the same job so they don't
 // create duplicate LwkApply entries for one posting:
-//   - Save button click -> confirmed  => create as status "saved"
-//   - Apply button click -> confirmed => if this job was already saved,
+//   - Save button click, confirmed => create as status "saved"
+//   - Apply button click, confirmed => if this job was already saved,
 //     PATCH that row to "applied" + today's date instead of creating a
 //     second one; otherwise create directly as "applied" (the existing
 //     behavior for a bare apply with no prior save).
 //
-// IMPORTANT CALIBRATION NOTE: both button selectors below are real
-// (read from a live posting on 2026-09-06 - Apply is a visible-text
-// button with class "apply-btn", Save is an icon-only button identified
-// by aria-label="Lưu công việc này"), but what happens *after* a
-// successful click is not verified - that needs a real, logged-in
-// VietnamWorks account submitting/saving for real, which wasn't
-// available to test against. So rather than guess at their internal
-// API, both SAVE_SIGNALS/APPLY_SIGNALS below watch the *page* for a
-// plausible completion signal: the clicked button's aria-label or
-// disabled state changing, or new text matching a "success" pattern
-// appearing nearby. Confirmed already: clicking Save while logged out
-// of VietnamWorks (not LwkApply - their own session) opens a login
-// modal rather than saving - neither pattern matches that modal's text,
-// so it correctly won't false-positive, but the real post-login success
-// state is still a guess. Try both buttons on a real posting and tell
-// me what actually happens (does the icon/aria-label change? does a
-// toast appear? what does devtools' Network tab show?) so detection can
-// be tightened.
+// Save is confirmed via a real network signal (see background.js's
+// webRequest listener): clicking "Lưu công việc này" was verified to
+// fire POST https://ms.vietnamworks.com/api-gateway/v1.0/save-job, so
+// this scrapes eagerly and hands off to the background service worker
+// (ARM_SAVE_WATCH) *before* that request completes, rather than
+// guessing at page text. Apply has no verified network endpoint yet, so
+// it still falls back to the DOM heuristic below - CALIBRATION NOTE:
+// APPLY_SIGNALS watches the clicked button's aria-label/disabled state
+// and nearby added text for a plausible completion signal, but what a
+// real successful apply actually looks like on-page is unverified.
 const APPLY_BUTTON_SELECTOR = '.apply-btn'
 const APPLY_INTENT_PATTERN = /nộp đơn|ứng tuyển/i
 const SAVE_ARIA_PATTERN = /lưu công việc/i
@@ -125,11 +139,6 @@ const APPLY_SIGNALS = {
   successTextPattern:
     /(ứng tuyển|nộp (đơn|hồ sơ)).{0,20}thành công|đã ứng tuyển|đã nộp đơn/i,
   ariaChangePattern: /đã ứng tuyển|đã nộp đơn/i,
-}
-
-const SAVE_SIGNALS = {
-  successTextPattern: /đã lưu (công việc|tin)|lưu (tin|việc làm) thành công/i,
-  ariaChangePattern: /bỏ lưu|đã lưu|hủy lưu/i,
 }
 
 function isApplyButton(target) {
@@ -246,29 +255,18 @@ function scrapedPayload(jobUrl) {
   }
 }
 
-async function handleSaveConfirmed(jobUrl) {
+// No DOM wait here - background.js's webRequest listener is what
+// actually confirms the save (see ARM_SAVE_WATCH) and reports back via
+// an AUTO_SAVE_RESULT message (handleAutoSaveResult above), since
+// there's nothing left worth polling the page for once a real network
+// signal is available.
+async function handleSaveClick(jobUrl) {
   if (await getCapturedJob(jobUrl)) return // already tracked either way
 
   const payload = scrapedPayload(jobUrl)
   if (!payload) return
 
-  const result = await chrome.runtime.sendMessage({ type: 'CREATE_APPLICATION', payload })
-  if (!result.ok) {
-    showToast(`Couldn't save to LwkApply: ${result.error}`)
-    return
-  }
-
-  await setCapturedJob(jobUrl, { applicationId: result.application.id, status: 'saved' })
-  showToast('Saved to LwkApply', {
-    undoLabel: 'Undo',
-    onUndo: async () => {
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_APPLICATION',
-        applicationId: result.application.id,
-      })
-      await deleteCapturedJob(jobUrl)
-    },
-  })
+  await chrome.runtime.sendMessage({ type: 'ARM_SAVE_WATCH', payload })
 }
 
 async function handleApplyConfirmed(jobUrl) {
@@ -333,20 +331,26 @@ document.addEventListener(
     const isSave = !isApply && isSaveButton(event.target)
     if (!isApply && !isSave) return
 
+    // Cheap, synchronous guard before any async work: a save/apply-like
+    // click on a search-results or list page (each job card can carry
+    // its own mini save icon) has no single JobPosting to scrape here -
+    // skip rather than risk capturing the wrong job's data.
+    if (!readJobPostingJsonLd()) return
+
     const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' })
     if (!authState?.loggedIn) return
 
     const jobUrl = window.location.href
-    const clickedButton = event.target.closest('button,a')
-    const signals = isApply ? APPLY_SIGNALS : SAVE_SIGNALS
-    const confirmed = await watchForActionConfirmation(clickedButton, signals)
-    if (!confirmed) return
 
-    if (isApply) {
-      await handleApplyConfirmed(jobUrl)
-    } else {
-      await handleSaveConfirmed(jobUrl)
+    if (isSave) {
+      await handleSaveClick(jobUrl)
+      return
     }
+
+    const clickedButton = event.target.closest('button,a')
+    const confirmed = await watchForActionConfirmation(clickedButton, APPLY_SIGNALS)
+    if (!confirmed) return
+    await handleApplyConfirmed(jobUrl)
   },
   true, // capture phase, so this still observes the click even if the
   // page's own handler later calls stopPropagation()

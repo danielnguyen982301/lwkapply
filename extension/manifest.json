@@ -3,7 +3,7 @@
   "name": "LwkApply Quick Capture",
   "version": "0.1.0",
   "description": "Save a job posting to your LwkApply tracker without retyping it.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "webRequest"],
   "host_permissions": [
     "http://localhost:8000/*",
     "https://*.vietnamworks.com/*"
