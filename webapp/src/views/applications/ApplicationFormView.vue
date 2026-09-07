@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DateTime } from 'luxon'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import Button from 'primevue/button'
@@ -12,7 +12,11 @@ import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 
 import { useApplicationsStore } from '@/stores/applications'
-import { applicationStatusOptions, salaryCurrencyOptions } from '@/lib/application-ui'
+import {
+  applicationSourceLabel,
+  applicationStatusOptions,
+  salaryCurrencyOptions,
+} from '@/lib/application-ui'
 import { formatJSDate } from '@/lib/date-utils'
 import { tooltip } from '@/lib/tooltip'
 import ContactsPanel from '@/components/applications/ContactsPanel.vue'
@@ -119,10 +123,21 @@ const { values, handleSubmit, errors, meta, resetForm } = useForm<FormValues>({
 
 const salarySuffix = computed(() => ` ${SALARY_CURRENCY_SYMBOLS[values.salary_currency]}`)
 
+// Not part of FormValues/the update payload - source is immutable
+// after creation (see types/application.ts), this is display-only, to
+// lock the Job URL field for a row a browser extension is syncing.
+// Manual applications (source null) are unaffected.
+const applicationSource = ref<string | null>(null)
+const isSyncedFromExternalSource = computed(() => applicationSource.value != null)
+const syncedSourceLabel = computed(() =>
+  applicationSource.value ? applicationSourceLabel(applicationSource.value) : '',
+)
+
 async function loadApplication(id: string) {
   try {
     const app = await store.fetchApplication(id)
 
+    applicationSource.value = app.source
     resetForm({ values: { ...populateForm(app) } })
   } catch {
     // store.currentError is already set and rendered below.
@@ -368,8 +383,17 @@ watch(
                 name="job_url"
                 type="url"
                 placeholder="https://…"
+                :disabled="isSyncedFromExternalSource"
                 class="w-full"
               />
+              <Message
+                v-if="isSyncedFromExternalSource"
+                severity="secondary"
+                variant="simple"
+                size="small"
+              >
+                Synced from {{ syncedSourceLabel }}
+              </Message>
             </div>
           </div>
 

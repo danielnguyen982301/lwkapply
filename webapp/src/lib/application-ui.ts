@@ -66,3 +66,16 @@ export function salaryCurrencyOptions(): CurrencyOption[] {
     value: currency,
   }))
 }
+
+// Application.source is deliberately a free-form string (see its
+// docstring in types/application.ts) so a new site never needs a
+// migration - this only supplies a nicer display name for the ones
+// we know about, falling back to a simple capitalization for anything
+// else rather than requiring every new source to be added here too.
+const APPLICATION_SOURCE_LABELS: Record<string, string> = {
+  vietnamworks: 'VietnamWorks',
+}
+
+export function applicationSourceLabel(source: string): string {
+  return APPLICATION_SOURCE_LABELS[source] ?? source.charAt(0).toUpperCase() + source.slice(1)
+}
