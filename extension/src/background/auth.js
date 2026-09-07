@@ -1,4 +1,5 @@
 import { API_BASE_URL, CLIENT_PLATFORM_HEADER } from './config.js'
+import { parseJsonSafe, firstErrorMessage } from './http.js'
 
 const STORAGE_KEY = 'lwkapply_auth'
 
@@ -15,21 +16,18 @@ async function clearStoredAuth() {
   await chrome.storage.local.remove(STORAGE_KEY)
 }
 
-function firstErrorMessage(body, fallback) {
-  if (typeof body?.detail === 'string') return body.detail
-  if (Array.isArray(body?.detail) && body.detail[0]?.msg) return body.detail[0].msg
-  return fallback
-}
-
 export async function login(email, password) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...CLIENT_PLATFORM_HEADER },
     body: JSON.stringify({ email, password }),
   })
-  const body = await response.json()
+  const body = await parseJsonSafe(response)
   if (!response.ok) {
     throw new Error(firstErrorMessage(body, 'Incorrect email or password'))
+  }
+  if (!body) {
+    throw new Error('Unexpected response from server.')
   }
   await setStoredAuth({
     accessToken: body.access_token,
@@ -51,8 +49,8 @@ async function refresh() {
     headers: { 'Content-Type': 'application/json', ...CLIENT_PLATFORM_HEADER },
     body: JSON.stringify({ refresh_token: auth.refreshToken }),
   })
-  const body = await response.json()
-  if (!response.ok) {
+  const body = await parseJsonSafe(response)
+  if (!response.ok || !body) {
     await clearStoredAuth()
     throw new Error('Session expired - please log in again')
   }

@@ -1,4 +1,5 @@
 import * as auth from './auth.js'
+import { parseJsonSafe, firstErrorMessage } from './http.js'
 
 // Popup (and, in future, an injected page button) talk to the API only
 // through this router - neither the popup nor the content script ever
@@ -29,9 +30,12 @@ async function handleMessage(message) {
         method: 'POST',
         body: JSON.stringify(message.payload),
       })
-      const body = await response.json()
+      const body = await parseJsonSafe(response)
       if (!response.ok) {
         return { ok: false, error: firstErrorMessage(body) }
+      }
+      if (!body) {
+        return { ok: false, error: 'Unexpected response from server.' }
       }
       return { ok: true, application: body }
     }
@@ -39,10 +43,4 @@ async function handleMessage(message) {
     default:
       return { ok: false, error: `Unknown message type: ${message.type}` }
   }
-}
-
-function firstErrorMessage(body) {
-  if (typeof body?.detail === 'string') return body.detail
-  if (Array.isArray(body?.detail) && body.detail[0]?.msg) return body.detail[0].msg
-  return 'Something went wrong. Please try again.'
 }
