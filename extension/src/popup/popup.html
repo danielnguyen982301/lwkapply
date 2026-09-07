@@ -48,6 +48,56 @@
         <label for="field-location">Location</label>
         <input type="text" id="field-location" />
 
+        <label for="field-salary-currency">Currency</label>
+        <!-- Mirrors backend/app/models/application.py::SalaryCurrency -
+             keep in sync if that enum changes. -->
+        <select id="field-salary-currency">
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="CAD">CAD</option>
+          <option value="AUD">AUD</option>
+          <option value="NZD">NZD</option>
+          <option value="CHF">CHF</option>
+          <option value="SEK">SEK</option>
+          <option value="NOK">NOK</option>
+          <option value="DKK">DKK</option>
+          <option value="ISK">ISK</option>
+          <option value="PLN">PLN</option>
+          <option value="CZK">CZK</option>
+          <option value="HUF">HUF</option>
+          <option value="RON">RON</option>
+          <option value="UAH">UAH</option>
+          <option value="RUB">RUB</option>
+          <option value="TRY">TRY</option>
+          <option value="ILS">ILS</option>
+          <option value="AED">AED</option>
+          <option value="SAR">SAR</option>
+          <option value="EGP">EGP</option>
+          <option value="NGN">NGN</option>
+          <option value="KES">KES</option>
+          <option value="ZAR">ZAR</option>
+          <option value="INR">INR</option>
+          <option value="PKR">PKR</option>
+          <option value="BDT">BDT</option>
+          <option value="CNY">CNY</option>
+          <option value="JPY">JPY</option>
+          <option value="KRW">KRW</option>
+          <option value="TWD">TWD</option>
+          <option value="HKD">HKD</option>
+          <option value="SGD">SGD</option>
+          <option value="MYR">MYR</option>
+          <option value="THB">THB</option>
+          <option value="VND">VND</option>
+          <option value="IDR">IDR</option>
+          <option value="PHP">PHP</option>
+          <option value="BRL">BRL</option>
+          <option value="MXN">MXN</option>
+          <option value="ARS">ARS</option>
+          <option value="CLP">CLP</option>
+          <option value="COP">COP</option>
+        </select>
+
         <div class="salary-row">
           <div>
             <label for="field-salary-min">Salary min</label>
@@ -56,57 +106,6 @@
           <div>
             <label for="field-salary-max">Salary max</label>
             <input type="number" id="field-salary-max" min="0" />
-          </div>
-          <div class="currency-field">
-            <label for="field-salary-currency">Currency</label>
-            <!-- Mirrors backend/app/models/application.py::SalaryCurrency -
-                 keep in sync if that enum changes. -->
-            <select id="field-salary-currency">
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="CAD">CAD</option>
-              <option value="AUD">AUD</option>
-              <option value="NZD">NZD</option>
-              <option value="CHF">CHF</option>
-              <option value="SEK">SEK</option>
-              <option value="NOK">NOK</option>
-              <option value="DKK">DKK</option>
-              <option value="ISK">ISK</option>
-              <option value="PLN">PLN</option>
-              <option value="CZK">CZK</option>
-              <option value="HUF">HUF</option>
-              <option value="RON">RON</option>
-              <option value="UAH">UAH</option>
-              <option value="RUB">RUB</option>
-              <option value="TRY">TRY</option>
-              <option value="ILS">ILS</option>
-              <option value="AED">AED</option>
-              <option value="SAR">SAR</option>
-              <option value="EGP">EGP</option>
-              <option value="NGN">NGN</option>
-              <option value="KES">KES</option>
-              <option value="ZAR">ZAR</option>
-              <option value="INR">INR</option>
-              <option value="PKR">PKR</option>
-              <option value="BDT">BDT</option>
-              <option value="CNY">CNY</option>
-              <option value="JPY">JPY</option>
-              <option value="KRW">KRW</option>
-              <option value="TWD">TWD</option>
-              <option value="HKD">HKD</option>
-              <option value="SGD">SGD</option>
-              <option value="MYR">MYR</option>
-              <option value="THB">THB</option>
-              <option value="VND">VND</option>
-              <option value="IDR">IDR</option>
-              <option value="PHP">PHP</option>
-              <option value="BRL">BRL</option>
-              <option value="MXN">MXN</option>
-              <option value="ARS">ARS</option>
-              <option value="CLP">CLP</option>
-              <option value="COP">COP</option>
-            </select>
           </div>
         </div>
 
