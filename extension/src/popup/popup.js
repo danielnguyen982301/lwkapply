@@ -10,6 +10,7 @@ const modeToggle = document.getElementById('mode-toggle')
 const modeCapturedBtn = document.getElementById('mode-captured')
 const modeManualBtn = document.getElementById('mode-manual')
 const jobUrlField = document.getElementById('field-job-url')
+const currencyField = document.getElementById('field-salary-currency')
 
 function showView(name) {
   for (const [key, el] of Object.entries(views)) {
@@ -42,6 +43,10 @@ function fillForm(job) {
   document.getElementById('field-location').value = job?.location ?? ''
   document.getElementById('field-salary-min').value = job?.salary_min ?? ''
   document.getElementById('field-salary-max').value = job?.salary_max ?? ''
+  // Falls back to the same USD the backend defaults to when nothing
+  // was scraped, rather than leaving the select on whatever it was
+  // last showing.
+  currencyField.value = job?.salary_currency ?? 'USD'
   jobUrlField.value = job?.job_url ?? ''
 }
 
@@ -51,6 +56,7 @@ function clearForm() {
   document.getElementById('field-location').value = ''
   document.getElementById('field-salary-min').value = ''
   document.getElementById('field-salary-max').value = ''
+  currencyField.value = 'USD'
   jobUrlField.value = ''
   document.getElementById('field-notes').value = ''
 }
@@ -152,6 +158,7 @@ document.getElementById('capture-form').addEventListener('submit', async (event)
     location: document.getElementById('field-location').value || null,
     salary_min: numberOrNull(document.getElementById('field-salary-min').value),
     salary_max: numberOrNull(document.getElementById('field-salary-max').value),
+    salary_currency: currencyField.value,
     job_url: jobUrlField.value || null,
     notes: document.getElementById('field-notes').value || null,
     source: 'vietnamworks',
@@ -179,6 +186,7 @@ document.getElementById('capture-form').addEventListener('submit', async (event)
           location: payload.location,
           salary_min: payload.salary_min,
           salary_max: payload.salary_max,
+          salary_currency: payload.salary_currency,
           notes: payload.notes,
         },
       })

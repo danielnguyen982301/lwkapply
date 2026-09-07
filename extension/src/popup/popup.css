@@ -83,6 +83,18 @@ textarea {
   flex-direction: column;
 }
 
+.salary-row > .currency-field {
+  flex: 0 0 68px;
+}
+
+select {
+  font: inherit;
+  padding: 6px 4px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+}
+
 button[type='submit'] {
   margin-top: 12px;
   padding: 8px;
