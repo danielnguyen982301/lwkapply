@@ -113,6 +113,7 @@ function scrapeJob() {
       ...parseSalary(jobPosting.baseSalary),
       salary_currency: parseSalaryCurrency(jobPosting.baseSalary),
       job_url: window.location.href,
+      external_id: extractJobIdFromUrl(window.location.href),
     }
   }
 
@@ -127,6 +128,7 @@ function scrapeJob() {
     salary_min: null,
     salary_max: null,
     job_url: window.location.href,
+    external_id: extractJobIdFromUrl(window.location.href),
   }
 }
 
