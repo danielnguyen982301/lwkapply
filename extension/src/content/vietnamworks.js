@@ -152,25 +152,24 @@ function handleAutoSaveResult(message) {
 }
 
 // Two shapes coming from background.js: "delete" undoes a create (the
-// Save flow), "recreate" undoes a delete (the Unsave flow) by posting
-// the same job data again.
+// Save flow), "recreate" undoes a delete (the Unsave flow). Recreate
+// goes through the same upsert endpoint Save itself uses (keyed by the
+// same source/external_id in undo.payload) rather than a plain create,
+// so double-clicking Undo - or a fresh Save racing it - can't produce
+// two rows for the same job.
 async function performUndo(undo) {
   if (undo.kind === 'delete') {
     await chrome.runtime.sendMessage({
       type: 'DELETE_APPLICATION',
       applicationId: undo.applicationId,
     })
-    await deleteCapturedJob(undo.jobUrl)
     return
   }
 
-  const result = await chrome.runtime.sendMessage({
-    type: 'CREATE_APPLICATION',
+  await chrome.runtime.sendMessage({
+    type: 'UPSERT_BY_EXTERNAL_ID',
     payload: undo.payload,
   })
-  if (result.ok) {
-    await setCapturedJob(undo.jobUrl, { applicationId: result.application.id, status: 'saved' })
-  }
 }
 
 // --- Auto-save on "Nộp đơn" (Apply) -------------------------------------
@@ -178,18 +177,18 @@ async function performUndo(undo) {
 // Save ("Lưu công việc này") needs nothing here at all - see
 // background.js's webRequest listener, which detects and handles it
 // entirely from the confirmed POST .../save-job network call, with no
-// dependency on which element was clicked or what it's labeled. That
-// replaced an earlier version of this file that also matched Save's
-// aria-label as a click trigger - redundant once the network signal
-// alone is a complete trigger, and worth removing rather than keeping
-// two mechanisms that could disagree.
+// dependency on which element was clicked or what it's labeled.
 //
 // Apply has no verified network endpoint yet, so it still relies on the
-// DOM heuristic below. If this job was already saved (tracked in
-// CAPTURED_JOBS_KEY, written by background.js's Save flow), a confirmed
-// Apply click PATCHes that same row to "applied" + today's date instead
-// of creating a second entry; otherwise it creates directly as
-// "applied" (a bare apply with no prior save).
+// DOM heuristic below - but it shares Save's real identity now too:
+// PATCH /applications/by-external-id (see background.js's
+// applyByExternalId) does the "already saved -> mark applied, some
+// other status -> leave alone, nothing tracked -> create fresh"
+// decision entirely on the backend, keyed by the same jobId Save reads
+// from its request body. Since a network signal isn't available here,
+// extractJobIdFromUrl below pulls the identical id out of the page's
+// own URL instead - VietnamWorks embeds it as the trailing number
+// before "-jv" in every job detail URL this scraper has seen.
 //
 // CALIBRATION NOTE: APPLY_SIGNALS watches the clicked button's
 // aria-label/disabled state and nearby added text for a plausible
@@ -198,8 +197,16 @@ async function performUndo(undo) {
 const APPLY_BUTTON_SELECTOR = '.apply-btn'
 const APPLY_INTENT_PATTERN = /nộp đơn|ứng tuyển/i
 const CONFIRMATION_WINDOW_MS = 20_000
-const CAPTURED_JOBS_KEY = 'lwkapply_captured_jobs'
-const MAX_TRACKED_JOBS = 500
+const SOURCE = 'vietnamworks'
+
+function extractJobIdFromUrl(url) {
+  // pathname excludes the query string and fragment by construction, so
+  // this is naturally immune to a job's URL varying by referral params
+  // (e.g. ?source=searchResults&...) - only the id right before the
+  // trailing "-jv" matters.
+  const match = new URL(url).pathname.match(/-(\d+)-jv\/?$/)
+  return match ? match[1] : null
+}
 
 const APPLY_SIGNALS = {
   successTextPattern:
@@ -269,37 +276,7 @@ function watchForActionConfirmation(clickedButton, { successTextPattern, ariaCha
   })
 }
 
-async function getCapturedJob(jobUrl) {
-  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
-  return jobs?.[jobUrl] ?? null
-}
-
-async function setCapturedJob(jobUrl, entry) {
-  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
-  const next = { ...(jobs ?? {}), [jobUrl]: entry }
-  const keys = Object.keys(next)
-  if (keys.length > MAX_TRACKED_JOBS) {
-    // Object key order is insertion order for string keys, so the
-    // oldest-tracked jobs are simply the first N keys.
-    for (const key of keys.slice(0, keys.length - MAX_TRACKED_JOBS)) delete next[key]
-  }
-  await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
-}
-
-async function deleteCapturedJob(jobUrl) {
-  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
-  if (!jobs?.[jobUrl]) return
-  const next = { ...jobs }
-  delete next[jobUrl]
-  await chrome.storage.local.set({ [CAPTURED_JOBS_KEY]: next })
-}
-
-function todayLocalIsoDate() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function scrapedPayload(jobUrl) {
+function scrapedPayload(jobId) {
   const job = scrapeJob()
   if (!job.company || !job.position) return null // guaranteed 422 otherwise
   return {
@@ -312,78 +289,51 @@ function scrapedPayload(jobUrl) {
     // ApplicationCreate's salary_currency has no None branch, it just
     // defaults to USD when the key is absent.
     ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
-    job_url: jobUrl,
+    job_url: job.job_url,
     notes: null,
-    source: 'vietnamworks',
+    source: SOURCE,
+    external_id: jobId,
   }
 }
 
-async function createAsApplied(jobUrl) {
-  const payload = scrapedPayload(jobUrl)
+// The backend decides everything here (see applyByExternalId in
+// background.js): a "saved" row for this jobId moves to "applied", any
+// other status is left alone, and no row at all gets created fresh as
+// applied. This function only has to report whichever of those already
+// happened - there's no local bookkeeping left to maintain.
+async function handleApplyConfirmed(jobId) {
+  const payload = scrapedPayload(jobId)
   if (!payload) return
-  payload.status = 'applied'
-  payload.applied_date = todayLocalIsoDate()
 
-  const result = await chrome.runtime.sendMessage({ type: 'CREATE_APPLICATION', payload })
+  const result = await chrome.runtime.sendMessage({ type: 'APPLY_BY_EXTERNAL_ID', payload })
   if (!result.ok) {
-    showToast(`Couldn't auto-save to LwkApply: ${result.error}`)
+    showToast(`Couldn't update LwkApply: ${result.error}`)
     return
   }
 
-  await setCapturedJob(jobUrl, { applicationId: result.application.id, status: 'applied' })
-  showToast('Saved to LwkApply as Applied', {
-    undoLabel: 'Undo',
-    onUndo: async () => {
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_APPLICATION',
-        applicationId: result.application.id,
-      })
-      await deleteCapturedJob(jobUrl)
-    },
-  })
-}
+  if (result.action === 'unchanged') return // already applied, or some other status - left alone
 
-async function handleApplyConfirmed(jobUrl) {
-  const existing = await getCapturedJob(jobUrl)
-  if (existing?.status === 'applied') return // already recorded, don't double-fire
-
-  if (existing?.status === 'saved') {
-    const { applicationId } = existing
-    const result = await chrome.runtime.sendMessage({
-      type: 'UPDATE_APPLICATION',
-      applicationId,
-      updates: { status: 'applied', applied_date: todayLocalIsoDate() },
-    })
-    if (!result.ok) {
-      if (result.status === 404) {
-        // Deleted through some other channel (the web app, another
-        // device) since we last saw it - the tracked reference is
-        // stale, not this apply. Clear it and fall through to create
-        // fresh, same as a bare apply with no prior save.
-        await deleteCapturedJob(jobUrl)
-        await createAsApplied(jobUrl)
-        return
-      }
-      showToast(`Couldn't update LwkApply: ${result.error}`)
-      return
-    }
-    await setCapturedJob(jobUrl, { applicationId, status: 'applied' })
-    showToast('Marked as Applied on LwkApply', {
+  const applicationId = result.application.id
+  if (result.action === 'created') {
+    showToast('Saved to LwkApply as Applied', {
       undoLabel: 'Undo',
-      onUndo: async () => {
-        await chrome.runtime.sendMessage({
-          type: 'UPDATE_APPLICATION',
-          applicationId,
-          updates: { status: 'saved', applied_date: null },
-        })
-        await setCapturedJob(jobUrl, { applicationId, status: 'saved' })
-      },
+      onUndo: () => chrome.runtime.sendMessage({ type: 'DELETE_APPLICATION', applicationId }),
     })
     return
   }
 
-  // No prior save on this job - create it directly as applied.
-  await createAsApplied(jobUrl)
+  // action === 'updated': this row existed as "saved" before this
+  // apply - undo should revert the status, not delete a row the user
+  // had already saved on purpose.
+  showToast('Marked as Applied on LwkApply', {
+    undoLabel: 'Undo',
+    onUndo: () =>
+      chrome.runtime.sendMessage({
+        type: 'UPDATE_APPLICATION',
+        applicationId,
+        updates: { status: 'saved', applied_date: null },
+      }),
+  })
 }
 
 document.addEventListener(
@@ -397,14 +347,16 @@ document.addEventListener(
     // rather than risk capturing the wrong job's data.
     if (!readJobPostingJsonLd()) return
 
+    const jobId = extractJobIdFromUrl(window.location.href)
+    if (jobId == null) return // unrecognized URL shape - nothing to key by
+
     const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' })
     if (!authState?.loggedIn) return
 
-    const jobUrl = window.location.href
     const clickedButton = event.target.closest('button,a')
     const confirmed = await watchForActionConfirmation(clickedButton, APPLY_SIGNALS)
     if (!confirmed) return
-    await handleApplyConfirmed(jobUrl)
+    await handleApplyConfirmed(jobId)
   },
   true, // capture phase, so this still observes the click even if the
   // page's own handler later calls stopPropagation()
