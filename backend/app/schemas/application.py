@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.application import ApplicationStatus
+from app.models.application import ApplicationStatus, SalaryCurrency
 
 
 class SalaryRangeValidationMixin(BaseModel):
@@ -40,6 +40,7 @@ class ApplicationBase(SalaryRangeValidationMixin):
     application_name: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     status: ApplicationStatus = ApplicationStatus.SAVED
+    salary_currency: SalaryCurrency = SalaryCurrency.USD
     applied_date: date | None = None
     job_url: str | None = Field(default=None, max_length=1000)
     notes: str | None = None
@@ -55,6 +56,7 @@ class ApplicationUpdate(SalaryRangeValidationMixin):
     application_name: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     status: ApplicationStatus | None = None
+    salary_currency: SalaryCurrency | None = None
     applied_date: date | None = None
     job_url: str | None = Field(default=None, max_length=1000)
     notes: str | None = None

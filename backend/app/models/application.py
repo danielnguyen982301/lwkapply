@@ -28,6 +28,53 @@ class ApplicationStatus(str, enum.Enum):
     ACCEPTED = "accepted"
 
 
+class SalaryCurrency(str, enum.Enum):
+    USD = "USD"
+    EUR = "EUR"
+    GBP = "GBP"
+    CAD = "CAD"
+    AUD = "AUD"
+    NZD = "NZD"
+    CHF = "CHF"
+    SEK = "SEK"
+    NOK = "NOK"
+    DKK = "DKK"
+    ISK = "ISK"
+    PLN = "PLN"
+    CZK = "CZK"
+    HUF = "HUF"
+    RON = "RON"
+    UAH = "UAH"
+    RUB = "RUB"
+    TRY = "TRY"
+    ILS = "ILS"
+    AED = "AED"
+    SAR = "SAR"
+    EGP = "EGP"
+    NGN = "NGN"
+    KES = "KES"
+    ZAR = "ZAR"
+    INR = "INR"
+    PKR = "PKR"
+    BDT = "BDT"
+    CNY = "CNY"
+    JPY = "JPY"
+    KRW = "KRW"
+    TWD = "TWD"
+    HKD = "HKD"
+    SGD = "SGD"
+    MYR = "MYR"
+    THB = "THB"
+    VND = "VND"
+    IDR = "IDR"
+    PHP = "PHP"
+    BRL = "BRL"
+    MXN = "MXN"
+    ARS = "ARS"
+    CLP = "CLP"
+    COP = "COP"
+
+
 class Application(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "applications"
 
@@ -58,6 +105,16 @@ class Application(Base, UUIDMixin, TimestampMixin):
     )
     salary_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     salary_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    salary_currency: Mapped[SalaryCurrency] = mapped_column(
+        Enum(
+            SalaryCurrency,
+            name="salary_currency",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=SalaryCurrency.USD,
+        server_default=SalaryCurrency.USD.value,
+        nullable=False,
+    )
     applied_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     job_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
