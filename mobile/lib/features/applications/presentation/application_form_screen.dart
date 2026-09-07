@@ -94,6 +94,12 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
   // FormBuilderTextFields to be rebuilt through form state plumbing.
   SalaryCurrency _selectedCurrency = SalaryCurrency.usd;
 
+  // Locks the Job URL field for a row a browser extension is syncing -
+  // source is immutable after creation (see Application's doc comment),
+  // this is display-only. A brand-new application (_existing null) is
+  // always unaffected, same as a manually created one.
+  bool get _isSyncedFromExternalSource => _existing?.source != null;
+
   @override
   void initState() {
     super.initState();
@@ -529,9 +535,13 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
             FormBuilderTextField(
               name: 'jobUrl',
               initialValue: _existing?.jobUrl,
-              decoration: const InputDecoration(
+              enabled: !_isSyncedFromExternalSource,
+              decoration: InputDecoration(
                 labelText: 'Job posting URL',
                 hintText: 'https://…',
+                helperText: _isSyncedFromExternalSource
+                    ? 'Synced from ${applicationSourceLabel(_existing!.source!)}'
+                    : null,
               ),
               keyboardType: TextInputType.url,
               valueTransformer: _emptyToNull,
