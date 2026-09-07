@@ -59,10 +59,23 @@ class ApplicationUpsertByExternalId(ApplicationCreate):
     a plain manual create leaves both null) are required here, since
     identifying which row to find-or-create is the entire point of this
     endpoint. `status` is accepted but ignored - both endpoints decide
-    the row's status themselves (see applications.py)."""
+    the row's status themselves (see applications.py).
 
-    source: str = Field(min_length=1, max_length=100)
-    external_id: str = Field(min_length=1, max_length=255)
+    Enforced via a validator rather than re-declaring source/external_id
+    with a narrower (non-Optional) type: a subclass narrowing an
+    inherited *mutable* attribute's type is a real type-safety hole
+    (nothing stops code that only knows about ApplicationBase from
+    assigning None to it on an instance of this subclass) that pyright
+    correctly flags as reportIncompatibleVariableOverride - this keeps
+    the inherited annotation as-is and rejects None at the validation
+    layer instead, where "required" actually belongs.
+    """
+
+    @model_validator(mode="after")
+    def require_source_and_external_id(self):
+        if not self.source or not self.external_id:
+            raise ValueError("source and external_id are required")
+        return self
 
 
 class ApplicationUpdate(SalaryRangeValidationMixin):

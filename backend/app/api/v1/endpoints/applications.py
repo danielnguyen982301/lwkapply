@@ -181,6 +181,11 @@ def upsert_application_by_external_id(
     {application_id} first (Starlette matches path shape before FastAPI
     validates the UUID), never reaching this route.
     """
+    # Guaranteed non-None by ApplicationUpsertByExternalId's own
+    # validator - narrows the inherited str | None annotation back to
+    # str for the type checker, same as the runtime guarantee already
+    # in effect.
+    assert payload.source and payload.external_id
     existing = _find_by_external_id(
         db, current_user, payload.source, payload.external_id
     )
@@ -232,6 +237,11 @@ def apply_application_by_external_id(
     - no row at all creates one directly as "applied" (a bare apply
       with no prior save)
     """
+    # Guaranteed non-None by ApplicationUpsertByExternalId's own
+    # validator - narrows the inherited str | None annotation back to
+    # str for the type checker, same as the runtime guarantee already
+    # in effect.
+    assert payload.source and payload.external_id
     existing = _find_by_external_id(
         db, current_user, payload.source, payload.external_id
     )
