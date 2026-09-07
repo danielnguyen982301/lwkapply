@@ -1,4 +1,4 @@
-# Learning Notes: Stack Fundamentals
+# Study Notes: Stack Fundamentals
 
 I had never used any of these technologies before starting this project.
 These are my own study notes on each one: the core ideas, how each one is
@@ -14,10 +14,51 @@ I fixed them.
 built on top of Starlette, which handles the ASGI (Asynchronous Server
 Gateway Interface) web layer, and Pydantic, which handles data validation.
 
+**How the three actually divide the work, and where a request flows
+through them:**
+
+```mermaid
+flowchart LR
+    subgraph Starlette_in["Starlette — receives the request"]
+        direction TB
+        S1["Uvicorn (ASGI server)<br/>receives the HTTP request"]
+        S2["Starlette matches it<br/>to a route"]
+        S3["Starlette's own middleware runs<br/>(e.g. CORSMiddleware)"]
+        S1 --> S2 --> S3
+    end
+    subgraph FastAPI_core["FastAPI — orchestrates your code"]
+        direction TB
+        F1["Depends() tree resolved<br/>(get_db, get_current_user, ...)"]
+        F2["Pydantic validates the<br/>request body/query/path params"]
+        F3["Your path operation<br/>function runs"]
+        F4["Pydantic serializes the return<br/>value through response_model"]
+        F1 --> F2 --> F3 --> F4
+    end
+    subgraph Starlette_out["Starlette — sends the response"]
+        direction TB
+        S4["Starlette builds the<br/>HTTP response object"]
+        S5["Uvicorn sends the<br/>bytes back to the client"]
+        S4 --> S5
+    end
+    Starlette_in --> FastAPI_core --> Starlette_out
+```
+
+Concretely, in this project's own `backend/app/main.py`: `app = FastAPI(...)`
+is itself a Starlette application under the hood (FastAPI subclasses it);
+`app.add_middleware(CORSMiddleware, ...)` is pure Starlette, handling
+cross-origin requests before any of your own code runs; `app.include_router(api_router, ...)`
+is FastAPI's own routing sugar on top of Starlette's router. Pydantic never
+touches routing or HTTP at all — its whole job is steps 2 and 4 above:
+turning raw JSON into validated Python objects on the way in, and turning
+Python objects back into JSON on the way out. FastAPI is the layer in the
+middle that reads your type hints and decides when to call each of the
+other two.
+
 **Core concepts:**
+
 - **Path operations** — a function you decorate with something like
   `@app.get("/x")`. The function's type-hinted parameters and return type
-  *are* the request and response schema — you don't write them out
+  _are_ the request and response schema — you don't write them out
   separately. (See any endpoint in `backend/app/api/v1/endpoints/`, for
   example `ai.py`'s `@router.post("/resume-analyses", ...)`.)
 - **Pydantic schemas** — plain Python classes that check that incoming JSON
@@ -52,11 +93,12 @@ Gateway Interface) web layer, and Pydantic, which handles data validation.
   [Starlette's `BackgroundTask`](https://www.starlette.io/background/).)
 
 **Important notes:**
+
 - A route defined with a plain `def` is synchronous — FastAPI runs it in a
   thread pool, so it can't block the main event loop. A route defined with
   `async def` runs directly on that event loop, so a blocking call inside
   it (for example, a database driver that wasn't built to run
-  asynchronously) freezes *every other request currently being handled*,
+  asynchronously) freezes _every other request currently being handled_,
   not just its own. (Official docs:
   [Concurrency and async / await](https://fastapi.tiangolo.com/async/).)
 - Dependencies are cached **per request** by default. Calling the same
@@ -84,6 +126,7 @@ Gateway Interface) web layer, and Pydantic, which handles data validation.
   [Response Model](https://fastapi.tiangolo.com/tutorial/response-model/).)
 
 **Best practices:**
+
 - Centralized configuration through a single `Settings(BaseSettings)`
   class (`backend/app/core/config.py`), instead of scattered `os.environ`
   calls throughout the codebase.
@@ -110,6 +153,7 @@ every schema change becomes a versioned, reviewable Python script instead
 of a one-off `ALTER TABLE` run by hand.
 
 **Core concepts:**
+
 - **Declarative models** — a Python class with typed columns that maps
   directly onto one database table. (See any file in `backend/app/models/`,
   for example `application.py`.)
@@ -134,6 +178,7 @@ of a one-off `ALTER TABLE` run by hand.
   docs: [Alembic](https://alembic.sqlalchemy.org/en/latest/).)
 
 **Important notes:**
+
 - **An ORM's own rules and the database's own constraints are two separate
   systems, and they can conflict.** See the case study below for the
   actual `IntegrityError` this caused. (Official docs on how the two are
@@ -146,7 +191,7 @@ of a one-off `ALTER TABLE` run by hand.
   `send_due_reminders`, which uses `joinedload(...).joinedload(...).joinedload(...)`
   specifically to avoid this; official docs: [Relationship Loading
   Techniques](https://docs.sqlalchemy.org/en/20/orm/queryguide/relationships.html).)
-- Alembic's `autogenerate` command compares your models against the *live*
+- Alembic's `autogenerate` command compares your models against the _live_
   database, not against the previous migration. That means it can miss or
   misread certain changes (for example, a change to the values inside an
   enum), so a generated migration still needs a human to read it before
@@ -161,17 +206,20 @@ Deleting a user by looping over their `.documents` relationship raised an
 `ON DELETE CASCADE` set up:
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Buggy["Via the ORM relationship — fails"]
-        A1[DELETE user] --> A2["SQLAlchemy walks user.documents"]
-        A2 --> A3["ORM tries to NULL documents.user_id on flush"]
-        A3 --> A4["column is NOT NULL -> IntegrityError"]
+        direction TB
+        A1["DELETE user"] --> A2["SQLAlchemy walks<br/>user.documents"]
+        A2 --> A3["ORM tries to NULL<br/>documents.user_id on flush"]
+        A3 --> A4["column is NOT NULL<br/>-> IntegrityError"]
     end
     subgraph Fixed["Querying the child table directly — works"]
-        B1[DELETE user] --> B2["SELECT documents WHERE user_id = user.id"]
-        B2 --> B3["use the rows' file_url, skip the ORM relationship entirely"]
-        B3 --> B4["the database's own ON DELETE CASCADE removes the rows"]
+        direction TB
+        B1["DELETE user"] --> B2["SELECT documents WHERE<br/>user_id = user.id"]
+        B2 --> B3["use the rows' file_url,<br/>skip the ORM relationship entirely"]
+        B3 --> B4["the database's own<br/>ON DELETE CASCADE removes the rows"]
     end
+    Buggy ~~~ Fixed
 ```
 
 **The lesson that generalizes:** an ORM's relationship rules are their own,
@@ -180,6 +228,7 @@ They can trigger their own cleanup logic that has nothing to do with what
 the database schema already guarantees on its own.
 
 **Best practices:**
+
 - Shared `UUIDMixin`/`TimestampMixin` base classes
   (`backend/app/db/base_class.py`) instead of repeating `id`,
   `created_at`, and `updated_at` by hand on every model.
@@ -222,13 +271,14 @@ finish, and so that a task which crashes can be retried without taking the
 whole API down with it.
 
 **Important notes:**
+
 - **A status column turns a background job from a black box into something
   you can check on.** `parse_resume_task` and `score_ats_task` save
   `PENDING`, then `PROCESSING`, then `COMPLETED` or `FAILED` as separate
   steps, instead of saving the result once at the very end (see
   `app/tasks/ai_celery.py`). That's specifically so
   `GET /ai/resume-analyses/{id}` always has a real, up-to-date answer for
-  the client to check — the status column *is* the way progress gets
+  the client to check — the status column _is_ the way progress gets
   reported, not just an implementation detail.
 - **Making a repeating task idempotent is just a matter of the right
   query, not a special library feature.** `send_due_reminders` only
@@ -260,6 +310,7 @@ whole API down with it.
   `beat_schedule`.)
 
 **Best practices:**
+
 - Worker and beat run as separate processes
   (`docker-compose.yml`'s `celery-worker`/`celery-beat` services), not
   combined into one, so scheduling isn't affected by worker load or vice
@@ -285,6 +336,7 @@ user interfaces out of components. It plays roughly the same role as React
 reactivity model.
 
 **Core concepts:**
+
 - **Single-File Components (`.vue` files)** — the template, the script,
   and the (optionally scoped) styles for one component all live together
   in a single file.
@@ -329,18 +381,21 @@ reactivity model.
 **How the reactivity model is actually different from React's:**
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Vue["Vue: fine-grained reactivity"]
-        V1["ref/reactive value changes"] --> V2["Proxy notifies exactly the effects that read it"]
-        V2 --> V3["Compiler pre-marked which template nodes are dynamic"]
-        V3 --> V4["Only those DOM nodes are patched"]
+        direction TB
+        V1["ref/reactive<br/>value changes"] --> V2["Proxy notifies exactly<br/>the effects that read it"]
+        V2 --> V3["Compiler pre-marked which<br/>template nodes are dynamic"]
+        V3 --> V4["Only those DOM<br/>nodes are patched"]
     end
     subgraph React["React: re-render + diff"]
-        R1["setState called"] --> R2["Whole component function re-runs"]
-        R2 --> R3["New virtual DOM subtree built"]
-        R3 --> R4["Diffed against the previous tree"]
-        R4 --> R5["Differences patched into the real DOM"]
+        direction TB
+        R1["setState called"] --> R2["Whole component<br/>function re-runs"]
+        R2 --> R3["New virtual DOM<br/>subtree built"]
+        R3 --> R4["Diffed against<br/>the previous tree"]
+        R4 --> R5["Differences patched<br/>into the real DOM"]
     end
+    Vue ~~~ React
 ```
 
 Both frameworks use a virtual DOM underneath — Vue hasn't gotten rid of it.
@@ -358,29 +413,29 @@ Internals](https://legacy.reactjs.org/docs/faq-internals.html).)
 **Advantages and disadvantages compared to React (from actually building
 with both mental models):**
 
-| | Vue | React |
-|---|---|---|
-| Learning curve | Gentler — reactivity is automatic, less boilerplate for simple state | Steeper — hooks rules, dependency arrays, when-to-memoize |
-| Ecosystem/jobs | Smaller | Much larger — bigger library ecosystem |
-| Flexibility | More "batteries-included" and opinionated (official router/store) | More unopinionated — you choose your own router/state library |
-| Markup | Templates (HTML-like, restricted syntax) | JSX (full JS expressiveness, tighter logic/markup coupling) |
+|                | Vue                                                                  | React                                                         |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Learning curve | Gentler — reactivity is automatic, less boilerplate for simple state | Steeper — hooks rules, dependency arrays, when-to-memoize     |
+| Ecosystem/jobs | Smaller                                                              | Much larger — bigger library ecosystem                        |
+| Flexibility    | More "batteries-included" and opinionated (official router/store)    | More unopinionated — you choose your own router/state library |
+| Markup         | Templates (HTML-like, restricted syntax)                             | JSX (full JS expressiveness, tighter logic/markup coupling)   |
 
 **Vue and React: the same job, under a different name.** Learning Vue
 after (or alongside) React mostly means finding things you already know,
 just called something else:
 
-| Concern | Vue | React |
-|---|---|---|
-| Local component state | `ref()` / `reactive()` | `useState()` |
-| Derived/memoized value | `computed()` | `useMemo()` |
-| React to a value changing | `watch()` / `watchEffect()` | `useEffect()` with a dependency array |
-| Run code once, on mount | `onMounted()` | `useEffect(() => {...}, [])` |
-| Cleanup on unmount | `onBeforeUnmount()` / `onUnmounted()` | the function `useEffect` returns |
-| Reference a DOM element directly | template `ref` | `useRef()` |
-| Reusable stateful logic | a composable (a plain `use*` function, Composition API) | a custom hook (a plain `use*` function) |
-| Global/shared state | Pinia | Redux / Zustand / Context |
-| Avoid recreating a function every render | not needed the same way — Vue doesn't re-run the whole component function on every update | `useCallback()` |
-| Avoid re-rendering a child unnecessarily | not needed the same way — fine-grained reactivity means only what actually changed updates | `React.memo()` |
+| Concern                                  | Vue                                                                                        | React                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------- |
+| Local component state                    | `ref()` / `reactive()`                                                                     | `useState()`                            |
+| Derived/memoized value                   | `computed()`                                                                               | `useMemo()`                             |
+| React to a value changing                | `watch()` / `watchEffect()`                                                                | `useEffect()` with a dependency array   |
+| Run code once, on mount                  | `onMounted()`                                                                              | `useEffect(() => {...}, [])`            |
+| Cleanup on unmount                       | `onBeforeUnmount()` / `onUnmounted()`                                                      | the function `useEffect` returns        |
+| Reference a DOM element directly         | template `ref`                                                                             | `useRef()`                              |
+| Reusable stateful logic                  | a composable (a plain `use*` function, Composition API)                                    | a custom hook (a plain `use*` function) |
+| Global/shared state                      | Pinia                                                                                      | Redux / Zustand / Context               |
+| Avoid recreating a function every render | not needed the same way — Vue doesn't re-run the whole component function on every update  | `useCallback()`                         |
+| Avoid re-rendering a child unnecessarily | not needed the same way — fine-grained reactivity means only what actually changed updates | `React.memo()`                          |
 
 Official documentation for each column: Vue's
 [`ref`/`reactive`/`computed`](https://vuejs.org/guide/essentials/reactivity-fundamentals.html)
@@ -405,27 +460,27 @@ This mount-and-cleanup row isn't just theoretical —
 
 ```ts
 onMounted(() => {
-  notifications.startPolling()
-  window.addEventListener('keydown', handleEscape)
-})
+  notifications.startPolling();
+  window.addEventListener("keydown", handleEscape);
+});
 
 onBeforeUnmount(() => {
-  notifications.stopPolling()
-  window.removeEventListener('keydown', handleEscape)
-})
+  notifications.stopPolling();
+  window.removeEventListener("keydown", handleEscape);
+});
 ```
 
 which is the Vue-shaped version of:
 
 ```jsx
 useEffect(() => {
-  notifications.startPolling()
-  window.addEventListener('keydown', handleEscape)
+  notifications.startPolling();
+  window.addEventListener("keydown", handleEscape);
   return () => {
-    notifications.stopPolling()
-    window.removeEventListener('keydown', handleEscape)
-  }
-}, [])
+    notifications.stopPolling();
+    window.removeEventListener("keydown", handleEscape);
+  };
+}, []);
 ```
 
 Either way, the intent is the same: start polling and attach a listener
@@ -434,6 +489,7 @@ Vue just writes "on mount" and "on unmount" as two separate function
 calls, instead of one `useEffect` with a returned cleanup function.
 
 **Important notes:**
+
 - The `ref` versus `reactive` trap: destructuring a `reactive()` object
   loses reactivity on its individual fields — they turn into plain,
   disconnected values. A `ref` needs `.value` when you access it in your
@@ -457,6 +513,7 @@ calls, instead of one `useEffect` with a returned cleanup function.
   components.)
 
 **Best practices:**
+
 - Composition API with `<script setup>` used consistently across
   components, not mixed with the older Options API.
 - TypeScript throughout, not plain JavaScript.
@@ -489,6 +546,7 @@ Native does through its actual native-widget bridge. (Official docs:
 [Impeller rendering engine](https://docs.flutter.dev/perf/impeller).)
 
 **Core concepts:**
+
 - **Everything is a widget** — layout, styling, even plain padding, are
   all widgets composed together into one tree. (Official docs:
   [Widgets](https://docs.flutter.dev/get-started/fundamentals/widgets).)
@@ -513,7 +571,56 @@ flowchart LR
     C --> W["Widget via ref.watch(apiClientProvider)"]
 ```
 
+**Riverpod (mobile) versus Pinia (web) — same underlying job, different
+shape:**
+
+```mermaid
+flowchart LR
+    subgraph PiniaFlow["Pinia — one store per concern"]
+        direction TB
+        P1["defineStore('notifications', ...)<br/>bundles state + getters + actions"]
+        P2["A component calls<br/>useNotificationsStore()"]
+        P3["It reads store.unreadCount<br/>directly off that one object"]
+        P4["An action mutates<br/>the store's own state"]
+        P5["Every component reading<br/>that field re-renders"]
+        P1 --> P2 --> P3
+        P4 -.->|"triggers"| P5
+        P3 -.- P5
+    end
+    subgraph RiverpodFlow["Riverpod — many small providers"]
+        direction TB
+        R1["Each provider is declared<br/>as its own top-level value"]
+        R2["A widget calls<br/>ref.watch(someProvider)"]
+        R3["Providers can depend on<br/>other providers, forming a graph"]
+        R4["A dependency changing<br/>notifies everything that watches it"]
+        R5["The widget rebuilds<br/>automatically"]
+        R1 --> R2
+        R3 --> R4 --> R5
+        R2 -.- R5
+    end
+    RiverpodFlow ~~~ PiniaFlow
+```
+
+The underlying mechanism is the same idea in both: something outside the
+component holds state, the component subscribes to it, and a change
+notifies every subscriber to update — neither one makes the component
+poll or manually diff anything itself. What differs is granularity and
+shape. Pinia (see `webapp/src/stores/notifications.ts`'s
+`defineStore('notifications', { state, getters, actions })`) bundles
+one _domain's_ state, derived values, and mutating logic into a single
+store object, read as a whole via `useNotificationsStore()`. Riverpod
+(see `mobile/lib/features/auth/presentation/session_providers.dart`)
+instead splits state into many small, independent providers —
+`accessTokenProvider`, `currentUserProvider`, and so on — that are wired
+together into a dependency graph, each one watched individually. Rough
+equivalences: `defineStore()` ≈ declaring a provider; `useXStore()` in a
+component ≈ `ref.watch(xProvider)` in a widget; an action mutating store
+state ≈ a controller/notifier setting `provider.state`; a Pinia getter
+(derived state) ≈ one provider reading another and deriving a value from
+it.
+
 **Important notes:**
+
 - **A provider cycle can hide behind two layers of indirection, not just
   two providers reading each other directly.** The actual cycle here ran
   three hops deep: `apiClientProvider` read `authControllerProvider`
@@ -525,7 +632,7 @@ flowchart LR
   time; it only throws a `CircularDependencyError` at runtime, the very
   first time something actually triggers the lazy read that completes the
   cycle. The fix wasn't "split things into more providers" as some kind of
-  general rule. It was finding the *one specific connection* that closed
+  general rule. It was finding the _one specific connection_ that closed
   the loop — `apiClientProvider` reading `authControllerProvider` — and
   routing around exactly that connection: `apiClientProvider` now reads
   and writes two new, dependency-free "leaf" providers directly,
@@ -538,19 +645,22 @@ flowchart LR
   [`c9e24de`](https://github.com/danielnguyen982301/lwkapply/commit/c9e24de100878a643a96008aaa2d2529193aee6a).)
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Before["Before — a 3-hop cycle, only caught at runtime"]
-        A1["apiClientProvider"] -->|"reads directly, for bearer token + logout"| A2["authControllerProvider"]
+        direction TB
+        A1["apiClientProvider"] -->|"reads directly, for<br/>bearer token + logout"| A2["authControllerProvider"]
         A2 -->|"ref.watch"| A3["pushServiceProvider"]
-        A3 -->|"ref.watch (needs Dio)"| A1
+        A3 -->|"ref.watch<br/>(needs Dio)"| A1
     end
     subgraph After["After — the one cyclic connection is routed around"]
-        B1["apiClientProvider"] -->|"read/write directly"| B2["accessTokenProvider (leaf, no dependencies)"]
-        B1 -->|"read/write directly"| B3["currentUserProvider (leaf, no dependencies)"]
-        B4["AuthController"] -.->|"ref.listen (one-way synchronization)"| B2
-        B5["authControllerProvider"] -->|"ref.watch — unchanged"| B6["pushServiceProvider"]
-        B6 -->|"ref.watch (needs Dio) — unchanged"| B1
+        direction TB
+        B1["apiClientProvider"] -->|"read/write<br/>directly"| B2["accessTokenProvider<br/>(leaf, no dependencies)"]
+        B1 -->|"read/write<br/>directly"| B3["currentUserProvider<br/>(leaf, no dependencies)"]
+        B4["AuthController"] -.->|"ref.listen (one-way<br/>synchronization)"| B2
+        B5["authControllerProvider"] -->|"ref.watch<br/>— unchanged"| B6["pushServiceProvider"]
+        B6 -->|"ref.watch (needs Dio)<br/>— unchanged"| B1
     end
+    Before ~~~ After
 ```
 
 Notice what stays exactly the same on both sides: `pushServiceProvider`
@@ -570,7 +680,7 @@ points back to where it started.
   the case study below for the actual bug this caused.
 - **`ref.watch` rebuilds everything underneath it in that widget.** If a
   widget watches a large state object but only actually needs one field
-  from it, the whole widget rebuilds on *any* change to that object. Using
+  from it, the whole widget rebuilds on _any_ change to that object. Using
   `.select((s) => s.field)` instead scopes the rebuild down to just the
   one field that's actually used — the difference between updating a
   single row and re-rendering the entire screen. (See
@@ -642,6 +752,7 @@ single source of truth that the others defer to. You can't let each one
 push its own navigation independently and just hope the timing works out.
 
 **Best practices:**
+
 - Sensitive data (auth tokens) stored via `flutter_secure_storage`
   (Keychain on iOS, Keystore-backed on Android), not plain
   `SharedPreferences`.
