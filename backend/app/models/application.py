@@ -3,7 +3,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, Enum, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -77,6 +77,22 @@ class SalaryCurrency(str, enum.Enum):
 
 class Application(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "applications"
+    __table_args__ = (
+        # At most one row per (user, source, external_id) - only
+        # enforced where both are actually set, so ordinary manually
+        # created rows (both null) are never compared against each
+        # other. Lets PUT /applications/by-external-id treat a unique
+        # violation as "someone already created this concurrently"
+        # rather than trusting a check-then-insert alone.
+        Index(
+            "ix_applications_user_source_external_id",
+            "user_id",
+            "source",
+            "external_id",
+            unique=True,
+            postgresql_where=text("source IS NOT NULL AND external_id IS NOT NULL"),
+        ),
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -99,6 +115,16 @@ class Application(Base, UUIDMixin, TimestampMixin):
     # Deliberately a free string rather than an enum: new sites should be
     # addable on the client side without a migration.
     source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # The source system's own identifier for this posting (e.g.
+    # VietnamWorks' internal job id) - paired with `source` as the real
+    # identity of a row a browser extension is tracking, since job_url
+    # is not a reliable natural key on its own (query strings vary by
+    # referral path for the same posting, and a site could someday
+    # regenerate its slug for the same id). Only meaningful alongside a
+    # non-null `source`; a plain manual row leaves both null. See the
+    # (user_id, source, external_id) partial unique index below and
+    # PUT/PATCH/DELETE /applications/by-external-id.
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[ApplicationStatus] = mapped_column(
         Enum(
             ApplicationStatus,
