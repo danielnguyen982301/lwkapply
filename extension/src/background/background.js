@@ -5,14 +5,14 @@ import { parseJsonSafe, firstErrorMessage } from './http.js'
 // the API only through this router - neither of them ever touches a
 // token directly, so a compromised job-site page can't read one via the
 // content script's execution context.
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  handleMessage(message, sender)
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  handleMessage(message)
     .then(sendResponse)
     .catch((error) => sendResponse({ ok: false, error: error.message }))
   return true // keep the message channel open for the async response
 })
 
-async function handleMessage(message, sender) {
+async function handleMessage(message) {
   switch (message.type) {
     case 'GET_AUTH_STATE':
       return { ok: true, loggedIn: await auth.isLoggedIn() }
@@ -33,13 +33,6 @@ async function handleMessage(message, sender) {
 
     case 'DELETE_APPLICATION':
       return deleteApplication(message.applicationId)
-
-    case 'ARM_SAVE_WATCH': {
-      const tabId = sender.tab?.id
-      if (tabId == null) return { ok: false, error: 'No tab context for this request.' }
-      armSaveWatch(tabId, message.payload)
-      return { ok: true }
-    }
 
     default:
       return { ok: false, error: `Unknown message type: ${message.type}` }
@@ -77,66 +70,80 @@ async function deleteApplication(applicationId) {
   return { ok: true }
 }
 
-// --- Network-confirmed save --------------------------------------------
+// --- Network-driven save ------------------------------------------------
 //
-// Verified against a real save: clicking "Lưu công việc
-// này" on VietnamWorks fires POST https://ms.vietnamworks.com/api-gateway/
-// v1.0/save-job, returning {"meta":{"code":200,"message":"success"}} on
-// success. That's a far more reliable signal than matching page text
-// (language-independent, immune to copy changes) - so unlike the Apply
-// flow (still DOM-heuristic in the content script; no network info for
-// it yet), Save is confirmed here via chrome.webRequest instead.
+// Verified against a real save: clicking "Lưu công việc này" on
+// VietnamWorks fires POST https://ms.vietnamworks.com/api-gateway/v1.0/
+// save-job, returning {"meta":{"code":200,"message":"success"}} on
+// success. The whole point of keying off this instead of the page's
+// visible text/aria-label was to stop depending on VietnamWorks' DOM at
+// all for Save - so nothing here identifies *which button* was clicked.
+// This listener is the entire trigger: a confirmed 2xx on that tab is
+// enough on its own to ask that tab's content script what job is on the
+// page right now (reusing the existing SCRAPE_JOB handler, built
+// originally for the popup) and save it. No click listener, no
+// aria-label matching, no per-click "arming" - if this endpoint fires
+// for a tab, something on that page just got saved.
 //
-// Coordination: the content script scrapes eagerly on click and arms a
-// watch (ARM_SAVE_WATCH) *before* the request completes, keyed by
-// tabId; onCompleted below only creates the application once that
-// specific tab's save-job POST actually succeeds. Kept as a plain
-// in-memory Map rather than chrome.storage.session - the window between
-// arming and the request completing is at most a couple of seconds, well
-// within a service worker's normal event-driven lifetime, so the small
-// risk of losing a pending entry to an untimely worker restart is an
-// accepted tradeoff for not needing an extra async storage round-trip
-// here.
-// Trailing "*" so this still matches if a query string ever gets
-// appended (not observed, but a match pattern without a wildcard only
-// matches that exact path with no query string at all).
+// Apply has no verified network endpoint yet, so it's still the
+// DOM-heuristic click listener in vietnamworks.js.
 const SAVE_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v1.0/save-job*'
-const PENDING_SAVE_TTL_MS = 15_000
 const CAPTURED_JOBS_KEY = 'lwkapply_captured_jobs' // must match the content script's key
 const MAX_TRACKED_JOBS = 500
-
-const pendingSaves = new Map() // tabId -> { payload, armedAt }
-
-function armSaveWatch(tabId, payload) {
-  pendingSaves.set(tabId, { payload, armedAt: Date.now() })
-}
 
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.method !== 'POST') return
     if (details.statusCode < 200 || details.statusCode >= 300) return
-    const pending = pendingSaves.get(details.tabId)
-    if (!pending) return
-    pendingSaves.delete(details.tabId)
-    if (Date.now() - pending.armedAt > PENDING_SAVE_TTL_MS) return // stale - ignore
-    finalizeSave(details.tabId, pending.payload)
+    if (details.tabId < 0) return // not associated with a tab - nothing to scrape
+    handleConfirmedSave(details.tabId)
   },
   { urls: [SAVE_JOB_ENDPOINT] },
 )
 
-async function finalizeSave(tabId, payload) {
-  const result = await createApplication(payload)
+async function handleConfirmedSave(tabId) {
+  if (!(await auth.isLoggedIn())) {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: 'Log in to LwkApply (click the toolbar icon) to auto-save this.',
+    })
+    return
+  }
+
+  let scraped
+  try {
+    scraped = await chrome.tabs.sendMessage(tabId, { type: 'SCRAPE_JOB' })
+  } catch {
+    return // no content script alive in this tab - nothing to scrape
+  }
+  const job = scraped?.job
+  if (!job?.company || !job?.position) return // not enough to satisfy the backend
+
+  if (await getCapturedJob(job.job_url)) return // already tracked
+
+  const result = await createApplication({
+    company: job.company,
+    position: job.position,
+    location: job.location,
+    salary_min: job.salary_min,
+    salary_max: job.salary_max,
+    job_url: job.job_url,
+    notes: null,
+    source: 'vietnamworks',
+  })
   if (!result.ok) {
     notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: false, error: result.error })
     return
   }
-  await setCapturedJob(payload.job_url, { applicationId: result.application.id, status: 'saved' })
+
+  await setCapturedJob(job.job_url, { applicationId: result.application.id, status: 'saved' })
   notifyTab(tabId, {
     type: 'AUTO_SAVE_RESULT',
     ok: true,
     message: 'Saved to LwkApply',
     applicationId: result.application.id,
-    jobUrl: payload.job_url,
+    jobUrl: job.job_url,
   })
 }
 
@@ -145,6 +152,11 @@ function notifyTab(tabId, message) {
   // this tab to receive it) - a missing receiving end is expected, not
   // an error worth surfacing.
   chrome.tabs.sendMessage(tabId, message).catch(() => {})
+}
+
+async function getCapturedJob(jobUrl) {
+  const { [CAPTURED_JOBS_KEY]: jobs } = await chrome.storage.local.get(CAPTURED_JOBS_KEY)
+  return jobs?.[jobUrl] ?? null
 }
 
 async function setCapturedJob(jobUrl, entry) {

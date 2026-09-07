@@ -108,29 +108,30 @@ function handleAutoSaveResult(message) {
   })
 }
 
-// --- Auto-save on "Lưu công việc này" (Save) / "Nộp đơn" (Apply) ------
+// --- Auto-save on "Nộp đơn" (Apply) -------------------------------------
 //
-// Two independent triggers, tracked against the same job so they don't
-// create duplicate LwkApply entries for one posting:
-//   - Save button click, confirmed => create as status "saved"
-//   - Apply button click, confirmed => if this job was already saved,
-//     PATCH that row to "applied" + today's date instead of creating a
-//     second one; otherwise create directly as "applied" (the existing
-//     behavior for a bare apply with no prior save).
+// Save ("Lưu công việc này") needs nothing here at all - see
+// background.js's webRequest listener, which detects and handles it
+// entirely from the confirmed POST .../save-job network call, with no
+// dependency on which element was clicked or what it's labeled. That
+// replaced an earlier version of this file that also matched Save's
+// aria-label as a click trigger - redundant once the network signal
+// alone is a complete trigger, and worth removing rather than keeping
+// two mechanisms that could disagree.
 //
-// Save is confirmed via a real network signal (see background.js's
-// webRequest listener): clicking "Lưu công việc này" was verified to
-// fire POST https://ms.vietnamworks.com/api-gateway/v1.0/save-job, so
-// this scrapes eagerly and hands off to the background service worker
-// (ARM_SAVE_WATCH) *before* that request completes, rather than
-// guessing at page text. Apply has no verified network endpoint yet, so
-// it still falls back to the DOM heuristic below - CALIBRATION NOTE:
-// APPLY_SIGNALS watches the clicked button's aria-label/disabled state
-// and nearby added text for a plausible completion signal, but what a
-// real successful apply actually looks like on-page is unverified.
+// Apply has no verified network endpoint yet, so it still relies on the
+// DOM heuristic below. If this job was already saved (tracked in
+// CAPTURED_JOBS_KEY, written by background.js's Save flow), a confirmed
+// Apply click PATCHes that same row to "applied" + today's date instead
+// of creating a second entry; otherwise it creates directly as
+// "applied" (a bare apply with no prior save).
+//
+// CALIBRATION NOTE: APPLY_SIGNALS watches the clicked button's
+// aria-label/disabled state and nearby added text for a plausible
+// completion signal, but what a real successful apply actually looks
+// like on-page is unverified.
 const APPLY_BUTTON_SELECTOR = '.apply-btn'
 const APPLY_INTENT_PATTERN = /nộp đơn|ứng tuyển/i
-const SAVE_ARIA_PATTERN = /lưu công việc/i
 const CONFIRMATION_WINDOW_MS = 20_000
 const CAPTURED_JOBS_KEY = 'lwkapply_captured_jobs'
 const MAX_TRACKED_JOBS = 500
@@ -148,13 +149,6 @@ function isApplyButton(target) {
   if (button.matches(APPLY_BUTTON_SELECTOR)) return true
   const text = button.innerText ?? ''
   return text.trim().length < 30 && APPLY_INTENT_PATTERN.test(text)
-}
-
-function isSaveButton(target) {
-  if (!(target instanceof Element)) return false
-  const button = target.closest('button,a')
-  const aria = button?.getAttribute('aria-label') ?? ''
-  return SAVE_ARIA_PATTERN.test(aria)
 }
 
 // Resolves true if a success signal shows up within the window, false
@@ -255,20 +249,6 @@ function scrapedPayload(jobUrl) {
   }
 }
 
-// No DOM wait here - background.js's webRequest listener is what
-// actually confirms the save (see ARM_SAVE_WATCH) and reports back via
-// an AUTO_SAVE_RESULT message (handleAutoSaveResult above), since
-// there's nothing left worth polling the page for once a real network
-// signal is available.
-async function handleSaveClick(jobUrl) {
-  if (await getCapturedJob(jobUrl)) return // already tracked either way
-
-  const payload = scrapedPayload(jobUrl)
-  if (!payload) return
-
-  await chrome.runtime.sendMessage({ type: 'ARM_SAVE_WATCH', payload })
-}
-
 async function handleApplyConfirmed(jobUrl) {
   const existing = await getCapturedJob(jobUrl)
   if (existing?.status === 'applied') return // already recorded, don't double-fire
@@ -327,26 +307,18 @@ async function handleApplyConfirmed(jobUrl) {
 document.addEventListener(
   'click',
   async (event) => {
-    const isApply = isApplyButton(event.target)
-    const isSave = !isApply && isSaveButton(event.target)
-    if (!isApply && !isSave) return
+    if (!isApplyButton(event.target)) return
 
-    // Cheap, synchronous guard before any async work: a save/apply-like
-    // click on a search-results or list page (each job card can carry
-    // its own mini save icon) has no single JobPosting to scrape here -
-    // skip rather than risk capturing the wrong job's data.
+    // Cheap, synchronous guard before any async work: an apply-like
+    // click on a search-results or list page (each job card is its own
+    // mini listing) has no single JobPosting to scrape here - skip
+    // rather than risk capturing the wrong job's data.
     if (!readJobPostingJsonLd()) return
 
     const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' })
     if (!authState?.loggedIn) return
 
     const jobUrl = window.location.href
-
-    if (isSave) {
-      await handleSaveClick(jobUrl)
-      return
-    }
-
     const clickedButton = event.target.closest('button,a')
     const confirmed = await watchForActionConfirmation(clickedButton, APPLY_SIGNALS)
     if (!confirmed) return
