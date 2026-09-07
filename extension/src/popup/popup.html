@@ -30,6 +30,14 @@
     </section>
 
     <section id="capture-view" hidden>
+      <div class="mode-toggle" id="mode-toggle" hidden>
+        <button type="button" id="mode-captured" class="mode-btn" aria-pressed="true">
+          This job
+        </button>
+        <button type="button" id="mode-manual" class="mode-btn" aria-pressed="false">
+          Manual
+        </button>
+      </div>
       <form id="capture-form">
         <label for="field-company">Company</label>
         <input type="text" id="field-company" required />

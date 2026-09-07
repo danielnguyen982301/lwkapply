@@ -39,6 +39,35 @@ textarea {
   border-radius: 6px;
 }
 
+input:read-only {
+  background: #f6f8fa;
+  color: #57606a;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  color: #57606a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-btn[aria-pressed='true'] {
+  background: #1a56db;
+  border-color: #1a56db;
+  color: #fff;
+}
+
 textarea {
   resize: vertical;
 }

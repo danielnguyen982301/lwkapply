@@ -6,6 +6,10 @@ const views = {
   unsupported: document.getElementById('unsupported-view'),
 }
 const logoutBtn = document.getElementById('logout-btn')
+const modeToggle = document.getElementById('mode-toggle')
+const modeCapturedBtn = document.getElementById('mode-captured')
+const modeManualBtn = document.getElementById('mode-manual')
+const jobUrlField = document.getElementById('field-job-url')
 
 function showView(name) {
   for (const [key, el] of Object.entries(views)) {
@@ -18,12 +22,18 @@ function sendMessage(message) {
   return chrome.runtime.sendMessage(message)
 }
 
-// Set by fillForm from the scrape, not from any form field - there's
-// nothing for the user to usefully edit here, and keeping it out of the
-// DOM avoids it silently going stale if they edit the Job URL field
-// into a different posting's URL. Cleared on every load so a capture
-// on an unsupported page (or one whose URL didn't match the expected
-// shape) doesn't accidentally reuse an older tab's id.
+// The last scrape, kept around so switching back to "This job" mode can
+// re-fill the form without asking the content script again.
+let scrapedJob = null
+// 'captured' locks Job URL to the scraped value and identifies the row
+// by external_id (upsert semantics - edits apply to an already-tracked
+// row via a follow-up update, see the submit handler, but never create
+// a second row for the same posting). 'manual' has no external_id at
+// all: every field including Job URL is free-form, and submitting
+// always creates a brand new row - for a job this extension didn't
+// capture, or a deliberate second entry (e.g. re-applying after a
+// rejection).
+let captureMode = 'captured'
 let currentExternalId = null
 
 function fillForm(job) {
@@ -32,8 +42,32 @@ function fillForm(job) {
   document.getElementById('field-location').value = job?.location ?? ''
   document.getElementById('field-salary-min').value = job?.salary_min ?? ''
   document.getElementById('field-salary-max').value = job?.salary_max ?? ''
-  document.getElementById('field-job-url').value = job?.job_url ?? ''
-  currentExternalId = job?.external_id ?? null
+  jobUrlField.value = job?.job_url ?? ''
+}
+
+function clearForm() {
+  document.getElementById('field-company').value = ''
+  document.getElementById('field-position').value = ''
+  document.getElementById('field-location').value = ''
+  document.getElementById('field-salary-min').value = ''
+  document.getElementById('field-salary-max').value = ''
+  jobUrlField.value = ''
+  document.getElementById('field-notes').value = ''
+}
+
+function setMode(mode) {
+  captureMode = mode
+  modeCapturedBtn.setAttribute('aria-pressed', String(mode === 'captured'))
+  modeManualBtn.setAttribute('aria-pressed', String(mode === 'manual'))
+  jobUrlField.readOnly = mode === 'captured'
+
+  if (mode === 'captured') {
+    fillForm(scrapedJob)
+    currentExternalId = scrapedJob?.external_id ?? null
+  } else {
+    clearForm()
+    currentExternalId = null
+  }
 }
 
 function numberOrNull(value) {
@@ -58,8 +92,20 @@ async function loadCaptureView() {
     // the tab would fix it; either way there's nothing to prefill from.
   }
 
+  scrapedJob = job
   showView('capture')
-  fillForm(job)
+
+  // Only offer "This job" when there's a real id to lock it to - on a
+  // VietnamWorks page that isn't a job detail page (or one whose URL
+  // didn't match the expected shape), there's nothing captured to
+  // offer as an alternative to entering it manually.
+  if (job?.external_id) {
+    modeToggle.hidden = false
+    setMode('captured')
+  } else {
+    modeToggle.hidden = true
+    setMode('manual')
+  }
 }
 
 async function init() {
@@ -90,6 +136,9 @@ document.getElementById('login-form').addEventListener('submit', async (event) =
   await loadCaptureView()
 })
 
+modeCapturedBtn.addEventListener('click', () => setMode('captured'))
+modeManualBtn.addEventListener('click', () => setMode('manual'))
+
 document.getElementById('capture-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   const errorEl = document.getElementById('capture-error')
@@ -103,23 +152,46 @@ document.getElementById('capture-form').addEventListener('submit', async (event)
     location: document.getElementById('field-location').value || null,
     salary_min: numberOrNull(document.getElementById('field-salary-min').value),
     salary_max: numberOrNull(document.getElementById('field-salary-max').value),
-    job_url: document.getElementById('field-job-url').value || null,
+    job_url: jobUrlField.value || null,
     notes: document.getElementById('field-notes').value || null,
     source: 'vietnamworks',
   }
 
-  // With a real external_id, use the same upsert-by-external-id path
-  // the auto-detected Save/Apply flows use, so a manual capture here
-  // and an auto-detected one for the same posting land on one row
-  // instead of two. Falls back to a plain create when the id couldn't
-  // be determined (an unrecognized URL shape) - still works, just
-  // without that dedup guarantee.
-  const result = currentExternalId
-    ? await sendMessage({
-        type: 'UPSERT_BY_EXTERNAL_ID',
-        payload: { ...payload, external_id: currentExternalId },
+  let result
+  if (captureMode === 'captured' && currentExternalId) {
+    result = await sendMessage({
+      type: 'UPSERT_BY_EXTERNAL_ID',
+      payload: { ...payload, external_id: currentExternalId },
+    })
+
+    if (result.ok && result.action === 'unchanged') {
+      // The upsert intentionally never overwrites an already-tracked
+      // row (the auto-detected Save/Apply flows depend on that to
+      // avoid clobbering edits made elsewhere with a thinner re-scrape)
+      // - so applying what the user typed in *this* form needs an
+      // explicit follow-up update, or their edits would silently vanish.
+      const updateResult = await sendMessage({
+        type: 'UPDATE_APPLICATION',
+        applicationId: result.application.id,
+        updates: {
+          company: payload.company,
+          position: payload.position,
+          location: payload.location,
+          salary_min: payload.salary_min,
+          salary_max: payload.salary_max,
+          notes: payload.notes,
+        },
       })
-    : await sendMessage({ type: 'CREATE_APPLICATION', payload })
+      result = updateResult.ok
+        ? { ok: true, application: updateResult.application, action: 'updated' }
+        : updateResult
+    }
+  } else {
+    // Manual mode, or "captured" mode without a usable id (shouldn't
+    // happen - the toggle is hidden in that case - but fall back to a
+    // plain create rather than silently doing nothing).
+    result = await sendMessage({ type: 'CREATE_APPLICATION', payload })
+  }
 
   if (!result.ok) {
     errorEl.textContent = result.error
@@ -127,7 +199,7 @@ document.getElementById('capture-form').addEventListener('submit', async (event)
     return
   }
   successEl.textContent =
-    result.action === 'unchanged' ? 'Already saved to LwkApply.' : 'Saved to LwkApply.'
+    result.action === 'updated' ? 'Updated the saved application.' : 'Saved to LwkApply.'
   successEl.hidden = false
 })
 
