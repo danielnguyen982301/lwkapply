@@ -388,9 +388,10 @@ watch(
               />
               <Message
                 v-if="isSyncedFromExternalSource"
-                severity="secondary"
+                severity="info"
                 variant="simple"
                 size="small"
+                icon="pi pi-info-circle"
               >
                 Synced from {{ syncedSourceLabel }}
               </Message>
