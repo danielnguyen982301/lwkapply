@@ -15,8 +15,10 @@ import { applicationStatusOptions } from '@/lib/application-ui'
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
+  SALARY_CURRENCY_SYMBOLS,
   type Application,
   type ApplicationStatus,
+  type SalaryCurrency,
 } from '@/types/application'
 
 const store = useApplicationsStore()
@@ -42,9 +44,10 @@ async function loadBoard() {
 
 onMounted(loadBoard)
 
-function formatSalary(min: number | null, max: number | null): string {
+function formatSalary(min: number | null, max: number | null, currency: SalaryCurrency): string {
   if (min == null && max == null) return ''
-  const fmt = (n: number) => `$${Math.round(n / 1000)}k`
+  const symbol = SALARY_CURRENCY_SYMBOLS[currency]
+  const fmt = (n: number) => `${Math.round(n / 1000)}k ${symbol}`
   if (min != null && max != null) return min === max ? fmt(min) : `${fmt(min)}–${fmt(max)}`
   return fmt((min ?? max) as number)
 }
@@ -166,8 +169,11 @@ async function onStatusSelect(app: Application, newStatus: ApplicationStatus) {
                   {{ app.company }}
                 </RouterLink>
                 <p class="text-xs text-slate">{{ app.position }}</p>
-                <p v-if="formatSalary(app.salary_min, app.salary_max)" class="text-xs text-slate">
-                  {{ formatSalary(app.salary_min, app.salary_max) }}
+                <p
+                  v-if="formatSalary(app.salary_min, app.salary_max, app.salary_currency)"
+                  class="text-xs text-slate"
+                >
+                  {{ formatSalary(app.salary_min, app.salary_max, app.salary_currency) }}
                 </p>
 
                 <Select

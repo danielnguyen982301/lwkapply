@@ -20,7 +20,12 @@ import TruncatedText from '@/components/common/TruncatedText.vue'
 import { applicationStatusFilterOptions } from '@/lib/application-ui'
 import { tooltip } from '@/lib/tooltip'
 import { useApplicationRowClick } from '@/lib/row-click'
-import type { Application, ApplicationStatus } from '@/types/application'
+import {
+  SALARY_CURRENCY_SYMBOLS,
+  type Application,
+  type ApplicationStatus,
+  type SalaryCurrency,
+} from '@/types/application'
 
 const store = useApplicationsStore()
 const confirm = useConfirm()
@@ -62,9 +67,10 @@ onMounted(() => {
   store.fetchApplications().catch(() => {})
 })
 
-function formatSalary(min: number | null, max: number | null): string {
+function formatSalary(min: number | null, max: number | null, currency: SalaryCurrency): string {
   if (min == null && max == null) return '—'
-  const fmt = (n: number) => `$${n.toLocaleString()}`
+  const symbol = SALARY_CURRENCY_SYMBOLS[currency]
+  const fmt = (n: number) => `${n.toLocaleString()} ${symbol}`
   if (min != null && max != null) return min === max ? fmt(min) : `${fmt(min)} – ${fmt(max)}`
   return fmt((min ?? max) as number)
 }
@@ -236,7 +242,7 @@ function confirmDelete(app: Application) {
           </Column>
           <Column header="Salary">
             <template #body="{ data }: { data: Application }">
-              {{ formatSalary(data.salary_min, data.salary_max) }}
+              {{ formatSalary(data.salary_min, data.salary_max, data.salary_currency) }}
             </template>
           </Column>
           <Column header="Applied">
