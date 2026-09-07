@@ -539,8 +539,13 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
               decoration: InputDecoration(
                 labelText: 'Job posting URL',
                 hintText: 'https://…',
-                helperText: _isSyncedFromExternalSource
-                    ? 'Synced from ${applicationSourceLabel(_existing!.source!)}'
+                // helper (a widget slot), not helperText (String-only) -
+                // needed room for the info icon alongside the label.
+                helper: _isSyncedFromExternalSource
+                    ? _SyncedHint(
+                        label:
+                            'Synced from ${applicationSourceLabel(_existing!.source!)}',
+                      )
                     : null,
               ),
               keyboardType: TextInputType.url,
@@ -577,5 +582,37 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen>
     if (parsed == null) return 'Enter a whole number';
     if (parsed < 0) return 'Enter 0 or greater';
     return null;
+  }
+}
+
+/// Job URL's "synced from X" helper - an info-circle icon plus colored
+/// text, standing in for InputDecoration's plain-String `helperText`
+/// slot (which can't carry an icon). Uses the theme's primary color
+/// rather than a hardcoded blue, so it still reads correctly in dark
+/// mode or a future re-theme, matching webapp's Message severity="info"
+/// tying its color to the same design tokens instead of a fixed value.
+class _SyncedHint extends StatelessWidget {
+  const _SyncedHint({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.info_outline, size: 14, color: color),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
   }
 }
