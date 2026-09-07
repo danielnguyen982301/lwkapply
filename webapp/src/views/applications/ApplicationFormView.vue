@@ -304,43 +304,49 @@ watch(
               />
             </div>
 
-            <div class="flex flex-col gap-1">
-              <label for="salary_currency" class="text-sm font-medium text-ink">Currency</label>
-              <CustomSelect
-                name="salary_currency"
-                input-id="salary_currency"
-                :options="currencyOptions"
-                option-label="label"
-                option-value="value"
-                filter
-                class="w-full"
-              />
-            </div>
+            <div class="flex flex-col gap-3 rounded-card border border-slate/15 p-3 sm:col-span-2">
+              <span class="text-sm font-medium text-ink">Salary</span>
 
-            <div class="flex flex-col gap-1">
-              <label for="salary_min" class="text-sm font-medium text-ink">Salary min</label>
-              <CustomInputNumber
-                name="salary_min"
-                input-id="salary_min"
-                :min="0"
-                :suffix="salarySuffix"
-                :invalid="!!errors.salary_min"
-                :aria-describedby="!!errors.salary_min ? 'salary-min-error' : undefined"
-                class="w-full"
-              />
-            </div>
+              <div class="flex flex-col gap-1">
+                <label for="salary_currency" class="text-xs text-slate">Currency</label>
+                <CustomSelect
+                  name="salary_currency"
+                  input-id="salary_currency"
+                  :options="currencyOptions"
+                  option-label="label"
+                  option-value="value"
+                  filter
+                  class="w-full"
+                />
+              </div>
 
-            <div class="flex flex-col gap-1">
-              <label for="salary_max" class="text-sm font-medium text-ink">Salary max</label>
-              <CustomInputNumber
-                name="salary_max"
-                input-id="salary_max"
-                :min="0"
-                :suffix="salarySuffix"
-                :invalid="!!errors.salary_max"
-                :aria-describedby="!!errors.salary_max ? 'salary-max-error' : undefined"
-                class="w-full"
-              />
+              <div class="flex gap-3">
+                <div class="flex flex-1 flex-col gap-1">
+                  <label for="salary_min" class="text-xs text-slate">Min</label>
+                  <CustomInputNumber
+                    name="salary_min"
+                    input-id="salary_min"
+                    :min="0"
+                    :suffix="salarySuffix"
+                    :invalid="!!errors.salary_min"
+                    :aria-describedby="!!errors.salary_min ? 'salary-min-error' : undefined"
+                    class="w-full"
+                  />
+                </div>
+
+                <div class="flex flex-1 flex-col gap-1">
+                  <label for="salary_max" class="text-xs text-slate">Max</label>
+                  <CustomInputNumber
+                    name="salary_max"
+                    input-id="salary_max"
+                    :min="0"
+                    :suffix="salarySuffix"
+                    :invalid="!!errors.salary_max"
+                    :aria-describedby="!!errors.salary_max ? 'salary-max-error' : undefined"
+                    class="w-full"
+                  />
+                </div>
+              </div>
             </div>
 
             <div class="flex flex-col gap-1">
