@@ -263,37 +263,7 @@ function scrapedPayload(jobUrl) {
   }
 }
 
-async function handleApplyConfirmed(jobUrl) {
-  const existing = await getCapturedJob(jobUrl)
-  if (existing?.status === 'applied') return // already recorded, don't double-fire
-
-  if (existing?.status === 'saved') {
-    const { applicationId } = existing
-    const result = await chrome.runtime.sendMessage({
-      type: 'UPDATE_APPLICATION',
-      applicationId,
-      updates: { status: 'applied', applied_date: todayLocalIsoDate() },
-    })
-    if (!result.ok) {
-      showToast(`Couldn't update LwkApply: ${result.error}`)
-      return
-    }
-    await setCapturedJob(jobUrl, { applicationId, status: 'applied' })
-    showToast('Marked as Applied on LwkApply', {
-      undoLabel: 'Undo',
-      onUndo: async () => {
-        await chrome.runtime.sendMessage({
-          type: 'UPDATE_APPLICATION',
-          applicationId,
-          updates: { status: 'saved', applied_date: null },
-        })
-        await setCapturedJob(jobUrl, { applicationId, status: 'saved' })
-      },
-    })
-    return
-  }
-
-  // No prior save on this job - create it directly as applied.
+async function createAsApplied(jobUrl) {
   const payload = scrapedPayload(jobUrl)
   if (!payload) return
   payload.status = 'applied'
@@ -316,6 +286,49 @@ async function handleApplyConfirmed(jobUrl) {
       await deleteCapturedJob(jobUrl)
     },
   })
+}
+
+async function handleApplyConfirmed(jobUrl) {
+  const existing = await getCapturedJob(jobUrl)
+  if (existing?.status === 'applied') return // already recorded, don't double-fire
+
+  if (existing?.status === 'saved') {
+    const { applicationId } = existing
+    const result = await chrome.runtime.sendMessage({
+      type: 'UPDATE_APPLICATION',
+      applicationId,
+      updates: { status: 'applied', applied_date: todayLocalIsoDate() },
+    })
+    if (!result.ok) {
+      if (result.status === 404) {
+        // Deleted through some other channel (the web app, another
+        // device) since we last saw it - the tracked reference is
+        // stale, not this apply. Clear it and fall through to create
+        // fresh, same as a bare apply with no prior save.
+        await deleteCapturedJob(jobUrl)
+        await createAsApplied(jobUrl)
+        return
+      }
+      showToast(`Couldn't update LwkApply: ${result.error}`)
+      return
+    }
+    await setCapturedJob(jobUrl, { applicationId, status: 'applied' })
+    showToast('Marked as Applied on LwkApply', {
+      undoLabel: 'Undo',
+      onUndo: async () => {
+        await chrome.runtime.sendMessage({
+          type: 'UPDATE_APPLICATION',
+          applicationId,
+          updates: { status: 'saved', applied_date: null },
+        })
+        await setCapturedJob(jobUrl, { applicationId, status: 'saved' })
+      },
+    })
+    return
+  }
+
+  // No prior save on this job - create it directly as applied.
+  await createAsApplied(jobUrl)
 }
 
 document.addEventListener(

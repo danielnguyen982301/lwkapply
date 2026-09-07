@@ -56,7 +56,7 @@ async function updateApplication(applicationId, updates) {
     body: JSON.stringify(updates),
   })
   const body = await parseJsonSafe(response)
-  if (!response.ok) return { ok: false, error: firstErrorMessage(body) }
+  if (!response.ok) return { ok: false, status: response.status, error: firstErrorMessage(body) }
   if (!body) return { ok: false, error: 'Unexpected response from server.' }
   return { ok: true, application: body }
 }
@@ -65,9 +65,18 @@ async function deleteApplication(applicationId) {
   const response = await auth.apiFetch(`/applications/${applicationId}`, { method: 'DELETE' })
   if (!response.ok) {
     const body = await parseJsonSafe(response)
-    return { ok: false, error: firstErrorMessage(body) }
+    return { ok: false, status: response.status, error: firstErrorMessage(body) }
   }
   return { ok: true }
+}
+
+// Bare status check against a cached applicationId - used to tell a
+// genuinely-still-tracked row (200) apart from one that's been deleted
+// through some other channel since we last saw it, e.g. the web app
+// (404), without fetching/discarding the full body either way.
+async function getApplicationStatus(applicationId) {
+  const response = await auth.apiFetch(`/applications/${applicationId}`, { method: 'GET' })
+  return response.status
 }
 
 // --- Network-driven save/unsave ------------------------------------------
@@ -129,7 +138,19 @@ async function handleConfirmedSave(tabId) {
   const job = await scrapeTab(tabId)
   if (!job?.company || !job?.position) return // not enough to satisfy the backend
 
-  if (await getCapturedJob(job.job_url)) return // already tracked
+  const existing = await getCapturedJob(job.job_url)
+  if (existing) {
+    const status = await getApplicationStatus(existing.applicationId)
+    if (status === 200) return // still tracked for real - skip
+    if (status === 404) {
+      // Deleted through some other channel (the web app, another
+      // device) since we last saw it - the cache is stale, not the
+      // save. Clear it and fall through to create a fresh one.
+      await deleteCapturedJob(job.job_url)
+    } else {
+      return // couldn't verify (auth/network hiccup) - skip rather than risk a duplicate
+    }
+  }
 
   const payload = {
     company: job.company,
@@ -185,6 +206,18 @@ async function handleConfirmedUnsave(tabId) {
 
   const result = await deleteApplication(existing.applicationId)
   if (!result.ok) {
+    if (result.status === 404) {
+      // Already gone - deleted through some other channel (the web
+      // app, another device) since we last saw it. The tracked
+      // reference was stale, not a real failure: clear it so future
+      // Save/Unsave clicks on this job start fresh instead of hitting
+      // this same 404 forever. Deliberately no "Undo" here - offering
+      // to recreate would resurrect a row the user removed elsewhere
+      // on purpose.
+      await deleteCapturedJob(job.job_url)
+      notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: true, message: 'Removed from LwkApply' })
+      return
+    }
     notifyTab(tabId, {
       type: 'AUTO_SAVE_RESULT',
       ok: false,
