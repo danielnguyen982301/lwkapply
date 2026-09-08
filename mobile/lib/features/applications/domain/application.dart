@@ -270,6 +270,8 @@ class Application {
     required this.appliedDate,
     required this.jobUrl,
     required this.notes,
+    required this.source,
+    required this.externalId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -294,6 +296,15 @@ class Application {
   final DateTime? appliedDate;
   final String? jobUrl;
   final String? notes;
+
+  /// Free-form origin, e.g. "vietnamworks" — null for the normal in-app
+  /// create flow, otherwise wherever a client (e.g. a browser
+  /// extension) sourced the application from. Immutable after creation.
+  final String? source;
+
+  /// The source system's own id for this posting — only meaningful
+  /// alongside a non-null [source]. Immutable after creation.
+  final String? externalId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -315,6 +326,8 @@ class Application {
           : DateTime.parse(json['applied_date'] as String),
       jobUrl: json['job_url'] as String?,
       notes: json['notes'] as String?,
+      source: json['source'] as String?,
+      externalId: json['external_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );

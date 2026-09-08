@@ -34,3 +34,18 @@ String formatDate(DateTime? date) {
   if (date == null) return '—';
   return _dateFormat.format(date);
 }
+
+/// Mirrors webapp's applicationSourceLabel (lib/application-ui.ts).
+/// Application.source is deliberately a free-form string (see its doc
+/// comment on the domain class) so a new site never needs a migration -
+/// this only supplies a nicer display name for the ones we know about,
+/// falling back to a simple capitalization for anything else rather
+/// than requiring every new source to be added here too.
+const _applicationSourceLabels = {'vietnamworks': 'VietnamWorks'};
+
+String applicationSourceLabel(String source) {
+  final known = _applicationSourceLabels[source];
+  if (known != null) return known;
+  if (source.isEmpty) return source;
+  return source[0].toUpperCase() + source.substring(1);
+}

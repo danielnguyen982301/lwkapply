@@ -19,6 +19,8 @@ inserts.
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app.models.application import Application, ApplicationStatus
 
 APPLICATIONS_URL = "/api/v1/applications"
@@ -92,6 +94,32 @@ class TestCreateApplication:
 
         assert response.status_code == 201
         assert response.json()["application_name"] == "Referral via Jane"
+
+    def test_source_round_trips(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["source"] == "vietnamworks"
+
+    def test_source_defaults_to_null(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.post(
+            APPLICATIONS_URL,
+            json={"company": "Initech", "position": "Backend Engineer"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["source"] is None
 
     def test_missing_company_is_rejected(self, client, make_user, auth_headers):
         user = make_user()
@@ -542,6 +570,308 @@ class TestDeleteApplication:
             f"{APPLICATIONS_URL}/{uuid.uuid4()}", headers=auth_headers(user)
         )
         assert response.status_code == 404
+
+
+class TestCreateApplicationSourceExternalIdConflict:
+    # This is the first test in the suite to deliberately let a real
+    # DBAPI-level constraint violation (not an application-level/pydantic
+    # one) reach flush() through the full request stack. conftest.py's
+    # db_session fixture wraps each test in connection.begin() plus a
+    # session-level SAVEPOINT, restarting the SAVEPOINT after every
+    # transaction end (see its after_transaction_end listener) - that
+    # listener is built around a flush's *normal* commit/rollback ending
+    # the SAVEPOINT, not a DBAPI error deactivating the underlying
+    # connection outright. The resulting SAWarning ("transaction already
+    # deassociated from connection") fires from conftest.py's own
+    # teardown, not from application code - confirmed by removing this
+    # test's db.rollback() call entirely and seeing the identical warning
+    # still fire, so it isn't something this test (or the endpoint) is
+    # doing wrong. It doesn't affect this test's own assertions or leak
+    # into any other test (a full suite run stays green around it), so
+    # this silences the one known false positive rather than either
+    # touching the shared fixture every other test also depends on, or
+    # leaving an unexplained warning for the next reader to puzzle over.
+    @pytest.mark.filterwarnings("ignore::sqlalchemy.exc.SAWarning")
+    def test_conflicting_source_and_external_id_is_409(
+        self, client, make_user, auth_headers
+    ):
+        user = make_user()
+        payload = {
+            "company": "Initech",
+            "position": "Backend Engineer",
+            "source": "vietnamworks",
+            "external_id": "2094252",
+        }
+
+        first = client.post(APPLICATIONS_URL, json=payload, headers=auth_headers(user))
+        second = client.post(APPLICATIONS_URL, json=payload, headers=auth_headers(user))
+
+        assert first.status_code == 201
+        assert second.status_code == 409
+
+    def test_same_external_id_is_fine_for_a_different_source(
+        self, client, make_user, auth_headers
+    ):
+        user = make_user()
+        first = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+        second = client.post(
+            APPLICATIONS_URL,
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "linkedin",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+
+class TestUpsertByExternalId:
+    def test_creates_saved_application_when_none_exists(
+        self, client, make_user, auth_headers
+    ):
+        user = make_user()
+        response = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["action"] == "created"
+        assert body["application"]["status"] == "saved"
+        assert body["application"]["source"] == "vietnamworks"
+        assert body["application"]["external_id"] == "2094252"
+
+    def test_repeating_the_same_call_does_not_create_a_duplicate(
+        self, client, make_user, auth_headers
+    ):
+        user = make_user()
+        payload = {
+            "company": "Initech",
+            "position": "Backend Engineer",
+            "source": "vietnamworks",
+            "external_id": "2094252",
+        }
+
+        first = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json=payload,
+            headers=auth_headers(user),
+        )
+        second = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json=payload,
+            headers=auth_headers(user),
+        )
+
+        assert first.json()["action"] == "created"
+        assert second.json()["action"] == "unchanged"
+        assert first.json()["application"]["id"] == second.json()["application"]["id"]
+
+        listing = client.get(APPLICATIONS_URL, headers=auth_headers(user))
+        assert listing.json()["total"] == 1
+
+    def test_different_users_can_track_the_same_external_id(
+        self, client, make_user, auth_headers
+    ):
+        user_a = make_user()
+        user_b = make_user()
+        payload = {
+            "company": "Initech",
+            "position": "Backend Engineer",
+            "source": "vietnamworks",
+            "external_id": "2094252",
+        }
+
+        response_a = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json=payload,
+            headers=auth_headers(user_a),
+        )
+        response_b = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json=payload,
+            headers=auth_headers(user_b),
+        )
+
+        assert response_a.json()["action"] == "created"
+        assert response_b.json()["action"] == "created"
+        assert (
+            response_a.json()["application"]["id"]
+            != response_b.json()["application"]["id"]
+        )
+
+    def test_requires_source_and_external_id(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.put(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json={"company": "Initech", "position": "Backend Engineer"},
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+
+
+class TestApplyByExternalId:
+    def test_marks_existing_saved_row_as_applied(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(
+            db_session,
+            user,
+            source="vietnamworks",
+            external_id="2094252",
+            status=ApplicationStatus.SAVED,
+        )
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["action"] == "updated"
+        assert body["application"]["id"] == str(application.id)
+        assert body["application"]["status"] == "applied"
+        assert body["application"]["applied_date"] is not None
+
+    def test_creates_directly_as_applied_when_nothing_tracked(
+        self, client, make_user, auth_headers
+    ):
+        user = make_user()
+        response = client.patch(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["action"] == "created"
+        assert body["application"]["status"] == "applied"
+
+    def test_leaves_a_row_in_any_other_status_untouched(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(
+            db_session,
+            user,
+            source="vietnamworks",
+            external_id="2094252",
+            status=ApplicationStatus.REJECTED,
+        )
+
+        response = client.patch(
+            f"{APPLICATIONS_URL}/by-external-id",
+            json={
+                "company": "Initech",
+                "position": "Backend Engineer",
+                "source": "vietnamworks",
+                "external_id": "2094252",
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["action"] == "unchanged"
+        assert body["application"]["status"] == "rejected"
+        assert body["application"]["id"] == str(application.id)
+
+
+class TestDeleteByExternalId:
+    def test_deletes_a_saved_row(self, client, db_session, make_user, auth_headers):
+        user = make_user()
+        application = _make_application(
+            db_session,
+            user,
+            source="vietnamworks",
+            external_id="2094252",
+            status=ApplicationStatus.SAVED,
+        )
+
+        response = client.delete(
+            f"{APPLICATIONS_URL}/by-external-id",
+            params={"source": "vietnamworks", "external_id": "2094252"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["action"] == "deleted"
+
+        get_response = client.get(
+            f"{APPLICATIONS_URL}/{application.id}", headers=auth_headers(user)
+        )
+        assert get_response.status_code == 404
+
+    def test_leaves_an_applied_row_alone(
+        self, client, db_session, make_user, auth_headers
+    ):
+        user = make_user()
+        application = _make_application(
+            db_session,
+            user,
+            source="vietnamworks",
+            external_id="2094252",
+            status=ApplicationStatus.APPLIED,
+        )
+
+        response = client.delete(
+            f"{APPLICATIONS_URL}/by-external-id",
+            params={"source": "vietnamworks", "external_id": "2094252"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["action"] == "kept"
+
+        get_response = client.get(
+            f"{APPLICATIONS_URL}/{application.id}", headers=auth_headers(user)
+        )
+        assert get_response.status_code == 200
+
+    def test_not_found_is_not_an_error(self, client, make_user, auth_headers):
+        user = make_user()
+        response = client.delete(
+            f"{APPLICATIONS_URL}/by-external-id",
+            params={"source": "vietnamworks", "external_id": "does-not-exist"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["action"] == "not_found"
 
 
 class TestListApplicationsFilter:

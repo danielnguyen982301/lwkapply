@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LwkApply</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>LwkApply</h1>
+      <button type="button" id="logout-btn" class="link-btn" hidden>Log out</button>
+    </header>
+
+    <section id="login-view" hidden>
+      <form id="login-form">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required autocomplete="username" />
+
+        <label for="login-password">Password</label>
+        <input
+          type="password"
+          id="login-password"
+          required
+          autocomplete="current-password"
+        />
+
+        <button type="submit">Log in</button>
+        <p class="error" id="login-error" hidden></p>
+      </form>
+    </section>
+
+    <section id="capture-view" hidden>
+      <div class="mode-toggle" id="mode-toggle" hidden>
+        <button type="button" id="mode-captured" class="mode-btn" aria-pressed="true">
+          This job
+        </button>
+        <button type="button" id="mode-manual" class="mode-btn" aria-pressed="false">
+          Manual
+        </button>
+      </div>
+      <form id="capture-form">
+        <label for="field-company">Company</label>
+        <input type="text" id="field-company" required />
+
+        <label for="field-position">Position</label>
+        <input type="text" id="field-position" required />
+
+        <label for="field-location">Location</label>
+        <input type="text" id="field-location" />
+
+        <label for="field-salary-currency">Currency</label>
+        <!-- Mirrors backend/app/models/application.py::SalaryCurrency -
+             keep in sync if that enum changes. -->
+        <select id="field-salary-currency">
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="CAD">CAD</option>
+          <option value="AUD">AUD</option>
+          <option value="NZD">NZD</option>
+          <option value="CHF">CHF</option>
+          <option value="SEK">SEK</option>
+          <option value="NOK">NOK</option>
+          <option value="DKK">DKK</option>
+          <option value="ISK">ISK</option>
+          <option value="PLN">PLN</option>
+          <option value="CZK">CZK</option>
+          <option value="HUF">HUF</option>
+          <option value="RON">RON</option>
+          <option value="UAH">UAH</option>
+          <option value="RUB">RUB</option>
+          <option value="TRY">TRY</option>
+          <option value="ILS">ILS</option>
+          <option value="AED">AED</option>
+          <option value="SAR">SAR</option>
+          <option value="EGP">EGP</option>
+          <option value="NGN">NGN</option>
+          <option value="KES">KES</option>
+          <option value="ZAR">ZAR</option>
+          <option value="INR">INR</option>
+          <option value="PKR">PKR</option>
+          <option value="BDT">BDT</option>
+          <option value="CNY">CNY</option>
+          <option value="JPY">JPY</option>
+          <option value="KRW">KRW</option>
+          <option value="TWD">TWD</option>
+          <option value="HKD">HKD</option>
+          <option value="SGD">SGD</option>
+          <option value="MYR">MYR</option>
+          <option value="THB">THB</option>
+          <option value="VND">VND</option>
+          <option value="IDR">IDR</option>
+          <option value="PHP">PHP</option>
+          <option value="BRL">BRL</option>
+          <option value="MXN">MXN</option>
+          <option value="ARS">ARS</option>
+          <option value="CLP">CLP</option>
+          <option value="COP">COP</option>
+        </select>
+
+        <div class="salary-row">
+          <div>
+            <label for="field-salary-min">Salary min</label>
+            <input type="number" id="field-salary-min" min="0" />
+          </div>
+          <div>
+            <label for="field-salary-max">Salary max</label>
+            <input type="number" id="field-salary-max" min="0" />
+          </div>
+        </div>
+
+        <label for="field-job-url">Job URL</label>
+        <input type="url" id="field-job-url" />
+
+        <label for="field-notes">Notes</label>
+        <textarea id="field-notes" rows="2"></textarea>
+
+        <button type="submit">Save to LwkApply</button>
+        <p class="error" id="capture-error" hidden></p>
+        <p class="success" id="capture-success" hidden></p>
+      </form>
+    </section>
+
+    <section id="unsupported-view" hidden>
+      <p>Open a VietnamWorks job posting, then click this icon again to capture it.</p>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

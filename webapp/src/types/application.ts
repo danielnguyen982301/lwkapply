@@ -248,6 +248,16 @@ export interface Application {
   applied_date: string | null
   job_url: string | null
   notes: string | null
+  /** Free-form origin, e.g. "vietnamworks" — null for the normal in-app
+   * create flow, otherwise wherever a client (e.g. a future browser
+   * extension) sourced the application from. Immutable after creation. */
+  source: string | null
+  /** The source system's own id for this posting (e.g. VietnamWorks'
+   * internal job id) — only meaningful alongside a non-null `source`.
+   * Paired with it as the real identity a browser extension tracks;
+   * job_url alone isn't a reliable natural key (its query string varies
+   * by referral path for the same posting). Immutable after creation. */
+  external_id: string | null
   created_at: string
   updated_at: string
 }
@@ -291,10 +301,17 @@ export interface ApplicationCreatePayload {
   applied_date?: string | null
   job_url?: string | null
   notes?: string | null
+  source?: string | null
+  external_id?: string | null
 }
 
-// Mirrors ApplicationUpdate: identical fields, all optional. The backend
-// uses `exclude_unset=True`, so only keys actually present in the request
-// body are touched — omit a field here rather than sending `undefined`/
-// `null` for "don't change this".
-export type ApplicationUpdatePayload = Partial<ApplicationCreatePayload>
+// Mirrors ApplicationUpdate: same fields as create, all optional, minus
+// `source`/`external_id` — ApplicationUpdate isn't a subclass of
+// ApplicationBase and deliberately excludes both, since a row's origin
+// and the source system's id for it are set once at creation and aren't
+// meant to change afterward. The backend uses `exclude_unset=True`, so
+// only keys actually present in the request body are touched — omit a
+// field here rather than sending `undefined`/`null` for "don't change this".
+export type ApplicationUpdatePayload = Partial<
+  Omit<ApplicationCreatePayload, 'source' | 'external_id'>
+>

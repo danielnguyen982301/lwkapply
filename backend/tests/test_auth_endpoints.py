@@ -85,6 +85,54 @@ class TestLoginReturnsCsrfToken:
         assert isinstance(body["csrf_token"], str)
 
 
+class TestExtensionClientTokenBasedAuth:
+    """The browser extension identifies itself the same way the mobile
+    app does - an `X-Client-Platform` header - so it gets the refresh
+    token back in the JSON body (it has no reliable access to the
+    httpOnly cookie from a background service worker) and skips CSRF on
+    logout (see app/api/deps.py::is_token_based_client)."""
+
+    def test_login_returns_refresh_token_for_extension_client(
+        self, https_client, db_session
+    ):
+        _, password = _make_user(db_session)
+
+        response = https_client.post(
+            LOGIN_URL,
+            json={"email": "csrf-test@example.com", "password": password},
+            headers={"X-Client-Platform": "extension"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["refresh_token"]
+
+    def test_login_omits_refresh_token_for_web_client(self, https_client, db_session):
+        _, password = _make_user(db_session)
+
+        response = https_client.post(
+            LOGIN_URL, json={"email": "csrf-test@example.com", "password": password}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["refresh_token"] is None
+
+    def test_logout_succeeds_without_csrf_for_extension_client(
+        self, https_client, db_session
+    ):
+        _, password = _make_user(db_session)
+        https_client.post(
+            LOGIN_URL,
+            json={"email": "csrf-test@example.com", "password": password},
+            headers={"X-Client-Platform": "extension"},
+        )
+
+        response = https_client.post(
+            LOGOUT_URL, headers={"X-Client-Platform": "extension"}
+        )
+
+        assert response.status_code == 204
+
+
 class TestRefreshDoesNotRequireCsrf:
     def test_refresh_succeeds_with_no_csrf_header(self, https_client, db_session):
         """The regression this guards against: bootstrap() on a hard

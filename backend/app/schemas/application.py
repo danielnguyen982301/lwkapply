@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -44,10 +45,37 @@ class ApplicationBase(SalaryRangeValidationMixin):
     applied_date: date | None = None
     job_url: str | None = Field(default=None, max_length=1000)
     notes: str | None = None
+    source: str | None = Field(default=None, max_length=100)
+    external_id: str | None = Field(default=None, max_length=255)
 
 
 class ApplicationCreate(ApplicationBase):
     pass
+
+
+class ApplicationUpsertByExternalId(ApplicationCreate):
+    """Body for PUT/PATCH /applications/by-external-id - identical to
+    ApplicationCreate, except source/external_id (optional there, since
+    a plain manual create leaves both null) are required here, since
+    identifying which row to find-or-create is the entire point of this
+    endpoint. `status` is accepted but ignored - both endpoints decide
+    the row's status themselves (see applications.py).
+
+    Enforced via a validator rather than re-declaring source/external_id
+    with a narrower (non-Optional) type: a subclass narrowing an
+    inherited *mutable* attribute's type is a real type-safety hole
+    (nothing stops code that only knows about ApplicationBase from
+    assigning None to it on an instance of this subclass) that pyright
+    correctly flags as reportIncompatibleVariableOverride - this keeps
+    the inherited annotation as-is and rejects None at the validation
+    layer instead, where "required" actually belongs.
+    """
+
+    @model_validator(mode="after")
+    def require_source_and_external_id(self):
+        if not self.source or not self.external_id:
+            raise ValueError("source and external_id are required")
+        return self
 
 
 class ApplicationUpdate(SalaryRangeValidationMixin):
@@ -76,3 +104,21 @@ class ApplicationListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ApplicationUpsertResult(BaseModel):
+    """Response for PUT/PATCH /applications/by-external-id - the row
+    alone doesn't say whether anything actually changed, which the
+    caller needs to pick the right toast/Undo behavior."""
+
+    application: ApplicationRead
+    action: Literal["created", "updated", "unchanged"]
+
+
+class ApplicationDeleteByExternalIdResult(BaseModel):
+    """Response for DELETE /applications/by-external-id. Always 200, not
+    404-on-not_found - "no saved row exists for this job" is one
+    legitimate outcome of "make sure no saved row exists for this job",
+    not an error."""
+
+    action: Literal["deleted", "kept", "not_found"]
