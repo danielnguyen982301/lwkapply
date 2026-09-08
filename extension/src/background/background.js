@@ -31,14 +31,10 @@ async function handleMessage(message) {
     case 'UPDATE_APPLICATION':
       return updateApplication(message.applicationId, message.updates)
 
-    case 'DELETE_APPLICATION':
-      return deleteApplication(message.applicationId)
-
-    // Used by the popup's manual "This job" capture mode and by the
-    // content script's Undo-after-Unsave handler - the network-driven
-    // Save/Unsave/Apply flows below call upsertByExternalId/
-    // applyByExternalId directly instead, no message round-trip needed
-    // since they're already in this same context.
+    // Used by the popup's manual "This job" capture mode - the
+    // network-driven Save/Unsave/Apply flows below call
+    // upsertByExternalId/applyByExternalId directly instead, no message
+    // round-trip needed since they're already in this same context.
     case 'UPSERT_BY_EXTERNAL_ID':
       return upsertByExternalId(message.payload)
 
@@ -67,15 +63,6 @@ async function updateApplication(applicationId, updates) {
   if (!response.ok) return { ok: false, error: firstErrorMessage(body) }
   if (!body) return { ok: false, error: 'Unexpected response from server.' }
   return { ok: true, application: body }
-}
-
-async function deleteApplication(applicationId) {
-  const response = await auth.apiFetch(`/applications/${applicationId}`, { method: 'DELETE' })
-  if (!response.ok) {
-    const body = await parseJsonSafe(response)
-    return { ok: false, error: firstErrorMessage(body) }
-  }
-  return { ok: true }
 }
 
 // PUT/PATCH/DELETE /applications/by-external-id - the backend is the
@@ -260,12 +247,7 @@ async function handleConfirmedSave(tabId, jobId) {
   }
   if (result.action === 'unchanged') return // already tracked - nothing new happened
 
-  notifyTab(tabId, {
-    type: 'AUTO_SAVE_RESULT',
-    ok: true,
-    message: 'Saved to LwkApply',
-    undo: { kind: 'delete', applicationId: result.application.id },
-  })
+  notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: true, message: 'Saved to LwkApply' })
 }
 
 // Only removes what's tracked as "saved" (the backend enforces this,
@@ -294,32 +276,7 @@ async function handleConfirmedUnsave(tabId, jobId) {
   }
   if (result.action !== 'deleted') return // nothing tracked, or kept as-is - nothing to announce
 
-  // Scraped only now, for the Undo-recreate payload - the delete itself
-  // never needed it.
-  const job = await scrapeTab(tabId)
-  notifyTab(tabId, {
-    type: 'AUTO_SAVE_RESULT',
-    ok: true,
-    message: 'Removed from LwkApply',
-    undo:
-      job?.company && job?.position
-        ? {
-            kind: 'recreate',
-            payload: {
-              company: job.company,
-              position: job.position,
-              location: job.location,
-              salary_min: job.salary_min,
-              salary_max: job.salary_max,
-              ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
-              job_url: job.job_url,
-              notes: null,
-              source: SOURCE,
-              external_id: jobId,
-            },
-          }
-        : undefined,
-  })
+  notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: true, message: 'Removed from LwkApply' })
 }
 
 // Mirrors upsertByExternalId's shape, but calls applyByExternalId
@@ -364,26 +321,9 @@ async function handleConfirmedApply(tabId, jobId) {
   }
   if (result.action === 'unchanged') return // already applied, or some other status - left alone
 
-  const applicationId = result.application.id
-  if (result.action === 'created') {
-    notifyTab(tabId, {
-      type: 'AUTO_SAVE_RESULT',
-      ok: true,
-      message: 'Saved to LwkApply as Applied',
-      undo: { kind: 'delete', applicationId },
-    })
-    return
-  }
-
-  // action === 'updated' - this row existed as "saved" before this
-  // apply; undo should revert the status, not delete a row the user
-  // had already saved on purpose.
-  notifyTab(tabId, {
-    type: 'AUTO_SAVE_RESULT',
-    ok: true,
-    message: 'Marked as Applied on LwkApply',
-    undo: { kind: 'revert-to-saved', applicationId },
-  })
+  const message =
+    result.action === 'created' ? 'Saved to LwkApply as Applied' : 'Marked as Applied on LwkApply'
+  notifyTab(tabId, { type: 'AUTO_SAVE_RESULT', ok: true, message })
 }
 
 function notifyTab(tabId, message) {

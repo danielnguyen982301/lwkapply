@@ -158,12 +158,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 })
 
 function handleAutoSaveResult(message) {
-  if (!message.ok) {
-    showToast(message.error)
-    return
-  }
-  const undo = message.undo
-  showToast(message.message, undo ? { undoLabel: 'Undo', onUndo: () => performUndo(undo) } : undefined)
+  showToast(message.ok ? message.message : message.error)
 }
 
 // pathname excludes the query string and fragment by construction, so
@@ -179,38 +174,7 @@ function extractJobIdFromUrl(url) {
   return match ? match[1] : null
 }
 
-// Three shapes coming from background.js: "delete" undoes a create
-// (Save, or a bare Apply with no prior save), "revert-to-saved" undoes
-// an Apply that moved an already-saved row to "applied", and "recreate"
-// undoes a delete (Unsave) - going through the same upsert endpoint
-// Save itself uses (keyed by the same source/external_id in
-// undo.payload) rather than a plain create, so double-clicking Undo -
-// or a fresh Save racing it - can't produce two rows for the same job.
-async function performUndo(undo) {
-  switch (undo.kind) {
-    case 'delete':
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_APPLICATION',
-        applicationId: undo.applicationId,
-      })
-      return
-    case 'revert-to-saved':
-      await chrome.runtime.sendMessage({
-        type: 'UPDATE_APPLICATION',
-        applicationId: undo.applicationId,
-        updates: { status: 'saved', applied_date: null },
-      })
-      return
-    case 'recreate':
-      await chrome.runtime.sendMessage({
-        type: 'UPSERT_BY_EXTERNAL_ID',
-        payload: undo.payload,
-      })
-      return
-  }
-}
-
-function showToast(message, { undoLabel, onUndo } = {}) {
+function showToast(message) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const shadow = host.attachShadow({ mode: 'open' })
@@ -233,30 +197,10 @@ function showToast(message, { undoLabel, onUndo } = {}) {
         font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
       }
-      button {
-        background: none;
-        border: none;
-        color: #8ab4f8;
-        font: inherit;
-        font-weight: 600;
-        cursor: pointer;
-        padding: 0;
-      }
     </style>
-    <div class="toast">
-      <span></span>
-      ${undoLabel ? '<button type="button"></button>' : ''}
-    </div>
+    <div class="toast"><span></span></div>
   `
   shadow.querySelector('span').textContent = message
-  const button = shadow.querySelector('button')
-  if (button && undoLabel) {
-    button.textContent = undoLabel
-    button.addEventListener('click', async () => {
-      await onUndo?.()
-      host.remove()
-    })
-  }
 
-  setTimeout(() => host.remove(), undoLabel ? 8000 : 5000)
+  setTimeout(() => host.remove(), 5000)
 }
