@@ -49,10 +49,10 @@ def glasses_mask(x, y, S):
     # thin enough to disappear entirely once downsampled to a 16px
     # toolbar icon, so bold lenses + a clearly gapped bridge carry
     # the whole shape instead.
-    lens_w = 0.30 * S
+    lens_w = 0.27 * S
     lens_h = 0.22 * S
     lens_r = 0.05 * S
-    gap = 0.10 * S
+    gap = 0.16 * S
     cy = 0.50 * S
     cx = 0.50 * S
 
@@ -68,18 +68,28 @@ def glasses_mask(x, y, S):
     if in_rounded_rect(x, y, r_x0, y0, r_x1, y1, lens_r):
         return True
 
-    # The bridge is a checkmark, not a straight bar: same connector
-    # role (glasses need something joining the lenses), but its bend
-    # also stands for "Apply" (submitted/done) - "Lowkey" from the
-    # glasses, "Apply" from the check, in one element instead of a
-    # second shape that wouldn't survive being shrunk to 16px.
+    # The bridge is a briefcase handle - a rounded arch over the two
+    # lenses - instead of a straight bar or a generic checkmark. A
+    # checkmark only means "done/submitted"; this arch reads as a
+    # case/bag handle, which is specifically "job", so the whole glyph
+    # becomes "glasses resting on a briefcase" - Lowkey from the
+    # lenses, Apply (as in job application, not a generic checkmark)
+    # from the handle. A real arc, not two straight segments meeting
+    # at a point - a sharp V there read as eyebrows/a roof, not a
+    # handle. A plain semicircle, centered at the attach height with
+    # radius = half_gap, so its base exactly spans the two attach
+    # points (l_x1, r_x0) with no bulge past them - an earlier attempt
+    # that solved for a circle through an independently-chosen apex
+    # put the attach points past the circle's equator, so the clipped
+    # arc bulged wider than the lenses before narrowing back in,
+    # looking like a floating ring instead of a dome resting on them.
     stroke = 0.045 * S
-    p1 = (l_x1, y0 + lens_h * 0.18)
-    p2 = (cx, y0 + lens_h * 0.68)
-    p3 = (r_x0, y0 - lens_h * 0.12)
-    if seg_dist(x, y, *p1, *p2) <= stroke / 2:
-        return True
-    if seg_dist(x, y, *p2, *p3) <= stroke / 2:
+    half_gap = gap / 2
+    attach_y = y0 + lens_h * 0.15
+    arch_cy = attach_y
+    arch_r = half_gap
+    d = ((x - cx) ** 2 + (y - arch_cy) ** 2) ** 0.5
+    if abs(d - arch_r) <= stroke / 2 and y <= attach_y:
         return True
 
     return False
