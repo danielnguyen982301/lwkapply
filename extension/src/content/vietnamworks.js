@@ -164,13 +164,18 @@ function handleAutoSaveResult(message) {
 // pathname excludes the query string and fragment by construction, so
 // this is naturally immune to a job's URL varying by referral params
 // (e.g. ?source=searchResults&...) - only the id right before the
-// trailing "-jv" matters. Used above for scrapeJob's external_id -
-// background.js's Save/Unsave/Apply detection all read this same id
-// straight out of their respective requests' bodies instead, since
-// they don't need scrapeJob() to know which job was acted on, only to
-// describe it (company/position/salary) once they already do.
+// trailing locale suffix matters. That suffix itself varies by site
+// locale though (confirmed "-jv" on the Vietnamese UI, "-jd" on the
+// English one for the exact same posting) - matching any trailing
+// letters instead of hardcoding one covers both without needing to
+// enumerate every locale's suffix. Used above for scrapeJob's
+// external_id - background.js's Save/Unsave/Apply detection all read
+// this same id straight out of their respective requests' bodies
+// instead, since they don't need scrapeJob() to know which job was
+// acted on, only to describe it (company/position/salary) once they
+// already do.
 function extractJobIdFromUrl(url) {
-  const match = new URL(url).pathname.match(/-(\d+)-jv\/?$/)
+  const match = new URL(url).pathname.match(/-(\d+)-[a-z]+\/?$/i)
   return match ? match[1] : null
 }
 
