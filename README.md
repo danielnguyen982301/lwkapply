@@ -72,6 +72,67 @@ The project is built as a modern multi-platform application consisting of:
 - Cover letter generation
 - Interview question generation
 
+## Browser Extension
+
+**LwkApply Quick Capture** auto-syncs your VietnamWorks job-application
+activity into LwkApply — Save, Unsave, and Apply on VietnamWorks are
+detected automatically and mirrored as an application in your LwkApply
+account, keyed by VietnamWorks' own job id rather than the page URL.
+It also supports capturing any job posting manually, on VietnamWorks
+or elsewhere.
+
+Source: [`extension/`](extension). It's self-distributed rather than
+listed on addons.mozilla.org (see `extension/scripts/package.sh` for
+how the submission build is put together) — Mozilla still signs it,
+so it installs normally in release Firefox, it's just not searchable
+in the store.
+
+### Installing on Firefox
+
+1. Go to the [Releases page](https://github.com/danielnguyen982301/lwkapply/releases/latest)
+   and download the `.xpi` file attached to the latest release.
+
+   <!-- screenshot: the Releases page with the .xpi asset visible -->
+
+2. Open the downloaded file. Firefox will show an install prompt
+   listing the permissions the extension requests and the categories
+   of data it collects (login credentials, and the job-posting/
+   application data it reads from VietnamWorks — see the
+   [privacy policy](https://lwkapply.vercel.app/privacy) for detail).
+
+   <!-- screenshot: Firefox's "Add extension?" prompt -->
+
+3. Click **Add Extension**. Firefox confirms it was added and offers
+   to pin its icon to the toolbar — do that for easy access.
+
+   <!-- screenshot: "Added to Firefox" confirmation -->
+
+4. Click the toolbar icon and log in with your LwkApply account.
+
+   <!-- screenshot: the popup's login form -->
+
+5. Open any VietnamWorks job posting and click **Save** or **Apply**
+   as you normally would. LwkApply Quick Capture picks this up
+   automatically and shows a toast confirming the application was
+   synced — no extra clicks needed.
+
+   <!-- screenshot: the "Saved to LwkApply" toast on a VietnamWorks
+        job posting -->
+
+To capture a job manually instead (any site, or a VietnamWorks
+posting you don't want auto-tracked), click the toolbar icon and
+switch to the popup's **Manual** tab.
+
+> The screenshot placeholders above are intentional — they mark where
+> real screenshots from an actual install/usage run should go, rather
+> than fabricated ones. Drop the images in `docs/images/` (e.g.
+> `firefox-install-prompt.png`) and swap each comment for
+> `![alt text](docs/images/filename.png)`.
+
+### Installing on Chrome
+
+Coming soon — pending Chrome Web Store developer registration.
+
 ## Technology Stack
 
 ### Frontend
