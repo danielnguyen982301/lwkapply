@@ -1,8 +1,7 @@
-// Points at the local dev backend (see docker-compose.yml / uvicorn
-// --port 8000). Swap for the deployed API origin before shipping past
-// local testing, and add that origin to manifest.json's
-// host_permissions too - a service worker fetch to a host not listed
-// there is blocked the same as an unprivileged cross-origin request.
+// Template for config.js (gitignored, generated - see
+// scripts/use-env.sh). Mirrors webapp's .env.example / mobile's
+// .env.example: one source of truth per environment, nothing
+// hardcoded in feature code.
 export const API_BASE_URL = 'http://localhost:8000/api/v1'
 
 // Mirrors backend/app/api/deps.py's EXTENSION_CLIENT_VALUE - tells the

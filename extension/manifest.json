@@ -6,6 +6,7 @@
   "permissions": ["storage", "activeTab", "webRequest"],
   "host_permissions": [
     "http://localhost:8000/*",
+    "https://lwkapply-api.onrender.com/*",
     "https://*.vietnamworks.com/*"
   ],
   "background": {
