@@ -49,3 +49,28 @@ class TestExtensionOriginCors:
             response.headers.get("access-control-allow-origin")
             == "http://localhost:5173"
         )
+
+
+class TestExtensionPreflightAllowsClientPlatformHeader:
+    """Regression guard for a second, distinct Firefox failure: origin
+    matching alone isn't enough, because Starlette's CORSMiddleware
+    rejects the preflight itself with a 400 ("Disallowed CORS headers")
+    if a requested header isn't in allow_headers - the browser never
+    even sees a response worth reading. This was invisible on Chrome
+    (extension origins bypass CORS there entirely) and on mobile (not a
+    browser, no CORS), so only the extension's real login preflight
+    (which requests X-Client-Platform, per app/api/deps.py's
+    is_token_based_client) ever exercised this path."""
+
+    def test_preflight_allows_x_client_platform_header(self, client):
+        response = client.options(
+            "/api/v1/auth/login",
+            headers={
+                "Origin": "moz-extension://12345678-abcd-1234-abcd-1234567890ab",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,x-client-platform",
+            },
+        )
+        assert response.status_code == 200
+        allowed = response.headers.get("access-control-allow-headers", "")
+        assert "x-client-platform" in allowed.lower()

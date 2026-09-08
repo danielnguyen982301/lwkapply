@@ -40,7 +40,23 @@ app.add_middleware(
     allow_origin_regex=EXTENSION_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+    # X-Client-Platform (app/api/deps.py::is_token_based_client) is sent
+    # by both mobile and the extension on every request, but was missing
+    # here - invisible until Firefox, for three different reasons: the
+    # webapp never sends it (only mobile/extension do), mobile isn't a
+    # browser so CORS doesn't apply to it at all, and Chrome's extension
+    # exemption above means Chrome never enforced this allowlist against
+    # it either. Confirmed against a real Firefox rejection: Starlette's
+    # CORSMiddleware returns a bare 400 ("Disallowed CORS headers") for
+    # the preflight itself when a requested header isn't in this list,
+    # which is a stricter failure mode than a missing-origin rejection -
+    # the browser never even gets to see a response worth reading.
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-CSRF-Token",
+        "X-Client-Platform",
+    ],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
