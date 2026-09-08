@@ -34,15 +34,13 @@ async function handleMessage(message) {
     case 'DELETE_APPLICATION':
       return deleteApplication(message.applicationId)
 
-    // Used by the content script's Apply flow and by its Undo handlers
-    // - background's own Save/Unsave handling below calls the
-    // by-external-id functions directly, no message round-trip needed
-    // since it's already in this same context.
+    // Used by the popup's manual "This job" capture mode and by the
+    // content script's Undo-after-Unsave handler - the network-driven
+    // Save/Unsave/Apply flows below call upsertByExternalId/
+    // applyByExternalId directly instead, no message round-trip needed
+    // since they're already in this same context.
     case 'UPSERT_BY_EXTERNAL_ID':
       return upsertByExternalId(message.payload)
-
-    case 'APPLY_BY_EXTERNAL_ID':
-      return applyByExternalId(message.payload)
 
     default:
       return { ok: false, error: `Unknown message type: ${message.type}` }
@@ -136,30 +134,44 @@ async function deleteByExternalId(source, externalId) {
 // Reading it needs a second webRequest event: onCompleted (used below
 // to confirm success) never exposes what was *sent*, only the
 // response's status code. onBeforeRequest with the "requestBody" extra
-// info does expose it, arriving as raw bytes to decode - correlated to
-// the matching onCompleted call via requestId, the one field guaranteed
-// stable across a single request's lifecycle events.
+// info does expose it - correlated to the matching onCompleted call via
+// requestId, the one field guaranteed stable across a single request's
+// lifecycle events.
 //
-// Apply has no verified network endpoint yet, so it's still the
-// DOM-heuristic click listener in vietnamworks.js, which extracts the
-// same jobId straight from the page's URL instead (see
-// extractJobIdFromUrl there).
+// Apply (Nộp đơn) works the same way, verified against a real
+// submission: POST .../v2.0/job/apply-multiple, form-encoded (not JSON
+// like save/unsave) with a jobIds[] field - "apply-multiple" suggests
+// VietnamWorks built this to submit several jobs in one call (a
+// "quick-apply to similar jobs" style flow), which this deliberately
+// does not attempt to handle: with more than one id in the array there
+// is no single job on the current page to scrape data for, so it's
+// skipped rather than guessed at (see extractSingleJobIdFromFormData).
 const SAVE_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v1.0/save-job*'
 const UNSAVE_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v1.0/unsave-job*'
+const APPLY_JOB_ENDPOINT = 'https://ms.vietnamworks.com/api-gateway/v2.0/job/apply-multiple*'
 const SOURCE = 'vietnamworks'
 
 const pendingJobIds = new Map() // requestId -> jobId
 
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    const jobId = extractJobIdFromRequestBody(details.requestBody)
+    const jobId = extractJobIdFromJsonBody(details.requestBody)
     if (jobId != null) pendingJobIds.set(details.requestId, jobId)
   },
   { urls: [SAVE_JOB_ENDPOINT, UNSAVE_JOB_ENDPOINT] },
   ['requestBody'],
 )
 
-function extractJobIdFromRequestBody(requestBody) {
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    const jobId = extractSingleJobIdFromFormData(details.requestBody)
+    if (jobId != null) pendingJobIds.set(details.requestId, jobId)
+  },
+  { urls: [APPLY_JOB_ENDPOINT] },
+  ['requestBody'],
+)
+
+function extractJobIdFromJsonBody(requestBody) {
   try {
     const bytes = requestBody?.raw?.[0]?.bytes
     if (!bytes) return null
@@ -171,6 +183,12 @@ function extractJobIdFromRequestBody(requestBody) {
   }
 }
 
+function extractSingleJobIdFromFormData(requestBody) {
+  const values = requestBody?.formData?.['jobIds[]']
+  if (!Array.isArray(values) || values.length !== 1) return null
+  return values[0]
+}
+
 chrome.webRequest.onCompleted.addListener(
   (details) => onConfirmedPost(details, handleConfirmedSave),
   { urls: [SAVE_JOB_ENDPOINT] },
@@ -179,6 +197,11 @@ chrome.webRequest.onCompleted.addListener(
 chrome.webRequest.onCompleted.addListener(
   (details) => onConfirmedPost(details, handleConfirmedUnsave),
   { urls: [UNSAVE_JOB_ENDPOINT] },
+)
+
+chrome.webRequest.onCompleted.addListener(
+  (details) => onConfirmedPost(details, handleConfirmedApply),
+  { urls: [APPLY_JOB_ENDPOINT] },
 )
 
 function onConfirmedPost(details, handler) {
@@ -296,6 +319,70 @@ async function handleConfirmedUnsave(tabId, jobId) {
             },
           }
         : undefined,
+  })
+}
+
+// Mirrors upsertByExternalId's shape, but calls applyByExternalId
+// (PATCH), which - like the backend endpoint it wraps - makes the
+// entire "saved -> applied, other status -> leave alone, nothing
+// tracked -> create fresh as applied" decision itself. This function
+// only has to report whichever of those already happened.
+async function handleConfirmedApply(tabId, jobId) {
+  if (!(await auth.isLoggedIn())) {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: 'Log in to LwkApply (click the toolbar icon) to auto-save this.',
+    })
+    return
+  }
+
+  const job = await scrapeTab(tabId)
+  if (!job?.company || !job?.position) return // not enough to satisfy the backend
+
+  const payload = {
+    company: job.company,
+    position: job.position,
+    location: job.location,
+    salary_min: job.salary_min,
+    salary_max: job.salary_max,
+    ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
+    job_url: job.job_url,
+    notes: null,
+    source: SOURCE,
+    external_id: jobId,
+  }
+
+  const result = await applyByExternalId(payload)
+  if (!result.ok) {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: false,
+      error: `Couldn't update LwkApply: ${result.error}`,
+    })
+    return
+  }
+  if (result.action === 'unchanged') return // already applied, or some other status - left alone
+
+  const applicationId = result.application.id
+  if (result.action === 'created') {
+    notifyTab(tabId, {
+      type: 'AUTO_SAVE_RESULT',
+      ok: true,
+      message: 'Saved to LwkApply as Applied',
+      undo: { kind: 'delete', applicationId },
+    })
+    return
+  }
+
+  // action === 'updated' - this row existed as "saved" before this
+  // apply; undo should revert the status, not delete a row the user
+  // had already saved on purpose.
+  notifyTab(tabId, {
+    type: 'AUTO_SAVE_RESULT',
+    ok: true,
+    message: 'Marked as Applied on LwkApply',
+    undo: { kind: 'revert-to-saved', applicationId },
   })
 }
 

@@ -76,14 +76,15 @@ function parseSalary(baseSalary) {
 }
 
 // Mirrors backend/app/models/application.py::SalaryCurrency. Trusts
-// baseSalary.currency when it's one of these; otherwise omits the
-// field entirely from the scrape (see scrapedPayload) so the backend's
-// own USD default applies, rather than sending a value that would fail
-// ApplicationCreate's validation. Not independently verified against a
-// non-USD listing - every real posting checked so far reported "USD"
-// regardless of whether the displayed figure was USD or VND, so this
-// may be boilerplate on VietnamWorks' end rather than reliably accurate
-// for VND-denominated postings.
+// baseSalary.currency when it's one of these; otherwise this returns
+// null, and background.js's payload-builders omit the field entirely
+// rather than sending null - ApplicationCreate's salary_currency has no
+// None branch, omitting the key is what lets the backend's own USD
+// default apply. Not independently verified against a non-USD listing -
+// every real posting checked so far reported "USD" regardless of
+// whether the displayed figure was USD or VND, so this may be
+// boilerplate on VietnamWorks' end rather than reliably accurate for
+// VND-denominated postings.
 const SALARY_CURRENCIES = new Set([
   'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'CHF', 'SEK', 'NOK', 'DKK',
   'ISK', 'PLN', 'CZK', 'HUF', 'RON', 'UAH', 'RUB', 'TRY', 'ILS', 'AED',
@@ -165,216 +166,49 @@ function handleAutoSaveResult(message) {
   showToast(message.message, undo ? { undoLabel: 'Undo', onUndo: () => performUndo(undo) } : undefined)
 }
 
-// Two shapes coming from background.js: "delete" undoes a create (the
-// Save flow), "recreate" undoes a delete (the Unsave flow). Recreate
-// goes through the same upsert endpoint Save itself uses (keyed by the
-// same source/external_id in undo.payload) rather than a plain create,
-// so double-clicking Undo - or a fresh Save racing it - can't produce
-// two rows for the same job.
-async function performUndo(undo) {
-  if (undo.kind === 'delete') {
-    await chrome.runtime.sendMessage({
-      type: 'DELETE_APPLICATION',
-      applicationId: undo.applicationId,
-    })
-    return
-  }
-
-  await chrome.runtime.sendMessage({
-    type: 'UPSERT_BY_EXTERNAL_ID',
-    payload: undo.payload,
-  })
-}
-
-// --- Auto-save on "Nộp đơn" (Apply) -------------------------------------
-//
-// Save ("Lưu công việc này") needs nothing here at all - see
-// background.js's webRequest listener, which detects and handles it
-// entirely from the confirmed POST .../save-job network call, with no
-// dependency on which element was clicked or what it's labeled.
-//
-// Apply has no verified network endpoint yet, so it still relies on the
-// DOM heuristic below - but it shares Save's real identity now too:
-// PATCH /applications/by-external-id (see background.js's
-// applyByExternalId) does the "already saved -> mark applied, some
-// other status -> leave alone, nothing tracked -> create fresh"
-// decision entirely on the backend, keyed by the same jobId Save reads
-// from its request body. Since a network signal isn't available here,
-// extractJobIdFromUrl below pulls the identical id out of the page's
-// own URL instead - VietnamWorks embeds it as the trailing number
-// before "-jv" in every job detail URL this scraper has seen.
-//
-// CALIBRATION NOTE: APPLY_SIGNALS watches the clicked button's
-// aria-label/disabled state and nearby added text for a plausible
-// completion signal, but what a real successful apply actually looks
-// like on-page is unverified.
-const APPLY_BUTTON_SELECTOR = '.apply-btn'
-const APPLY_INTENT_PATTERN = /nộp đơn|ứng tuyển/i
-const CONFIRMATION_WINDOW_MS = 20_000
-const SOURCE = 'vietnamworks'
-
+// pathname excludes the query string and fragment by construction, so
+// this is naturally immune to a job's URL varying by referral params
+// (e.g. ?source=searchResults&...) - only the id right before the
+// trailing "-jv" matters. Used above for scrapeJob's external_id -
+// background.js's Save/Unsave/Apply detection all read this same id
+// straight out of their respective requests' bodies instead, since
+// they don't need scrapeJob() to know which job was acted on, only to
+// describe it (company/position/salary) once they already do.
 function extractJobIdFromUrl(url) {
-  // pathname excludes the query string and fragment by construction, so
-  // this is naturally immune to a job's URL varying by referral params
-  // (e.g. ?source=searchResults&...) - only the id right before the
-  // trailing "-jv" matters.
   const match = new URL(url).pathname.match(/-(\d+)-jv\/?$/)
   return match ? match[1] : null
 }
 
-const APPLY_SIGNALS = {
-  successTextPattern:
-    /(ứng tuyển|nộp (đơn|hồ sơ)).{0,20}thành công|đã ứng tuyển|đã nộp đơn/i,
-  ariaChangePattern: /đã ứng tuyển|đã nộp đơn/i,
-}
-
-function isApplyButton(target) {
-  if (!(target instanceof Element)) return false
-  const button = target.closest(APPLY_BUTTON_SELECTOR) ?? target.closest('button,a')
-  if (!button) return false
-  if (button.matches(APPLY_BUTTON_SELECTOR)) return true
-  const text = button.innerText ?? ''
-  return text.trim().length < 30 && APPLY_INTENT_PATTERN.test(text)
-}
-
-// Resolves true if a success signal shows up within the window, false
-// on timeout. Watches the clicked button's own aria-label/disabled
-// state (via an attribute observer, since a toggle button like Save is
-// far more likely to flip an attribute than replace its text) and any
-// newly-added page text, rather than re-scanning the whole page on
-// every mutation.
-function watchForActionConfirmation(clickedButton, { successTextPattern, ariaChangePattern }) {
-  return new Promise((resolve) => {
-    let settled = false
-    const initialAria = clickedButton?.getAttribute('aria-label') ?? null
-
-    const finish = (success) => {
-      if (settled) return
-      settled = true
-      observer.disconnect()
-      clearTimeout(timer)
-      resolve(success)
-    }
-
-    const buttonNowConfirms = () => {
-      if (!clickedButton) return false
-      if (clickedButton.disabled) return true
-      const aria = clickedButton.getAttribute('aria-label')
-      if (aria && aria !== initialAria && ariaChangePattern.test(aria)) return true
-      return successTextPattern.test(clickedButton.innerText ?? '')
-    }
-
-    const observer = new MutationObserver((mutations) => {
-      if (buttonNowConfirms()) {
-        finish(true)
-        return
-      }
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          const text = node.nodeType === Node.TEXT_NODE ? node.textContent : node.innerText
-          if (text && successTextPattern.test(text)) {
-            finish(true)
-            return
-          }
-        }
-      }
-    })
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['aria-label', 'disabled'],
-    })
-    const timer = setTimeout(() => finish(false), CONFIRMATION_WINDOW_MS)
-  })
-}
-
-function scrapedPayload(jobId) {
-  const job = scrapeJob()
-  if (!job.company || !job.position) return null // guaranteed 422 otherwise
-  return {
-    company: job.company,
-    position: job.position,
-    location: job.location,
-    salary_min: job.salary_min,
-    salary_max: job.salary_max,
-    // Omitted entirely when unknown rather than sent as null -
-    // ApplicationCreate's salary_currency has no None branch, it just
-    // defaults to USD when the key is absent.
-    ...(job.salary_currency ? { salary_currency: job.salary_currency } : {}),
-    job_url: job.job_url,
-    notes: null,
-    source: SOURCE,
-    external_id: jobId,
-  }
-}
-
-// The backend decides everything here (see applyByExternalId in
-// background.js): a "saved" row for this jobId moves to "applied", any
-// other status is left alone, and no row at all gets created fresh as
-// applied. This function only has to report whichever of those already
-// happened - there's no local bookkeeping left to maintain.
-async function handleApplyConfirmed(jobId) {
-  const payload = scrapedPayload(jobId)
-  if (!payload) return
-
-  const result = await chrome.runtime.sendMessage({ type: 'APPLY_BY_EXTERNAL_ID', payload })
-  if (!result.ok) {
-    showToast(`Couldn't update LwkApply: ${result.error}`)
-    return
-  }
-
-  if (result.action === 'unchanged') return // already applied, or some other status - left alone
-
-  const applicationId = result.application.id
-  if (result.action === 'created') {
-    showToast('Saved to LwkApply as Applied', {
-      undoLabel: 'Undo',
-      onUndo: () => chrome.runtime.sendMessage({ type: 'DELETE_APPLICATION', applicationId }),
-    })
-    return
-  }
-
-  // action === 'updated': this row existed as "saved" before this
-  // apply - undo should revert the status, not delete a row the user
-  // had already saved on purpose.
-  showToast('Marked as Applied on LwkApply', {
-    undoLabel: 'Undo',
-    onUndo: () =>
-      chrome.runtime.sendMessage({
+// Three shapes coming from background.js: "delete" undoes a create
+// (Save, or a bare Apply with no prior save), "revert-to-saved" undoes
+// an Apply that moved an already-saved row to "applied", and "recreate"
+// undoes a delete (Unsave) - going through the same upsert endpoint
+// Save itself uses (keyed by the same source/external_id in
+// undo.payload) rather than a plain create, so double-clicking Undo -
+// or a fresh Save racing it - can't produce two rows for the same job.
+async function performUndo(undo) {
+  switch (undo.kind) {
+    case 'delete':
+      await chrome.runtime.sendMessage({
+        type: 'DELETE_APPLICATION',
+        applicationId: undo.applicationId,
+      })
+      return
+    case 'revert-to-saved':
+      await chrome.runtime.sendMessage({
         type: 'UPDATE_APPLICATION',
-        applicationId,
+        applicationId: undo.applicationId,
         updates: { status: 'saved', applied_date: null },
-      }),
-  })
+      })
+      return
+    case 'recreate':
+      await chrome.runtime.sendMessage({
+        type: 'UPSERT_BY_EXTERNAL_ID',
+        payload: undo.payload,
+      })
+      return
+  }
 }
-
-document.addEventListener(
-  'click',
-  async (event) => {
-    if (!isApplyButton(event.target)) return
-
-    // Cheap, synchronous guard before any async work: an apply-like
-    // click on a search-results or list page (each job card is its own
-    // mini listing) has no single JobPosting to scrape here - skip
-    // rather than risk capturing the wrong job's data.
-    if (!readJobPostingJsonLd()) return
-
-    const jobId = extractJobIdFromUrl(window.location.href)
-    if (jobId == null) return // unrecognized URL shape - nothing to key by
-
-    const authState = await chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' })
-    if (!authState?.loggedIn) return
-
-    const clickedButton = event.target.closest('button,a')
-    const confirmed = await watchForActionConfirmation(clickedButton, APPLY_SIGNALS)
-    if (!confirmed) return
-    await handleApplyConfirmed(jobId)
-  },
-  true, // capture phase, so this still observes the click even if the
-  // page's own handler later calls stopPropagation()
-)
 
 function showToast(message, { undoLabel, onUndo } = {}) {
   const host = document.createElement('div')
