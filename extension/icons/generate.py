@@ -68,12 +68,18 @@ def glasses_mask(x, y, S):
     if in_rounded_rect(x, y, r_x0, y0, r_x1, y1, lens_r):
         return True
 
-    # A thin bridge near the TOP of the lenses, not centered - a
-    # centered, lens-thick bridge reads as a dumbbell instead of
-    # glasses once the lenses are wide enough to be blocky.
-    bridge_h = 0.028 * S
-    bridge_cy = y0 + lens_h * 0.22
-    if in_rect(x, y, l_x1, bridge_cy - bridge_h / 2, r_x0, bridge_cy + bridge_h / 2):
+    # The bridge is a checkmark, not a straight bar: same connector
+    # role (glasses need something joining the lenses), but its bend
+    # also stands for "Apply" (submitted/done) - "Lowkey" from the
+    # glasses, "Apply" from the check, in one element instead of a
+    # second shape that wouldn't survive being shrunk to 16px.
+    stroke = 0.045 * S
+    p1 = (l_x1, y0 + lens_h * 0.18)
+    p2 = (cx, y0 + lens_h * 0.68)
+    p3 = (r_x0, y0 - lens_h * 0.12)
+    if seg_dist(x, y, *p1, *p2) <= stroke / 2:
+        return True
+    if seg_dist(x, y, *p2, *p3) <= stroke / 2:
         return True
 
     return False
