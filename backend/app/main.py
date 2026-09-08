@@ -17,9 +17,27 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
 )
 
+# Chrome exempts host_permissions-covered origins from CORS entirely
+# for extension background requests, so it never needed an entry here -
+# Firefox doesn't grant that exemption and enforces ordinary CORS
+# instead (confirmed against a real "CORS header 'Access-Control-
+# Allow-Origin' missing" rejection from the LwkApply browser extension
+# running there). A static allow_origins entry can't fix this: Chrome's
+# extension origin is stable (derived from the extension's key), but
+# Firefox deliberately randomizes moz-extension://<uuid> per
+# installation as an anti-fingerprinting measure - every user who
+# installs the extension gets a different origin, published or not, so
+# there is no fixed value to whitelist. allow_origin_regex matches the
+# *shape* of an extension origin instead of one specific value - safe
+# to allow broadly here because this API is Bearer-token authenticated,
+# not cookie-based, so there's no ambient credential for a stranger's
+# extension to ride on the way CORS is usually guarding against.
+EXTENSION_ORIGIN_REGEX = r"^(chrome|moz)-extension://.*"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=EXTENSION_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
