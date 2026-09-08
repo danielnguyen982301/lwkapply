@@ -92,7 +92,7 @@ in the store.
 1. Go to the [Releases page](https://github.com/danielnguyen982301/lwkapply/releases/latest)
    and download the `.xpi` file attached to the latest release.
 
-   <!-- screenshot: the Releases page with the .xpi asset visible -->
+   ![GitHub release page with the .xpi asset listed under Assets](docs/images/firefox-extension-step-1.png)
 
 2. Open the downloaded file. Firefox will show an install prompt
    listing the permissions the extension requests and the categories
@@ -100,34 +100,32 @@ in the store.
    application data it reads from VietnamWorks — see the
    [privacy policy](https://lwkapply.vercel.app/privacy) for detail).
 
-   <!-- screenshot: Firefox's "Add extension?" prompt -->
+   ![Firefox's "Add LwkApply Quick Capture?" permissions and data collection prompt](docs/images/firefox-extension-step-2.png)
 
 3. Click **Add Extension**. Firefox confirms it was added and offers
    to pin its icon to the toolbar — do that for easy access.
 
-   <!-- screenshot: "Added to Firefox" confirmation -->
+   ![Firefox's "LwkApply Quick Capture was added" confirmation](docs/images/firefox-extension-step-3.png)
 
 4. Click the toolbar icon and log in with your LwkApply account.
 
-   <!-- screenshot: the popup's login form -->
+   ![The extension popup's login form](docs/images/firefox-extension-step-4.png)
 
-5. Open any VietnamWorks job posting and click **Save** or **Apply**
-   as you normally would. LwkApply Quick Capture picks this up
-   automatically and shows a toast confirming the application was
-   synced — no extra clicks needed.
+5. Open any VietnamWorks job posting. The popup (under its **This
+   job** tab) shows the details it already scraped from the page:
 
-   <!-- screenshot: the "Saved to LwkApply" toast on a VietnamWorks
-        job posting -->
+   ![The popup on a VietnamWorks job posting, pre-filled under "This job"](docs/images/firefox-extension-step-5a.png)
+
+   You don't need to use the popup for this, though — click **Save**
+   or **Apply** on VietnamWorks itself, as you normally would, and
+   LwkApply Quick Capture detects it automatically and shows its own
+   confirmation toast alongside VietnamWorks':
+
+   ![Clicking Save on VietnamWorks triggers VietnamWorks' own success toast plus LwkApply Quick Capture's "Saved to LwkApply" toast](docs/images/firefox-extension-step-5b.png)
 
 To capture a job manually instead (any site, or a VietnamWorks
 posting you don't want auto-tracked), click the toolbar icon and
 switch to the popup's **Manual** tab.
-
-> The screenshot placeholders above are intentional — they mark where
-> real screenshots from an actual install/usage run should go, rather
-> than fabricated ones. Drop the images in `docs/images/` (e.g.
-> `firefox-install-prompt.png`) and swap each comment for
-> `![alt text](docs/images/filename.png)`.
 
 ### Installing on Chrome
 
