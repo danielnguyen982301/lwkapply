@@ -81,6 +81,12 @@ account, keyed by VietnamWorks' own job id rather than the page URL.
 It also supports capturing any job posting manually, on VietnamWorks
 or elsewhere.
 
+**Built and tested for Chrome and Firefox only.** Safari uses a
+different extension model entirely (Safari Web Extensions, which need
+converting and signing through Xcode/the Apple Developer Program) —
+this hasn't been built or tested there, so installing this extension's
+Chrome/Firefox package as-is on Safari isn't expected to work.
+
 Source: [`extension/`](extension). It's self-distributed rather than
 listed on addons.mozilla.org (see `extension/scripts/package.sh` for
 how the submission build is put together) — Mozilla still signs it,
