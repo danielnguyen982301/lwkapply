@@ -28,7 +28,19 @@ so far) from the project roadmap.
   the same company/position are still easy to tell apart in list views —
   purely a display/search convenience, no other endpoint behavior depends
   on it. Embedded in the Interviews directory endpoint's
-  `ApplicationSummary` too (see the note below)
+  `ApplicationSummary` too (see the note below). Also carries
+  `salary_currency` (defaults `USD`) and, for applications created by an
+  external client rather than typed in directly, `source`/`external_id`
+  plus three dedicated idempotent endpoints
+  (`PUT`/`PATCH`/`DELETE /applications/by-external-id`) — see "Salary
+  currency, application source, and the browser extension" below
+- **Token-based clients (mobile + browser extension)**: `/auth/login`,
+  `/auth/refresh`, and `/auth/logout` treat mobile and the browser
+  extension identically now — both send tokens back in the JSON body
+  instead of relying on a cookie, and both skip CSRF. See "A note on
+  mobile-client auth support" below (renamed in spirit, not yet in this
+  file's heading, to "token-based clients") and "Salary currency,
+  application source, and the browser extension"'s CORS note
 - **Interviews**: full CRUD, pagination, nested under
   `/applications/{application_id}/interviews`; plus a read-only, top-level
   `GET /interviews` — a cross-application directory of every interview
@@ -147,44 +159,59 @@ ApplicationContact" below for why); `ApplicationDocument`/
 document/contact via `Document.user_id`/`Contact.user_id` — since
 attaching requires owning both ends of the link.
 
-### A note on mobile-client auth support
+### A note on token-based-client auth support (mobile + browser extension)
 
 `/auth/login`, `/auth/refresh`, and `/auth/logout` now branch on whether
-a request came from the mobile app or the web app. Full detail on the
-mobile side of this is in `mobile/MOBILE_SUMMARY.md`; here's the
-backend half:
+a request came from a "token-based" client — originally just the mobile
+app, generalized when the browser extension (see "Salary currency,
+application source, and the browser extension" below) turned out to
+need the exact same treatment: no reliable access to the web app's
+httpOnly cookie, so it needs its refresh token back in the response body
+instead, and it can skip CSRF for the same reason mobile does. Full
+detail on the mobile side of this is in `mobile/MOBILE_SUMMARY.md`;
+here's the backend half:
 
-- **Detection**: `app/api/deps.py::is_mobile_client(request)` checks for
-  an `X-Client-Platform: mobile` header. Header lookups on
-  `request.headers` are case-insensitive, so this matches regardless of
-  how a client capitalizes it.
+- **Detection**: `app/api/deps.py::is_token_based_client(request)`
+  (renamed from `is_mobile_client` when the extension was added) checks
+  for an `X-Client-Platform` header whose value is in
+  `TOKEN_BASED_CLIENT_VALUES` — `{"mobile", "extension"}`, each also
+  exposed as its own named constant
+  (`MOBILE_CLIENT_VALUE`/`EXTENSION_CLIENT_VALUE`) rather than inlined,
+  so a caller can still ask "is this specifically mobile?" if that
+  distinction ever matters somewhere `is_token_based_client()`'s
+  coarser answer wouldn't do. Header lookups on `request.headers` are
+  case-insensitive, so this matches regardless of how a client
+  capitalizes it.
 - **`TokenResponse.refresh_token`** (`app/schemas/auth.py`) is a new,
-  optional field, populated **only** when `is_mobile_client()` is true.
-  Web's response body never includes it — it keeps getting its refresh
-  token exclusively via the existing httpOnly cookie. This is the one
-  detail to never get wrong here: populating this field unconditionally
-  would let any XSS payload on the web app read the refresh token
-  straight out of the fetch response, defeating the entire reason that
-  cookie is httpOnly in the first place. Don't add a call site that
-  passes `refresh_token` to `_issue_tokens()` without checking
-  `is_mobile_client()` first.
-- **New `RefreshRequest` schema** (`app/schemas/auth.py`): mobile has no
-  cookie to read a refresh token from (see MOBILE_SUMMARY.md's token-
-  storage-strategy note — mobile deliberately doesn't persist a cookie
-  jar), so it sends the refresh token explicitly in the `/auth/refresh`
+  optional field, populated **only** when `is_token_based_client()` is
+  true. Web's response body never includes it — it keeps getting its
+  refresh token exclusively via the existing httpOnly cookie. This is
+  the one detail to never get wrong here: populating this field
+  unconditionally would let any XSS payload on the web app read the
+  refresh token straight out of the fetch response, defeating the
+  entire reason that cookie is httpOnly in the first place. Don't add a
+  call site that passes `refresh_token` to `_issue_tokens()` without
+  checking `is_token_based_client()` first.
+- **New `RefreshRequest` schema** (`app/schemas/auth.py`): neither
+  mobile nor the extension has a cookie to read a refresh token from
+  (see MOBILE_SUMMARY.md's token-storage-strategy note — mobile
+  deliberately doesn't persist a cookie jar; the extension's background
+  service worker has no reliable access to the web app's cookie jar at
+  all), so both send the refresh token explicitly in the `/auth/refresh`
   request body. Web's refresh flow sends no body at all and is
   unaffected — the `payload` parameter on the `refresh` endpoint is
   `Optional`.
 - **CSRF**: `/auth/refresh` and `/auth/logout` moved from
-  `Depends(verify_csrf)` to a new `Depends(verify_csrf_unless_mobile)`
-  (`app/api/deps.py`). CSRF double-submit exists specifically to stop a
-  _browser_ from silently riding a cookie it holds for our site into a
-  request from some other site's page. The mobile app never holds that
-  cookie meaningfully, so there's no cookie for a hostile page to ride
-  in the first place — the check simply doesn't apply to it. Web's CSRF
+  `Depends(verify_csrf)` to a new `Depends(verify_csrf_unless_token_based)`
+  (`app/api/deps.py`, renamed from `verify_csrf_unless_mobile`). CSRF
+  double-submit exists specifically to stop a _browser_ from silently
+  riding a cookie it holds for our site into a request from some other
+  site's page. Neither mobile nor the extension holds that cookie
+  meaningfully, so there's no cookie for a hostile page to ride in the
+  first place — the check simply doesn't apply to either. Web's CSRF
   enforcement is completely unchanged; `verify_csrf` itself wasn't
-  touched, `verify_csrf_unless_mobile` just wraps it with an early
-  return for mobile requests.
+  touched, `verify_csrf_unless_token_based` just wraps it with an early
+  return for token-based-client requests.
 - **`/auth/register` deliberately NOT changed** — it still only creates
   the account and returns `UserRead`, no auto-login, no tokens. Giving
   mobile a different (auto-login) contract here would mean either two
@@ -192,13 +219,14 @@ backend half:
   too for no reason tied to mobile. The mobile client instead calls
   `/auth/register` then an explicit `/auth/login` afterward — see
   MOBILE_SUMMARY.md's `auth_api.dart` note.
-- **No server-side refresh-token revocation exists for either client
+- **No server-side refresh-token revocation exists for any client
   type** — refresh tokens are stateless, signature-verified JWTs, not
   tracked in the DB, so `/auth/logout` is just cookie-clearing (web) or
-  a no-op (mobile, which only deletes its local secure-storage copy
-  client-side). This was already true before mobile support was added;
-  worth remembering if a future change assumes logout revokes anything
-  server-side.
+  a no-op (mobile and the extension, which each only delete their own
+  local storage copy client-side —
+  `flutter_secure_storage`/`chrome.storage.local` respectively). This
+  was already true before mobile support was added; worth remembering
+  if a future change assumes logout revokes anything server-side.
 
 ### A note on the analytics endpoints
 
@@ -1451,6 +1479,178 @@ goes through `configparser`, so a running deployment was never affected
 by this one. `webapp/vercel.json` also had to be added - Vue Router's
 history-mode client-side routes 404'd on Vercel on a hard refresh with
 no SPA rewrite rule configured.
+
+## Salary currency, application source, and the browser extension
+
+Two mostly-independent additions to `Application` that shipped close
+together: a small one (`salary_currency`) and a larger one
+(`source`/`external_id` plus the browser extension that's the reason
+they exist). Full detail on the extension itself —
+`extension/src/background/background.js`'s `chrome.webRequest`-based
+Save/Unsave/Apply detection, the Firefox/Chrome store submissions — is
+in the repo root `README.md`'s "Browser Extension" section, not here;
+this section covers the backend surface those changes needed.
+
+### `salary_currency`
+
+`Application.salary_currency` (`app/models/application.py`) — a new
+Postgres enum, `SalaryCurrency` (44 ISO 4217 codes, `USD` first), with
+both a Python-side `default` and a matching `server_default` (same
+"needs to be correct for a row inserted outside the ORM's one ordinary
+path" reasoning as `Interview.result`/`InterviewReminder.channel`
+elsewhere in this file). Every existing row backfilled to `USD` by the
+migration that added the column, so no application silently lost its
+displayed currency. `ApplicationUpdate.salary_currency` is `Optional`
+or with the schema's existing `exclude_unset` `PATCH` semantics
+untouched — omitting it on an update leaves the stored value alone,
+same as every other optional field there.
+
+### `source` / `external_id` — identifying an application by where it came from, not just its URL
+
+`Application.source` (`String(100)`, nullable — `None` for every
+manually-created application, `"vietnamworks"` for one the extension
+created) and `Application.external_id` (`String(255)`, nullable — the
+source system's own id for the posting, e.g. VietnamWorks' internal
+job id read out of its own Save/Apply network requests). Both nullable
+independently, but only ever meaningfully paired: a manual row leaves
+both `NULL`, an extension-created row sets both.
+
+**Why not just `job_url`?** The extension's first design used the job
+posting's URL as the identity key for "have we already tracked this
+job." That broke the first time a real posting was checked against it:
+VietnamWorks appends a referral query string
+(`?source=searchResults&searchType=2&...`) that varies by how the user
+navigated to the same posting, so the "same" job could arrive under
+several different URLs depending on which search result the user
+clicked. `external_id` — VietnamWorks' own stable job id — doesn't have
+that problem; `job_url` is kept only as a clickable link, now
+canonicalized (query string stripped client-side before it's ever
+sent) for display, not identity.
+
+**The partial unique index** (`__table_args__`,
+`ix_applications_user_source_external_id`): unique on
+`(user_id, source, external_id)`,
+`postgresql_where="source IS NOT NULL AND external_id IS NOT NULL"`.
+Partial specifically so it constrains only extension-created rows —
+without the `WHERE` clause, every manually-created application (both
+columns `NULL`) would collide with every other one under a naive
+unique-on-three-columns index, since Postgres's default *does* treat
+multiple `NULL`s as satisfying most unique constraints in ways that
+would still be wrong to rely on here; the partial index sidesteps the
+question entirely by only ever indexing rows where both columns are
+actually set.
+
+### `PUT`/`PATCH`/`DELETE /applications/by-external-id` — idempotent by design
+
+Three endpoints (`app/api/v1/endpoints/applications.py`), registered
+**before** the existing `/{application_id}` routes — required, not
+stylistic: Starlette matches path *shape* before FastAPI validates the
+`{application_id}` path param's type, so `by-external-id` as a literal
+segment would otherwise get swallowed by the `{application_id}` route
+first and fail UUID validation instead of ever reaching these handlers.
+
+- **`PUT /by-external-id`** (`upsert_application_by_external_id`) —
+  Save. Looks up an existing row by `(current_user, source,
+  external_id)` via the shared `_find_by_external_id()` helper; if
+  none exists, creates one and returns `action="created"`; if one
+  exists, returns it unchanged with `action="unchanged"` — **this
+  endpoint deliberately never overwrites an already-tracked row.** A
+  re-Save (VietnamWorks lets a job be saved once, so this mostly
+  fires from Apply auto-detecting after an earlier Save, or a client
+  retry) must not clobber edits the user already made elsewhere
+  (e.g. in the webapp) with a thinner re-scrape from the extension.
+  Race handling: the `INSERT` can still lose a concurrent-create race
+  between the lookup and the write (two requests for the same new job
+  arriving together) — caught as `IntegrityError`, checked against
+  `_is_source_external_id_conflict()` (matches on
+  `_SOURCE_EXTERNAL_ID_INDEX`'s constraint name specifically, so an
+  unrelated `IntegrityError`, e.g. a broken FK, still propagates as a
+  genuine 500 rather than being swallowed here), then re-queried and
+  returned as `"unchanged"` instead of a 409 — from the caller's
+  perspective a lost create-race and an already-existing row should
+  look identical, since both mean "there's already a row for this
+  job, here it is."
+- **`PATCH /by-external-id`** (`apply_application_by_external_id`) —
+  Apply. Same upsert shape and the same race handling, but marks
+  `status="applied"` on both the create and the update path (Save
+  never touches `status` at all — a saved-but-not-yet-applied job
+  should stay whatever status it already had).
+- **`DELETE /by-external-id`** (`delete_application_by_external_id`,
+  query params `source`+`external_id`) — Unsave. Conditional: only
+  deletes a row whose `status` is still `"saved"` — an application the
+  user has already progressed past Save (applied, interviewing, etc.)
+  must survive an Unsave click on VietnamWorks, since by that point
+  it's the user's own tracked history, not just a mirror of
+  VietnamWorks' saved-jobs list. Returns
+  `action="deleted"`/`"kept"`/`"not_found"` rather than a bare 204, so
+  the extension can show an accurate confirmation either way instead
+  of assuming success.
+- **`POST /applications` (plain create) also changed**: now catches
+  `IntegrityError` on the same partial index and returns `409` instead
+  of an unhandled 500 — the manual-capture popup's "This job" mode
+  ultimately calls `PUT /by-external-id`, not this endpoint, but a
+  direct `POST` racing the same `(source, external_id)` pair needed the
+  same protection rather than leaking a raw DB error.
+
+**A Pyright fix worth remembering the shape of**:
+`ApplicationUpsertByExternalId` (`app/schemas/application.py`) first
+tried to make `source`/`external_id` required by re-declaring them as
+non-`Optional` overrides of `ApplicationBase`'s `str | None` fields —
+flagged by Pyright as `reportIncompatibleVariableOverride` (a subclass
+narrowing an inherited *mutable* attribute's type is genuinely unsound:
+code holding an `ApplicationBase` reference could still assign `None`
+through the base type's contract). This had shipped and merged before
+anyone ran Pyright against the change at all — only the webapp's `tsc`
+was part of this project's routine, nothing enforced a Python
+type-check pass on backend changes. Fixed with a `model_validator(mode="after")`
+(`require_source_and_external_id`) instead of overriding the fields,
+plus explicit `assert payload.source and payload.external_id`
+narrowing statements at both endpoint call sites — the validator
+guarantees the invariant at runtime, the `assert`s are purely to
+satisfy the type checker that Pyright's own control-flow narrowing
+can't infer across a Pydantic validator boundary on its own.
+
+### CORS for browser-extension origins (`app/main.py`)
+
+Two separate fixes, found in two separate rounds of real Firefox
+testing — Chrome never surfaced either, for reasons noted at each:
+
+- **`allow_origin_regex=r"^(chrome|moz)-extension://.*"`**, additive
+  alongside the existing static `allow_origins` list. Chrome exempts
+  any origin covered by the extension's own `host_permissions` from
+  CORS entirely for extension background requests, so a Chrome-only
+  extension never needed anything here; Firefox enforces ordinary CORS
+  against extensions like any other origin. A static `allow_origins`
+  entry can't fix this either way: Chrome's extension origin is
+  stable (key-derived), but Firefox deliberately randomizes
+  `moz-extension://<uuid>` **per installation** as an
+  anti-fingerprinting measure — permanent, confirmed to survive even a
+  published (not just temporarily-loaded) install — so there is no
+  fixed value to ever put in a static allowlist. Regex-matching the
+  *shape* of an extension origin instead is safe to do broadly here
+  specifically because this API is bearer-token authenticated, not
+  cookie-based — there's no ambient credential for CORS's usual
+  same-origin protection to be guarding against.
+- **`X-Client-Platform` added to `allow_headers`** — missing
+  originally, invisible until Firefox for three independent reasons:
+  the webapp never sends this header at all (only mobile/extension
+  do), mobile isn't a browser so CORS doesn't apply to it in the first
+  place, and Chrome's blanket extension exemption above meant Chrome
+  never enforced this specific allowlist against the extension either.
+  Symptom was a second, different-looking Firefox failure from the
+  origin fix above: not "Access-Control-Allow-Origin missing" on the
+  real request, but the *preflight itself* returning a bare `400
+  Disallowed CORS headers` — Starlette's `CORSMiddleware` rejects a
+  preflight outright if any requested header isn't in `allow_headers`,
+  which is a stricter failure than a missing-origin rejection since the
+  browser never even gets to see a response worth reading. Reproduced
+  and confirmed via a direct `curl` OPTIONS request before and after
+  the fix, and now has a dedicated regression test
+  (`tests/test_cors.py::TestExtensionPreflightAllowsClientPlatformHeader`)
+  alongside the origin-matching tests
+  (`TestExtensionOriginCors`) — the two are deliberately separate test
+  classes, since they guard against two different failure modes that
+  happened to both only be reachable from Firefox.
 
 ## Not yet implemented (next up per TODO.md)
 

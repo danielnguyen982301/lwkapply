@@ -595,6 +595,30 @@ deleted along with the rest of `contact_with_application.dart`), a
 deliberately separate, non-shared class that needed the field added
 individually.
 
+Two more recent additions, backend detail for both in
+`backend/BACKEND_SUMMARY.md`'s "Salary currency, application source,
+and the browser extension" — full reasoning again lives in each file's
+own doc comments, flagging only what's cross-cutting here:
+
+- **`SalaryCurrency` enum** (`domain/application.dart`) — mirrors the
+  backend's 44-code set and webapp's `SalaryCurrency` type by name.
+  `formatSalary()` (`application_formatting.dart`) now renders the
+  stored currency's real symbol instead of a hardcoded `$`, same fix
+  webapp needed for the same reason (every application previously
+  displayed as if it were USD regardless of what was actually stored).
+- **`source`/`external_id`** (`domain/application.dart`) — non-null
+  only on an application the browser extension synced in from
+  VietnamWorks; `null`/`null` for every application created on mobile
+  or web directly. `application_form_screen.dart`'s Job URL field
+  becomes read-only (`enabled: !_isSyncedFromExternalSource`) whenever
+  `source` is set, with a small `_SyncedHint` (an info-outline icon +
+  text, colored via `Theme.of(context).colorScheme.primary` rather than
+  a hardcoded blue, so it still reads correctly in dark mode) shown as
+  the field's `helper` — mirrors webapp's `<Message severity="info">`
+  treatment, same reasoning: an application actively kept in sync by
+  the extension would just have a manual URL edit overwritten on the
+  next Save/Apply anyway.
+
 ### Contacts, Interviews, and Documents (`lib/features/{contacts,interviews,documents}/`)
 
 Nested, per-application CRUD for all three, added to

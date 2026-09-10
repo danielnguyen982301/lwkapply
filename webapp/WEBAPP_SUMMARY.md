@@ -16,7 +16,12 @@ a web UI too — see AI Tools below, the first async/polling flow in this
 frontend. The Account Settings screen and the header notification bell
 (backend already existed too — see TODO.md's former "Account Settings"
 gap) are implemented as of this pass — see Account settings &
-notifications below.
+notifications below. Applications gained a `salary_currency` field and,
+for applications synced in by the browser extension rather than typed
+in directly, a locked Job URL + "Synced from" hint — see Application
+tracking below. A new public `/privacy` route also exists now, unrelated
+to any of the above except that the browser extension's data collection
+is what made it necessary — see Privacy policy page below.
 
 ## What's here
 
@@ -782,6 +787,64 @@ mobile's `ThemeMode` for parity across both clients.
 - **Not browser-tested as part of this pass** — verified via
   `type-check`/`lint`/`format:check` only, per this project's own
   established preference for this app.
+
+### Salary currency, application source, and the browser-extension sync hint
+
+Backend detail (the `salary_currency`/`source`/`external_id` fields
+themselves, the `by-external-id` endpoints) is in
+`backend/BACKEND_SUMMARY.md`'s "Salary currency, application source,
+and the browser extension"; this is the web UI built against it.
+
+- **Salary currency** — a new `<Select>` (`salaryCurrencyOptions()`,
+  `src/lib/application-ui.ts`) on `ApplicationFormView.vue`'s form,
+  given its own full-width row above Salary min/max rather than sharing
+  a row with them — cramming a 44-option currency picker alongside two
+  number inputs read poorly, and currency logically pairs with *both*
+  fields, not just one. The list/board views' salary display
+  (`ApplicationListView.vue`/`ApplicationBoardView.vue`, each with their
+  own `formatSalary()` — not shared, worth extracting into
+  `application-ui.ts` if a third view ever needs it) now render the
+  stored currency's real symbol via `SALARY_CURRENCY_SYMBOLS`
+  (`src/types/application.ts`) instead of a hardcoded `$`, which is
+  what they showed for every application regardless of currency before
+  this — silently wrong for anything already stored as VND, EUR, etc.
+- **`source`/`external_id`** mirrored into `Application`/
+  `ApplicationCreatePayload` (`src/types/application.ts`) as plain
+  optional fields — `ApplicationUpdatePayload` deliberately excludes
+  both, since neither is ever meant to change after creation (an
+  application doesn't switch which system it was synced from).
+  `applicationSourceLabel()` (`src/lib/application-ui.ts`) maps the
+  known `"vietnamworks"` value to `"VietnamWorks"` and falls back to
+  capitalizing whatever string it's given otherwise, rather than a
+  fixed lookup table that breaks the moment a second source exists.
+- **Locked Job URL + sync hint** (`ApplicationFormView.vue`): a
+  computed `isSyncedFromExternalSource` (true whenever `source` is
+  non-null) disables the Job URL field — editing the URL of a row
+  that's actively kept in sync by the extension would just get
+  overwritten on the next Save/Apply anyway, so the field is locked
+  rather than silently losing an edit — and shows a small `<Message
+  severity="info" variant="simple" icon="pi pi-info-circle">Synced
+  from {{ syncedSourceLabel }}</Message>` underneath explaining why.
+  Every other field on the form stays fully editable; only Job URL is
+  identity-bearing enough to lock. Purely additive to manually-created
+  applications — `source`/`external_id` both `null` there, so
+  `isSyncedFromExternalSource` is false and the form behaves exactly as
+  before.
+
+### Privacy policy page
+
+`PrivacyPolicyView.vue`, route `/privacy` — not gated by
+`requiresAuth` or `guestOnly` (same un-nested pattern
+`NotFoundView.vue` already uses), since it has to be readable by a
+logged-out visitor (an AMO reviewer, most immediately) without
+redirecting a logged-in one away either. Written to satisfy Firefox
+AMO's data-collection disclosure requirement for the browser extension
+(login credentials + job-application data), but covers all three
+LwkApply surfaces — web, mobile, extension — since they share one
+account and backend; the extension is what made the page necessary,
+not what it's scoped to. Contact address is a dedicated
+`lwkapply@gmail.com`, not the developer's personal email, kept out of
+public listings deliberately.
 
 ## What's deliberately not here yet
 

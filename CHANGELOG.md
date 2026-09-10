@@ -31,6 +31,58 @@
     `AIJobStatusStyle`, a couple of inline chips) that hardcoded a
     light-mode-only `.shade50`/`.shade800` pairing and would have
     washed out against a dark scaffold otherwise.
+- **Salary currency** — `Application.salary_currency` (44 ISO 4217
+  codes, defaults `USD`, backfilled on every existing row). A new
+  currency `<Select>`/dropdown on the web and mobile application
+  forms, and the list/board/card views on both now render the stored
+  currency's real symbol instead of a hardcoded `$` — every
+  application previously displayed as if it were USD regardless of
+  what was actually stored. Full detail in `backend/BACKEND_SUMMARY.md`'s
+  "Salary currency, application source, and the browser extension".
+- **LwkApply Quick Capture — a browser extension that auto-syncs
+  VietnamWorks job-application activity into LwkApply**, published on
+  both Firefox and the Chrome Web Store. Full detail in the repo root
+  `README.md`'s new "Browser Extension" section (install tutorials
+  with real screenshots for both browsers) and
+  `backend/BACKEND_SUMMARY.md`'s "Salary currency, application source,
+  and the browser extension"; summary here:
+  - **Auto-sync**: detects Save, Unsave, and Apply on VietnamWorks by
+    observing the real network requests VietnamWorks' own site makes
+    for those actions (`chrome.webRequest`, not DOM clicks/heuristics
+    — an earlier DOM-based approach was replaced entirely once real
+    request/response shapes were captured), and mirrors the action
+    into the user's LwkApply account automatically, with a toast
+    confirmation. Also supports manual capture of any job posting
+    (VietnamWorks or elsewhere) via a toolbar popup, with an explicit
+    "This job" (locked, synced) vs. "Manual" (free-form) mode choice.
+  - **Identity**: a synced application is keyed by VietnamWorks' own
+    internal job id (`Application.external_id`, paired with
+    `source="vietnamworks"`), not the posting's URL — the URL varies by
+    referral query string for the same job, which broke an earlier
+    URL-keyed design. Three new idempotent backend endpoints
+    (`PUT`/`PATCH`/`DELETE /applications/by-external-id`) back Save/
+    Apply/Unsave respectively.
+  - **Web and mobile**: both show a locked Job URL field + a "Synced
+    from VietnamWorks" hint on any application the extension created,
+    so editing it doesn't fight the next auto-sync. A new public
+    `/privacy` page on the webapp satisfies Firefox AMO's data-
+    collection disclosure requirement for the extension.
+  - **Cross-browser**: works on Firefox (which needed its own manifest
+    key, `background.scripts` alongside `service_worker`) as well as
+    Chrome, and needed two backend CORS fixes Chrome never surfaced —
+    an `allow_origin_regex` for extension origins (Chrome exempts
+    `host_permissions`-covered origins from CORS entirely; Firefox
+    doesn't, and also randomizes its extension origin per install) and
+    adding `X-Client-Platform` to `allow_headers` (missing entry made
+    Firefox reject the login preflight outright).
+  - **Distribution**: self-distributed on Firefox (Mozilla-signed
+    `.xpi` via GitHub Releases, not listed on addons.mozilla.org —
+    mirrors this project's existing sideloaded-APK approach for
+    mobile), publicly listed on the Chrome Web Store. A dedicated
+    icon (flat sunglasses on a dark badge, with a briefcase-handle
+    bridge connecting the lenses) plays on "LwkApply" being short for
+    "Lowkey Apply" — a first pass used a generic checkmark, replaced
+    for not reflecting the name at all.
 
 ## v0.19.0
 

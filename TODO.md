@@ -39,6 +39,20 @@
 - [x] CRUD endpoints
 - [x] Search endpoint
 - [x] Filtering endpoint
+- [x] `salary_currency` field (44 ISO 4217 codes, defaults `USD`) — see
+      BACKEND_SUMMARY.md
+- [x] `source`/`external_id` fields + a partial unique index on
+      `(user_id, source, external_id)`, plus three idempotent
+      `PUT`/`PATCH`/`DELETE /applications/by-external-id` endpoints
+      (Save/Apply/Unsave) backing the browser extension below — see
+      BACKEND_SUMMARY.md and the Browser Extension section below
+- [x] Token-based-client auth generalized from mobile-only to mobile +
+      browser extension (`is_mobile_client` → `is_token_based_client`,
+      same for the CSRF-skip dependency) — see BACKEND_SUMMARY.md
+- [x] CORS support for browser-extension origins
+      (`allow_origin_regex` for `chrome-`/`moz-extension://`, plus
+      `X-Client-Platform` added to `allow_headers` — the latter only
+      ever surfaced on Firefox, see BACKEND_SUMMARY.md)
 
 ### Interviews
 
@@ -204,6 +218,15 @@ true history-based conversion funnel wasn't built yet.
 - [x] Search and filters
 - [x] PrimeVue components across existing UI (forms, tables, alerts,
       confirm dialogs, status badges)
+- [x] Salary currency select on the form; list/board views render the
+      real stored currency symbol instead of a hardcoded `$` — see
+      WEBAPP_SUMMARY.md
+- [x] Locked Job URL + "Synced from VietnamWorks" hint on applications
+      created by the browser extension — see WEBAPP_SUMMARY.md and the
+      Browser Extension section below
+- [x] Public `/privacy` page — required for the browser extension's
+      Firefox AMO submission, covers all three LwkApply surfaces — see
+      WEBAPP_SUMMARY.md
 
 ### Form validation
 
@@ -327,6 +350,11 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
   - [x] Create/edit — shared form, validated against the backend schema
   - [x] Delete — confirmation dialog on the Edit screen
   - [ ] Swipe-to-delete on the list row
+  - [x] Salary currency field; real currency symbol in the list/formatting
+        helper instead of a hardcoded `$` — see MOBILE_SUMMARY.md
+  - [x] Locked Job URL + "Synced from VietnamWorks" hint for
+        extension-created applications — see MOBILE_SUMMARY.md and the
+        Browser Extension section below
 - [x] Interviews / Contacts / Documents feature screens — nested,
       per-application CRUD, added to `ApplicationFormScreen` as a
       4-tab layout (Details / Contacts / Interviews / Documents),
@@ -409,6 +437,69 @@ WEBAPP_SUMMARY.md's "Known gap" section. Worth a dedicated pass.
     - [ ] A payment/account-upgrade flow (none exists yet)
     - [ ] Wiring the premium limit into that one call site once the
           above two exist to key off of
+
+---
+
+## Browser Extension
+
+"LwkApply Quick Capture" (`extension/`) — auto-syncs VietnamWorks
+job-application activity into LwkApply. See the repo root `README.md`'s
+"Browser Extension" section for install tutorials (with real
+screenshots) and `backend/BACKEND_SUMMARY.md`'s "Salary currency,
+application source, and the browser extension" for the backend side.
+
+- [x] Manifest V3 scaffold — background service worker, content script
+      scoped to `*.vietnamworks.com`, toolbar popup
+- [x] Auto-sync via `chrome.webRequest` — detects Save, Unsave, and
+      Apply by observing VietnamWorks' own network requests for those
+      actions, not DOM clicks/heuristics (an earlier DOM-based
+      approach was fully replaced once real request/response shapes
+      were captured from the user's own DevTools testing)
+- [x] Identity keyed by VietnamWorks' own internal job id
+      (`external_id`), not the posting URL — the URL varies by
+      referral query string for the same job, which broke an earlier
+      URL-keyed design
+- [x] Manual capture popup — "This job" (locked to the scraped job,
+      upserts by `external_id`) vs. "Manual" (free-form, always
+      creates a new row) modes; salary parsing handles VietnamWorks
+      sometimes putting a formatted string instead of a number in
+      schema.org's `baseSalary.value`; salary currency select
+- [x] No Undo on auto-save toasts — deliberately removed; Unsave
+      already reverses Save, and there's no "withdraw" once applied on
+      VietnamWorks, so the extension's own confirmation stays simple
+- [x] Icon — flat sunglasses on a dark badge with a briefcase-handle
+      bridge, playing on "LwkApply" = "Lowkey Apply"; a checkmark tried
+      first didn't reflect the name at all. Hand-rendered via a
+      stdlib-only PNG encoder (`extension/icons/generate.py`) since no
+      SVG rasterizer or Pillow was available
+- [x] Firefox: `background.scripts` alongside `service_worker`
+      (Firefox rejects the MV3-only key alone), the two CORS fixes
+      (see Backend > Applications above), and a
+      `browser_specific_settings.gecko.data_collection_permissions`
+      declaration (a newer AMO submission requirement, not just a
+      manifest nice-to-have — the first submission attempt was
+      rejected without it)
+- [x] Firefox distribution: self-distributed ("on your own"/unlisted
+      on AMO — Mozilla-signed `.xpi`, not a public store listing,
+      mirroring this project's existing sideloaded-APK approach for
+      mobile), hosted as a GitHub Release asset. A packaging script
+      (`extension/scripts/package.sh`) strips the dev-only
+      `localhost` origin from `host_permissions` and points
+      `config.js` at production before zipping for submission
+- [x] Chrome: publicly listed on the Chrome Web Store (category
+      Workflow & Planning), including the data-usage disclosure
+      checklist and single-purpose/permission justifications
+- [ ] Firefox extension identity is signed but the `.xpi` has no
+      `update_url` manifest yet — a new release currently needs manual
+      redownload rather than auto-updating for anyone who installed via
+      GitHub Releases
+- [ ] The Firefox Apply auto-detection path (`chrome.webRequest` on
+      `apply-multiple`) hasn't been re-verified end-to-end on Firefox
+      specifically — Save/Unsave were, Apply wasn't due to lack of a
+      suitable job posting to test against at the time
+- [ ] Chrome Web Store "Official URL" (verified via Google Search
+      Console) and a small 440×280 promo tile — both optional, skipped
+      for now
 
 ---
 
