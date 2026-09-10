@@ -129,19 +129,21 @@ switch to the popup's **Manual** tab.
 
 ### Installing on Chrome
 
-Published on the Chrome Web Store, but as a brand-new listing with no
-installs yet, it doesn't reliably show up in the Store's own search —
-use the direct link below rather than searching for it.
-
-1. Open the listing directly:
+1. Search **LwkApply Quick Capture** on the
+   [Chrome Web Store](https://chromewebstore.google.com). If it
+   doesn't show up in results, open the listing directly instead:
    [LwkApply Quick Capture on the Chrome Web Store](https://chromewebstore.google.com/detail/jcmpjhfpncpndgedeobhcbiinhjhffih).
 
-   <!-- screenshot: the Chrome Web Store listing page -->
+   ![The LwkApply Quick Capture listing on the Chrome Web Store](docs/images/chrome-extension-step-1.png)
 
 2. Click **Add to Chrome**, then **Add extension** on the permissions
    prompt Chrome shows.
 
-   <!-- screenshot: Chrome's "Add extension?" permissions prompt -->
+   ![Chrome's "Add LwkApply Quick Capture?" permissions prompt](docs/images/chrome-extension-step-2a.png)
+
+   Chrome confirms it was added:
+
+   ![Chrome's "has been added to Chrome" confirmation](docs/images/chrome-extension-step-2b.png)
 
 3. Click the toolbar icon (pin it from the extensions puzzle-piece
    menu if it's not already visible) and log in with your LwkApply
