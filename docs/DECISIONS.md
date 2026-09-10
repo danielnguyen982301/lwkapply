@@ -241,6 +241,7 @@ any actual endpoint either.
   ever holding the user's credentials for that other site
 
 **Alternatives:**
+- Direct API integration with the job board
 - A userscript (Tampermonkey/Greasemonkey)
 - A bookmarklet
 - Server-side polling with the user's job-board credentials stored
@@ -248,14 +249,26 @@ any actual endpoint either.
 
 **Trade-offs:**
 
-| Aspect | Browser extension | Userscript | Bookmarklet | Server-side polling (stored credentials) | Email parsing |
-|---|---|---|---|---|---|
-| Credential handling | None — rides the user's own already-authenticated browser session; the job board's session never touches LwkApply's server | Same as the extension | Same as the extension | Requires storing the user's job-board password or session server-side | None, but depends on inbox/forwarding-rule access instead |
-| Reacts automatically | Yes — `chrome.webRequest` observes the site's own network requests for Save/Apply as they happen | Limited — only page-injected JS, no privileged request-observation API, so some request types are unreliable to intercept | No — a one-shot script the user must click every single time; no background observation at all | Yes, but only on a polling interval, not instantly | No — dependent on whether, and when, an email actually shows up |
-| Correctness | High — reads the same real network requests the site's own UI already triggers, not a scrape/guess | Comparable in principle, but weaker interception guarantees for non-fetch/XHR requests | N/A | Only as good as whatever gets scraped from the polled pages | Low — not every relevant email even comes from the job board's own domain (a recruiter can email directly, bypassing any forwarding rule), and there's no equivalent mechanism at all for a user who isn't on Gmail |
-| Distribution | Store review (Firefox AMO / Chrome Web Store), or self-distribution | No store review — shared as a plain script | Simplest possible — just a bookmark, but has to be re-added per browser/device | N/A — a server-side job, nothing for the user to install | N/A — a mail rule, not installed software |
-| Ethical/ToS risk | Low — acts only inside the user's own session; nothing is done on the user's behalf without them being present in the browser | Same as the extension | Same as the extension | High — automated, credentialed access to another site on the user's behalf is very likely a ToS violation regardless of intent, and any anti-bot/CAPTCHA measure would either block it or have to be deliberately bypassed, which this project won't do | Low risk, but doesn't reliably solve the actual problem |
-| Manual-capture UI | Yes — a toolbar popup, reused for capturing jobs from any other site too | Possible, but typically minimal | None | None | None |
+| Aspect | Browser extension | Direct API integration | Userscript | Bookmarklet | Server-side polling (stored credentials) | Email parsing |
+|---|---|---|---|---|---|---|
+| Credential handling | None — rides the user's own already-authenticated browser session; the job board's session never touches LwkApply's server | An official API key/OAuth grant, scoped and revocable by the job board itself | Same as the extension | Same as the extension | Requires storing the user's job-board password or session server-side | None, but depends on inbox/forwarding-rule access instead |
+| Reacts automatically | Yes — `chrome.webRequest` observes the site's own network requests for Save/Apply as they happen | Yes — a webhook, or a clean poll against a real endpoint meant for this | Limited — only page-injected JS, no privileged request-observation API, so some request types are unreliable to intercept | No — a one-shot script the user must click every single time; no background observation at all | Yes, but only on a polling interval, not instantly | No — dependent on whether, and when, an email actually shows up |
+| Correctness | High — reads the same real network requests the site's own UI already triggers, not a scrape/guess | Highest — a real, documented contract, not inferred from traffic | Comparable in principle, but weaker interception guarantees for non-fetch/XHR requests | N/A | Only as good as whatever gets scraped from the polled pages | Low — not every relevant email even comes from the job board's own domain (a recruiter can email directly, bypassing any forwarding rule), and there's no equivalent mechanism at all for a user who isn't on Gmail |
+| Distribution | Store review (Firefox AMO / Chrome Web Store), or self-distribution | N/A — a backend integration, nothing for the user to install | No store review — shared as a plain script | Simplest possible — just a bookmark, but has to be re-added per browser/device | N/A — a server-side job, nothing for the user to install | N/A — a mail rule, not installed software |
+| Ethical/ToS risk | Low — acts only inside the user's own session; nothing is done on the user's behalf without them being present in the browser | None — this is the sanctioned integration path | Same as the extension | Same as the extension | High — automated, credentialed access to another site on the user's behalf is very likely a ToS violation regardless of intent, and any anti-bot/CAPTCHA measure would either block it or have to be deliberately bypassed, which this project won't do | Low risk, but doesn't reliably solve the actual problem |
+| Manual-capture UI | Yes — a toolbar popup, reused for capturing jobs from any other site too | No | Possible, but typically minimal | None | None | None |
+| Actually available here | Yes | **No** — VietnamWorks exposes no public API to integrate against, and even where a job board does have one, getting approved for it, and building/maintaining a separate integration per board, is realistically more scope than a personal study project should take on | Yes | Yes | Yes (technically) | Yes |
+
+Direct API integration would be the *correct* way to do this in a real
+product — a documented, sanctioned contract instead of quietly
+depending on a private site's undocumented request shapes. It isn't
+listed above as merely "worse on some axis," it's **not an option at
+all** for VietnamWorks specifically (no public API exists to integrate
+against), and the general version of it — getting API access approved
+per job board, then building and maintaining a separate integration for
+each one — is a scope commitment closer to a small company's roadmap
+than a study project's. The browser extension is the best *available*
+option here, not the best option in the abstract.
 
 Server-side polling and CAPTCHA-bypassing were discussed and explicitly
 declined on ethical grounds before any of the above was weighed as a

@@ -795,7 +795,13 @@ flowchart LR
 short version is that an extension is the only option that can react
 to a Save/Apply the instant it happens, using the user's own
 already-authenticated browser session, without this project ever
-holding a VietnamWorks credential.
+holding a VietnamWorks credential. The actually-correct way to do this
+in a real product would be direct API integration with the job board —
+not attempted here because VietnamWorks doesn't expose one, and even in
+general, getting API access approved and maintaining a separate
+integration per job board is a bigger scope commitment than a study
+project should take on. The extension is the best *available* option,
+not the theoretically best one.
 
 **Important notes:**
 
@@ -863,22 +869,26 @@ bring?** Everything scoped to `background.js`'s three
 would need a same-shape rewrite for the new site's own endpoints and
 page markup — none of it is site-agnostic, all of it was built by
 reading one specific site's real network traffic. Concretely, per new
-board: (1) new `host_permissions`/`content_scripts` matches for its
-domain, (2) its own Save/Unsave/Apply request URLs and body shapes
-found the same manual-DevTools way (nothing here guarantees another
-board even structures these as three separate actions, or encodes
-request bodies the same way — a board could just as easily use one
-combined "apply" action with no separate save step), (3) its own
-job-id-from-URL or job-id-from-response extraction, and (4) its own
-schema.org JobPosting JSON-LD shape, if it has one at all — the
-scraper's `<h1>`-only fallback exists specifically because JSON-LD
-presence can't be assumed even on the one board this was built
-against, let alone a second one. `Application.source` being a
-free-form string rather than a fixed enum (see `backend/BACKEND_SUMMARY.md`)
-means the backend needs zero changes to accept a second board's rows
-— all of the real work is client-side, per-board reverse-engineering,
-none of it reusable framework code the way, say, a second Vue view
-reuses the same Pinia store pattern as the first.
+board:
+
+1. New `host_permissions`/`content_scripts` matches for its domain.
+2. Its own Save/Unsave/Apply request URLs and body shapes, found the
+   same manual-DevTools way — nothing here guarantees another board
+   even structures these as three separate actions, or encodes request
+   bodies the same way; a board could just as easily use one combined
+   "apply" action with no separate save step at all.
+3. Its own job-id-from-URL or job-id-from-response extraction.
+4. Its own schema.org JobPosting JSON-LD shape, if it has one at all —
+   the scraper's `<h1>`-only fallback exists specifically because
+   JSON-LD presence can't be assumed even on the one board this was
+   built against, let alone a second one.
+
+`Application.source` being a free-form string rather than a fixed enum
+(see `backend/BACKEND_SUMMARY.md`) means the backend needs zero changes
+to accept a second board's rows — all of the real work above is
+client-side, per-board reverse-engineering, none of it reusable
+framework code the way, say, a second Vue view reuses the same Pinia
+store pattern as the first.
 
 **Limitations, as actually shipped:**
 
