@@ -129,7 +129,31 @@ switch to the popup's **Manual** tab.
 
 ### Installing on Chrome
 
-Coming soon — pending Chrome Web Store developer registration.
+Published on the Chrome Web Store, but as a brand-new listing with no
+installs yet, it doesn't reliably show up in the Store's own search —
+use the direct link below rather than searching for it.
+
+1. Open the listing directly:
+   [LwkApply Quick Capture on the Chrome Web Store](https://chromewebstore.google.com/detail/jcmpjhfpncpndgedeobhcbiinhjhffih).
+
+   <!-- screenshot: the Chrome Web Store listing page -->
+
+2. Click **Add to Chrome**, then **Add extension** on the permissions
+   prompt Chrome shows.
+
+   <!-- screenshot: Chrome's "Add extension?" permissions prompt -->
+
+3. Click the toolbar icon (pin it from the extensions puzzle-piece
+   menu if it's not already visible) and log in with your LwkApply
+   account — same popup as Firefox's, pictured in step 4 above.
+
+4. Open any VietnamWorks job posting and click **Save** or **Apply**
+   as you normally would. The auto-sync behavior is identical to
+   Firefox's — see steps 5 above for what the popup and confirmation
+   toast look like.
+
+To capture a job manually instead, click the toolbar icon and switch
+to the popup's **Manual** tab, same as on Firefox.
 
 ## Technology Stack
 
