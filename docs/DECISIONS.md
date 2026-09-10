@@ -227,3 +227,57 @@ features — for example, more capable AI features — behind it in the
 future. It isn't implemented yet: `UserRole` only has `USER`/`ADMIN` today
 (`backend/app/models/user.py:19-21`), and `require_admin` isn't wired into
 any actual endpoint either.
+
+---
+
+## Decision 8: a browser extension to sync applications from other job boards
+
+**Reason:**
+- Let users track applications they make on external job boards (starting
+  with VietnamWorks, a Vietnamese job board) without retyping them into
+  LwkApply by hand
+- Needed something that could react to a Save/Apply action as it happens,
+  without needing the job board's cooperation (no public API) and without
+  ever holding the user's credentials for that other site
+
+**Alternatives:**
+- A userscript (Tampermonkey/Greasemonkey)
+- A bookmarklet
+- Server-side polling with the user's job-board credentials stored
+- Parsing job-board notification emails (via a forwarding rule)
+
+**Trade-offs:**
+
+| Aspect | Browser extension | Userscript | Bookmarklet | Server-side polling (stored credentials) | Email parsing |
+|---|---|---|---|---|---|
+| Credential handling | None — rides the user's own already-authenticated browser session; the job board's session never touches LwkApply's server | Same as the extension | Same as the extension | Requires storing the user's job-board password or session server-side | None, but depends on inbox/forwarding-rule access instead |
+| Reacts automatically | Yes — `chrome.webRequest` observes the site's own network requests for Save/Apply as they happen | Limited — only page-injected JS, no privileged request-observation API, so some request types are unreliable to intercept | No — a one-shot script the user must click every single time; no background observation at all | Yes, but only on a polling interval, not instantly | No — dependent on whether, and when, an email actually shows up |
+| Correctness | High — reads the same real network requests the site's own UI already triggers, not a scrape/guess | Comparable in principle, but weaker interception guarantees for non-fetch/XHR requests | N/A | Only as good as whatever gets scraped from the polled pages | Low — not every relevant email even comes from the job board's own domain (a recruiter can email directly, bypassing any forwarding rule), and there's no equivalent mechanism at all for a user who isn't on Gmail |
+| Distribution | Store review (Firefox AMO / Chrome Web Store), or self-distribution | No store review — shared as a plain script | Simplest possible — just a bookmark, but has to be re-added per browser/device | N/A — a server-side job, nothing for the user to install | N/A — a mail rule, not installed software |
+| Ethical/ToS risk | Low — acts only inside the user's own session; nothing is done on the user's behalf without them being present in the browser | Same as the extension | Same as the extension | High — automated, credentialed access to another site on the user's behalf is very likely a ToS violation regardless of intent, and any anti-bot/CAPTCHA measure would either block it or have to be deliberately bypassed, which this project won't do | Low risk, but doesn't reliably solve the actual problem |
+| Manual-capture UI | Yes — a toolbar popup, reused for capturing jobs from any other site too | Possible, but typically minimal | None | None | None |
+
+Server-side polling and CAPTCHA-bypassing were discussed and explicitly
+declined on ethical grounds before any of the above was weighed as a
+technical trade-off — storing a third-party site's credentials
+server-side, or defeating its anti-bot measures, isn't something this
+project will do even where it might be technically the *easier* path
+(e.g. polling doesn't need the user's browser open at all). That ruled
+out server-side polling before comparing it on any other axis.
+
+- **What building it actually surfaced:** identity design was the real
+  problem, not the network interception — the first version keyed a
+  tracked job by its page URL, which broke the moment the same posting
+  was reached through a different referral link (VietnamWorks appends a
+  varying `?source=...` query string). Switched to the job board's own
+  internal id instead (`Application.external_id`), which needed three
+  new idempotent backend endpoints so Save/Apply/Unsave could each be
+  upsert-safe against a network retry or a race. Getting the same
+  extension working on Firefox as well as Chrome surfaced two more real
+  gaps invisible on Chrome alone: Firefox enforces ordinary CORS against
+  extension origins where Chrome exempts them entirely, and Firefox
+  randomizes its own extension origin per install, so a static CORS
+  allowlist entry can't work — see `backend/BACKEND_SUMMARY.md`'s
+  "Salary currency, application source, and the browser extension" and
+  the repo root `README.md`'s "Browser Extension" section for full
+  detail.
