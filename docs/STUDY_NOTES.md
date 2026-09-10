@@ -769,6 +769,166 @@ push its own navigation independently and just hope the timing works out.
 
 ---
 
+## Browser extensions (WebExtensions API)
+
+**What it is:** the WebExtensions API is the standard both Chrome and
+Firefox implement (Manifest V3) for building an extension: a background
+script that keeps running independently of any one tab, content
+scripts injected into matching pages, a toolbar popup, and privileged
+APIs (`chrome.webRequest`, `chrome.storage`, `chrome.tabs`) an ordinary
+web page can't call. (Official docs:
+[chrome.webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest),
+[Content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts).)
+
+```mermaid
+flowchart LR
+    Page["VietnamWorks job page"] -->|reads page content| Content["Content script"]
+    Page -->|Save/Apply click, a real network request| WebRequest["chrome.webRequest listener\n(background script)"]
+    Content -->|SCRAPE_JOB message| Background["Background script"]
+    WebRequest -->|job id read from the request body| Background
+    Background -->|PUT/PATCH/DELETE .../by-external-id| Backend[("LwkApply backend")]
+```
+
+**Why it exists (for this project specifically):** see
+`docs/DECISIONS.md`'s Decision 8 for the full alternatives comparison
+(userscript, bookmarklet, server-side polling, email parsing) — the
+short version is that an extension is the only option that can react
+to a Save/Apply the instant it happens, using the user's own
+already-authenticated browser session, without this project ever
+holding a VietnamWorks credential.
+
+**Important notes:**
+
+- **A DOM click handler and a real network-request listener aren't
+  the same reliability guarantee, and the first version of this
+  extension only found that out the hard way.** The very first
+  Save-detection attempt watched for clicks on the "Save this job"
+  button (`isApplyButton`/`watchForActionConfirmation`, since removed)
+  — this looked reliable in casual testing but is fundamentally
+  guessing: a click doesn't prove the underlying request actually
+  succeeded, and any DOM selector is tied to the site's current markup
+  (VietnamWorks' classes are build-hashed, e.g. `sc-953ea32e-0
+  eZdGQB`, and will change on their next deploy). Replaced entirely
+  with `chrome.webRequest.onBeforeRequest`/`onCompleted` listening for
+  the site's *own* `save-job`/`unsave-job`/`apply-multiple` requests —
+  found by watching the real Network tab in DevTools while manually
+  clicking Save on a real posting, not guessed at. This only detects
+  success, since `onCompleted` fires after the response comes back —
+  a failed save (network error, VietnamWorks-side rejection) correctly
+  triggers nothing.
+- **Reading a request's body needs an explicit opt-in, and it comes in
+  two different shapes depending on how the site encoded the
+  request.** `addListener(..., ['requestBody'])` is required before
+  `details.requestBody` is populated at all (`background.js`). Save/
+  Unsave send a JSON body (`requestBody.raw`, a byte array that has to
+  be decoded and `JSON.parse`d — `extractJobIdFromJsonBody`); Apply
+  sends a form-encoded body instead (`requestBody.formData`, already
+  parsed into key→value-array pairs by the browser —
+  `extractSingleJobIdFromFormData`). Same API, two different body
+  shapes to actually handle, discovered by inspecting each real
+  request rather than assuming they'd match.
+- **`onBeforeRequest` and `onCompleted` are two separate events for the
+  same request, and correlating them needs a small map, not a
+  closure.** The job id has to be read from the request *body*
+  (`onBeforeRequest`), but the save is only confirmed once the
+  *response* comes back (`onCompleted`) — two different listener
+  callbacks, invoked at two different times, that both only ever
+  receive `details.requestId` in common. `pendingJobIds` (a plain
+  `Map<requestId, jobId>`) bridges the two: written in
+  `onBeforeRequest`, read and deleted in `onCompleted`.
+- **A content script and a background script are two separate
+  JavaScript worlds that can only talk by passing messages, not by
+  sharing state.** The content script (`vietnamworks.js`) can read the
+  page's DOM/JSON-LD; the background script owns the extension's
+  identity/auth/network layer. Getting scraped job data from one to
+  the other goes through `chrome.runtime.sendMessage`/`onMessage`
+  (`SCRAPE_JOB` request, `AUTO_SAVE_RESULT` response) — there's no
+  shared variable or import between them, unlike a Vue component
+  importing a Pinia store directly.
+- **No bundler, no build step at all — unlike every other client in
+  this project.** `extension/` ships plain, unbundled ES modules
+  straight from `src/`; Vue/Flutter both compile before anything
+  reaches a device. That has a real consequence: swapping the API base
+  URL between dev and production can't be a build-time environment
+  variable the way `VITE_API_BASE_URL`/`--dart-define` are — there's
+  no build to inject it at. Solved with a small file-copy convention
+  instead (`config.development.js`/`config.production.js` →
+  `scripts/use-env.sh` copies the selected one to the fixed path
+  `auth.js` imports) — a real, if less elegant, substitute for what a
+  bundler would otherwise do for free.
+
+**What difficulties would integrating a second job board actually
+bring?** Everything scoped to `background.js`'s three
+`chrome.webRequest` listeners and `content/vietnamworks.js`'s scraper
+would need a same-shape rewrite for the new site's own endpoints and
+page markup — none of it is site-agnostic, all of it was built by
+reading one specific site's real network traffic. Concretely, per new
+board: (1) new `host_permissions`/`content_scripts` matches for its
+domain, (2) its own Save/Unsave/Apply request URLs and body shapes
+found the same manual-DevTools way (nothing here guarantees another
+board even structures these as three separate actions, or encodes
+request bodies the same way — a board could just as easily use one
+combined "apply" action with no separate save step), (3) its own
+job-id-from-URL or job-id-from-response extraction, and (4) its own
+schema.org JobPosting JSON-LD shape, if it has one at all — the
+scraper's `<h1>`-only fallback exists specifically because JSON-LD
+presence can't be assumed even on the one board this was built
+against, let alone a second one. `Application.source` being a
+free-form string rather than a fixed enum (see `backend/BACKEND_SUMMARY.md`)
+means the backend needs zero changes to accept a second board's rows
+— all of the real work is client-side, per-board reverse-engineering,
+none of it reusable framework code the way, say, a second Vue view
+reuses the same Pinia store pattern as the first.
+
+**Limitations, as actually shipped:**
+
+- **Detection only works while the browser is open and the extension is
+  installed and enabled** — there's no server-side fallback. Applying
+  to a job from a phone's mobile browser, or a machine without the
+  extension installed, doesn't get auto-tracked at all; the user would
+  need to capture it manually (or not at all).
+- **Entirely dependent on the target site's own markup/request shapes
+  staying stable.** There's no contract with VietnamWorks — the
+  moment they change `save-job`'s request shape, rename a form field,
+  or restructure their JSON-LD, detection silently stops working until
+  someone notices and re-reverse-engineers it. This is the direct
+  cost of "no API, no cooperation needed" from the Why section above —
+  the trade-off is durability, not correctness at any single point in
+  time.
+- **Self-distribution (see `docs/DECISIONS.md` and the README) means no
+  automatic updates for anyone who installed via the direct GitHub
+  Release link** — there's no `update_url` manifest wired up yet, so a
+  fix to any of the above (or a new job board) needs every existing
+  installer to manually redownload, unlike the Chrome Web Store side,
+  which does auto-update.
+- **Manifest V3's `background.service_worker` isn't portable by
+  itself** — Firefox doesn't support that manifest key at all
+  (`background.scripts` alongside it is required), and getting the
+  same extension to actually authenticate correctly on both browsers
+  needed two separate CORS fixes on top of that (Chrome exempts
+  extension origins from CORS entirely; Firefox doesn't, and also
+  randomizes its own extension origin per install) — "write once, ship
+  to both browsers" undersells how much of this is genuinely
+  browser-specific, not just a manifest-syntax difference.
+
+**Best practices:**
+
+- Detect via the real network request the site's own UI makes, not a
+  DOM click or a page-content heuristic — a click doesn't prove
+  success, and page markup is the least stable thing about a site.
+- Key a synced record by the *source system's own id*, not by URL —
+  URLs vary by referral/query-string noise for what's really the same
+  resource.
+- Keep identity-bearing fields locked in the UI once a record is
+  externally synced (see `ApplicationFormView.vue`'s disabled Job URL
+  field), rather than letting a manual edit silently get overwritten by
+  the next auto-sync.
+- Treat the manifest's CORS/permission surface as something to
+  actually test per target browser, not something Chrome-only testing
+  can stand in for.
+
+---
+
 ## Infrastructure & deployment
 
 **What this teaches, in general:** the architecture that looks "correct"
