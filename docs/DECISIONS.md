@@ -23,11 +23,10 @@
 | Fit for this project's AI features | Strong — Python's AI/ML ecosystem is dominant | Weaker — a secondary ecosystem | Weakest — little AI/ML presence |
 
 - **What building with it actually surfaced:** how `Depends()` turns "get
-  a DB session, check the JWT, load the user" into composable,
-  independently-testable functions; why a FastAPI process has to stay
-  stateless behind a load balancer; why `response_model` is a security
-  boundary, not just documentation. Full detail, with code citations, in
-  [STUDY_NOTES.md's FastAPI section](STUDY_NOTES.md#fastapi).
+  a DB session, check the JWT, load the user" into small, testable
+  functions; why a FastAPI process has to stay stateless behind a load
+  balancer; why `response_model` is a security boundary, not just docs.
+  Full detail in [STUDY_NOTES.md's FastAPI section](STUDY_NOTES.md#fastapi).
 
 ---
 
@@ -49,11 +48,11 @@
 | Migrations | Explicit, versioned scripts (Alembic) | No formal migrations — shape can drift silently |
 | Fit for this project's data | Strong — this data is naturally relational | Weaker — would let relational modeling be skipped |
 
-- **What building with it actually surfaced:** the difference between an
-  ORM's own relationship semantics and the database's own constraints (the
-  `IntegrityError` case study), lazy loading hiding N+1 queries, and why
-  Alembic's `autogenerate` output still needs a human read-through. Full
-  detail in [STUDY_NOTES.md's SQLAlchemy/Alembic
+- **What building with it actually surfaced:** an ORM's relationship
+  rules aren't the same as the database's own constraints (the
+  `IntegrityError` case study), lazy loading can hide N+1 queries, and
+  Alembic's `autogenerate` output still needs a human read-through, not
+  blind trust. Full detail in [STUDY_NOTES.md's SQLAlchemy/Alembic
   section](STUDY_NOTES.md#sqlalchemy-alembic-postgresql).
 
 ---
@@ -78,12 +77,11 @@
 | Ecosystem | Smaller | Largest of the three | Solid, but smaller than React's |
 | Fit for this project | Chosen — an approachable first deep framework | Would add hooks, JSX, and a library choice on top | Would add much more up-front surface area |
 
-- **What building with it actually surfaced:** a full comparison of Vue's
-  primitives against their React equivalents (`ref`/`useState`,
-  `onMounted`/`useEffect`, and so on), grounded in real code in this
-  project (`webapp/src/layouts/AppLayout.vue`, the chart theming fix). Full
-  detail in [STUDY_NOTES.md's Vue 3
-  section](STUDY_NOTES.md#vue-3-versus-react).
+- **What building with it actually surfaced:** how Vue's primitives map
+  onto their React equivalents (`ref`/`useState`, `onMounted`/
+  `useEffect`, etc.), grounded in real code here
+  (`webapp/src/layouts/AppLayout.vue`, the chart theming fix). Full
+  detail in [STUDY_NOTES.md's Vue 3 section](STUDY_NOTES.md#vue-3-versus-react).
 
 ---
 
@@ -106,8 +104,8 @@
 | Widget/component source | Reimplements native look-and-feel itself | Gets real native components for free |
 | Fit for this project | Chosen — Riverpod's DI model mirrors FastAPI's `Depends()` | Would mean learning React first, on top of mobile concepts |
 
-- **What building with it actually surfaced:** how a Riverpod provider
-  graph can form a circular dependency that only throws at runtime (fixed
+- **What building with it actually surfaced:** a Riverpod provider graph
+  can form a circular dependency that only throws at runtime (fixed
   in commit
   [`c9e24de`](https://github.com/danielnguyen982301/lwkapply/commit/c9e24de100878a643a96008aaa2d2529193aee6a)),
   and how a cold-start deep link can lose a race against the router's own
@@ -129,12 +127,10 @@
 **Alternatives:**
 - AWS S3
 
-Storing uploaded resumes and cover letters in object storage at all
-(rather than as BLOB columns in PostgreSQL) wasn't really a live trade-off
-weighed from experience — keeping large files out of the relational
-database is close to universal advice in backend documentation, closer to
-following established practice than an informed comparison made
-firsthand. The actual choice worth comparing is which object storage
+Keeping large files out of PostgreSQL entirely (rather than BLOB
+columns) wasn't really a decision weighed from experience — that's
+close to universal backend advice, more "follow best practice" than an
+informed comparison. The real choice was which object storage
 provider.
 
 **Trade-offs:**
@@ -148,29 +144,26 @@ provider.
 | Vendor relationship | No AWS account or IAM keys needed | Requires an AWS account and IAM credentials |
 | Ecosystem/tooling | Smaller, but interoperates via the same S3-compatible client | Much larger — the default in most tutorials |
 
-**Note — this project originally used S3, then switched to R2:** the
-earliest version of this project's document storage used
-`app/services/s3.py` directly. It was migrated to Cloudflare R2 in v0.5.0
-(see `CHANGELOG.md` and `backend/BACKEND_SUMMARY.md`'s "A note on the AWS
-S3 → Cloudflare R2 migration" section), before S3 ever carried real
-production traffic — so it was a client/config swap, not a data
-migration. Because R2 implements the same S3-compatible API,
-`upload_document`/`delete_document`/`generate_download_url`'s actual logic
-never changed; only the client construction (`endpoint_url`,
-`region_name="auto"`) and the credential/config names did. The original
-`s3.py` is kept in the repo as a reference implementation. The switch
-happened for exactly the reason listed above: S3's free tier expires 6
-months after account creation, which doesn't fit a study project meant to
-keep running indefinitely without turning into a recurring bill, while
-R2's free tier has no such expiration.
+**Note — this project actually started on S3, then switched to R2:**
+the earliest version used `app/services/s3.py` directly, migrated to
+R2 in v0.5.0 (see `CHANGELOG.md` and `backend/BACKEND_SUMMARY.md`'s "A
+note on the AWS S3 → Cloudflare R2 migration") before S3 ever carried
+real traffic — a client/config swap, not a data migration. Same
+S3-compatible API underneath, so
+`upload_document`/`delete_document`/`generate_download_url`'s logic
+never changed, only the client construction (`endpoint_url`,
+`region_name="auto"`) and credential names. `s3.py` is still in the
+repo as a reference. The switch was for exactly the reason in the
+Reason section above: S3's free tier expires after 6 months, R2's
+doesn't.
 
-- **What building it actually surfaced:** `backend/app/services/r2.py`'s
-  own design notes — uploads are server-proxied rather than presigned,
-  specifically so file size/type can be validated before anything touches
-  the bucket; downloads are always short-lived presigned URLs, never a
-  permanent public link; object keys are namespaced by
-  `user_id`/`application_id` so a misconfigured bucket listing can't
-  trivially expose one user's files to another.
+- **What building it actually surfaced:** uploads are server-proxied
+  rather than presigned, so file size/type can be validated before
+  anything touches the bucket; downloads are always short-lived
+  presigned URLs, never a permanent public link; object keys are
+  namespaced by `user_id`/`application_id` so a misconfigured bucket
+  listing can't expose one user's files to another. See
+  `backend/app/services/r2.py`'s own notes.
 
 ---
 
@@ -193,24 +186,22 @@ R2's free tier has no such expiration.
 | Auth model | OAuth 2.0, a long-lived refresh token | An API key sent with each call |
 | Real-world result | Works, but lands in spam without a verified domain — known, documented, not a bug | Not usable here in production, for the two reasons above |
 
-**Note — this project originally planned to use Resend, then switched to
-the Gmail API:** `backend/app/services/email_smtp.py` (kept as the
-local-dev/reference implementation, still supporting a `"resend"` provider
-mode over HTTP as well as an `"smtp"` mode pointed at MailHog for local
-development) was the original plan for production. Two real deployment
-blockers surfaced once reminder emails were actually tried against a live
+**Note — planned to use Resend, switched to the Gmail API:**
+`backend/app/services/email_smtp.py` (kept as the local-dev/reference
+implementation, still supports a `"resend"` mode plus an `"smtp"` mode
+for local MailHog) was the original production plan. Two real
+deployment blockers killed it once actually tried against a live
 Render deployment (see `backend/BACKEND_SUMMARY.md`'s "Email backend:
-Gmail API added alongside SMTP/Resend" section): Render blocks outbound
-SMTP-port traffic on free web services, and Resend requires a verified
-sending domain this project doesn't have. The fix was
-`backend/app/services/email_gmail_api.py`, which
-`backend/app/tasks/reminders_inline.py` (the production reminders
-pipeline) uses instead — sending over HTTPS, not blocked by Render, and
-through Google's own servers, carrying real SPF/DKIM/DMARC authentication
-automatically rather than a same-inbox workaround with weaker
-deliverability. `backend/app/tasks/reminders_celery.py` (the local-dev/
-reference Celery path) is untouched and still uses the original
-`email_smtp.py` against MailHog.
+Gmail API added alongside SMTP/Resend"): Render blocks outbound SMTP
+ports on free web services, and Resend needs a verified sending domain
+this project doesn't have. Fixed with
+`backend/app/services/email_gmail_api.py`, used by
+`backend/app/tasks/reminders_inline.py` (the production path) instead —
+sends over HTTPS, so Render doesn't block it, and through Google's own
+servers, so it carries real SPF/DKIM/DMARC automatically instead of a
+weaker same-inbox workaround. `backend/app/tasks/reminders_celery.py`
+(local-dev Celery path) is untouched, still on `email_smtp.py` +
+MailHog.
 
 ---
 
@@ -222,11 +213,11 @@ reference Celery path) is untouched and still uses the original
 **Alternatives:**
 - No role distinction (a single kind of user)
 
-**Note:** a premium user-tier role is planned, to gate access to advanced
-features — for example, more capable AI features — behind it in the
-future. It isn't implemented yet: `UserRole` only has `USER`/`ADMIN` today
-(`backend/app/models/user.py:19-21`), and `require_admin` isn't wired into
-any actual endpoint either.
+**Note:** a premium role is planned, to gate more advanced features
+(better AI features, say) behind it eventually. Not implemented yet —
+`UserRole` only has `USER`/`ADMIN` today
+(`backend/app/models/user.py:19-21`), and `require_admin` isn't wired
+into any endpoint.
 
 ---
 
@@ -259,38 +250,34 @@ any actual endpoint either.
 | Manual-capture UI | Yes — a toolbar popup, reused for capturing jobs from any other site too | No | Possible, but typically minimal | None | None | None |
 | Actually available here | Yes | **No** — VietnamWorks exposes no public API to integrate against, and even where a job board does have one, getting approved for it, and building/maintaining a separate integration per board, is realistically more scope than a personal study project should take on | Yes | Yes | Yes (technically) | Yes |
 
-Direct API integration would be the *correct* way to do this in a real
-product — a documented, sanctioned contract instead of quietly
-depending on a private site's undocumented request shapes. It isn't
-listed above as merely "worse on some axis," it's **not an option at
-all** for VietnamWorks specifically (no public API exists to integrate
-against), and the general version of it — getting API access approved
-per job board, then building and maintaining a separate integration for
-each one — is a scope commitment closer to a small company's roadmap
-than a study project's. The browser extension is the best *available*
-option here, not the best option in the abstract.
+Direct API integration would honestly be the *correct* way to do this
+— a real, sanctioned contract instead of quietly depending on a
+private site's undocumented request shapes. It's not listed above as
+"worse on some axis" — it's **not an option at all** for VietnamWorks
+(no public API), and building/maintaining a separate integration per
+job board in general is more scope than a study project should take
+on. The extension is the best *available* option, not the best option
+in the abstract.
 
-Server-side polling and CAPTCHA-bypassing were discussed and explicitly
-declined on ethical grounds before any of the above was weighed as a
-technical trade-off — storing a third-party site's credentials
-server-side, or defeating its anti-bot measures, isn't something this
-project will do even where it might be technically the *easier* path
-(e.g. polling doesn't need the user's browser open at all). That ruled
-out server-side polling before comparing it on any other axis.
+Server-side polling and CAPTCHA-bypassing got ruled out on ethical
+grounds before weighing them on any axis above — storing a third
+party's credentials server-side, or defeating its anti-bot measures,
+isn't something this project will do, even where it'd technically be
+easier (polling doesn't even need the user's browser open). Different
+kind of "no" than losing a trade-off.
 
-- **What building it actually surfaced:** identity design was the real
-  problem, not the network interception — the first version keyed a
+- **What building it actually surfaced:** identity was the real
+  problem, not the network interception. The first version keyed a
   tracked job by its page URL, which broke the moment the same posting
-  was reached through a different referral link (VietnamWorks appends a
+  showed up through a different referral link (VietnamWorks appends a
   varying `?source=...` query string). Switched to the job board's own
-  internal id instead (`Application.external_id`), which needed three
+  internal id (`Application.external_id`) instead, which needed three
   new idempotent backend endpoints so Save/Apply/Unsave could each be
-  upsert-safe against a network retry or a race. Getting the same
-  extension working on Firefox as well as Chrome surfaced two more real
-  gaps invisible on Chrome alone: Firefox enforces ordinary CORS against
-  extension origins where Chrome exempts them entirely, and Firefox
-  randomizes its own extension origin per install, so a static CORS
-  allowlist entry can't work — see `backend/BACKEND_SUMMARY.md`'s
-  "Salary currency, application source, and the browser extension" and
-  the repo root `README.md`'s "Browser Extension" section for full
-  detail.
+  upsert-safe against a retry or a race. Getting it working on Firefox
+  too surfaced two more gaps Chrome alone never showed: Firefox
+  enforces real CORS against extension origins where Chrome exempts
+  them entirely, and Firefox randomizes its own extension origin per
+  install, so a static CORS allowlist can't work at all. Full detail
+  in `backend/BACKEND_SUMMARY.md`'s "Salary currency, application
+  source, and the browser extension" and the README's "Browser
+  Extension" section.
