@@ -1,4 +1,4 @@
-# Study Notes: Stack Fundamentals
+# Extensive Study Notes: Stack Fundamentals
 
 I had never used any of these technologies before starting this project.
 These are my own study notes on each one: the core ideas, how each one is
