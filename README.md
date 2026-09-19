@@ -12,9 +12,11 @@ A full-stack job application management platform designed to help job seekers or
 ## Study Notes
 
 A section of what I learned from this project.
-Full notes are in [docs/STUDY_NOTES.md](docs/STUDY_NOTES.md): the core
-concepts and important notes of each technology (FastAPI, SQLAlchemy/Alembic,
-Celery, Vue, Flutter/Riverpod), problems and fixes.
+Full notes are in [docs/EXTENSIVE_STUDY_NOTES.md](docs/EXTENSIVE_STUDY_NOTES.md):
+the core concepts and important notes of each technology (FastAPI,
+SQLAlchemy/Alembic, Celery, Vue, Flutter/Riverpod), problems and fixes.
+The most challenging problems I ran into are in
+[docs/SPECIALIZED_STUDY_NOTES.md](docs/SPECIALIZED_STUDY_NOTES.md).
 
 ## Overview
 
