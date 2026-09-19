@@ -14,7 +14,11 @@ The application uses PostgreSQL as the primary relational database.
 - first_name
 - last_name
 - avatar_url
-- role
+- role (user/admin)
+- is_active
+- timezone (nullable IANA name), timezone_is_manual (true once the user
+  picks one, so auto-detection stops overwriting it)
+- token_version (bumped to invalidate previously issued JWTs)
 - created_at
 - updated_at
 
@@ -28,9 +32,16 @@ The application uses PostgreSQL as the primary relational database.
   applications to the same company/position, e.g. a re-apply after
   rejection)
 - location
-- status
+- source (nullable — where the application came from, e.g. the browser
+  extension's site name)
+- external_id (nullable — the source's own job id; unique per
+  `(user_id, source, external_id)` when both are set, so a sync from the
+  extension can't create duplicates)
+- status (saved/applied/phone_screen/interviewing/offer/rejected/
+  withdrawn/accepted)
 - salary_min
 - salary_max
+- salary_currency (ISO 4217 code, default `USD`)
 - applied_date
 - job_url
 - notes
@@ -41,7 +52,7 @@ The application uses PostgreSQL as the primary relational database.
 - application_id
 - type
 - scheduled_at
-- duration
+- duration_minutes
 - feedback
 - result
 
@@ -71,14 +82,84 @@ Deleting an application only removes the join rows here; the document
 itself is untouched. Deleting a document cascades its join rows (and its
 `resume_analyses`/`ats_scores`, unchanged).
 
-### contacts
+### application_status_history
+
+Append-only log of `applications.status` transitions. Not read by any
+analytics yet — those query the current status directly.
 
 - id (UUID)
 - application_id
+- from_status (nullable — null for the first row)
+- to_status
+- created_at (the transition time; rows are never updated)
+
+### interview_reminders
+
+One row per (interview, lead time, channel).
+
+- id (UUID)
+- interview_id
+- remind_at
+- sent_at (nullable — stamped once sent; the idempotency guard)
+- channel (email/push/in_app)
+
+### contacts
+
+A top-level, user-owned resource, like `documents`, no longer tied to a
+single application.
+
+- id (UUID)
+- user_id — direct FK (`application_id` was dropped)
 - name
 - title
 - email
 - linkedin_url
+
+### application_contacts
+
+Many-to-many join between `applications` and `contacts`, mirroring
+`application_documents`. Unique on `(application_id, contact_id)`.
+Deleting an application only removes its join rows; the contact
+itself is untouched.
+
+- id (UUID)
+- application_id
+- contact_id
+- created_at / updated_at
+
+### user_settings
+
+1:1 with `users`; created at registration.
+
+- id (UUID)
+- user_id (unique)
+- reminder_lead_hours (nullable)
+- notifications_enabled
+- email_notifications_enabled
+- push_notifications_enabled
+
+### notifications
+
+In-app notification feed (the bell icon).
+
+- id (UUID)
+- user_id
+- type (currently only `interview_reminder`)
+- title
+- body
+- application_id (nullable)
+- interview_id (nullable)
+- read_at (nullable — null means unread)
+
+### device_tokens
+
+Push-notification (FCM) device registrations.
+
+- id (UUID)
+- user_id
+- platform (android/ios)
+- token (globally unique; reassigned to a new user on re-login)
+- last_seen_at
 
 ### resume_analyses (AI features — backend/BACKEND_SUMMARY.md)
 
@@ -124,7 +205,13 @@ for the full reasoning.
 ## Relationships
 
 User -> Applications -> Interviews
-User -> Applications -> Contacts
+User -> Contacts (direct — not nested under Application)
+Applications <-> Contacts (many-to-many, via ApplicationContact)
+Applications -> StatusHistory
+Interviews -> InterviewReminders
+User -> UserSettings (1:1)
+User -> Notifications
+User -> DeviceTokens
 User -> Documents (direct — not nested under Application)
 Applications <-> Documents (many-to-many, via ApplicationDocument)
 User -> ResumeAnalyses (direct — not nested under Application)
